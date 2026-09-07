@@ -1,0 +1,39 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+node_modules
+dist
+dist-ssr
+*.local
+
+# Variables de entorno. Antes solo se ignoraba *.local, asi que un archivo
+# llamado .env o .env.production se habria commiteado con credenciales
+# reales dentro. La plantilla vive en docs/configuracion.md y no como
+# archivo de ejemplo, para que nadie escriba sus claves dentro de un
+# archivo que esta versionado.
+.env
+.env.*
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Cobertura: solo se versiona el resumen, que el requisito pide
+coverage/*
+!coverage/coverage-summary.json
+
+# Reporte que genera el paso de pruebas en CI para explicar los fallos.
+test-report.json

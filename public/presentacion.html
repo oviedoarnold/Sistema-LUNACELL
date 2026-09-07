@@ -1,0 +1,499 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sistema Ferretería · Presentación del producto</title>
+<meta name="description" content="Presentación del Sistema Ferretería: problema, solución, arquitectura, tecnologías y manual de uso.">
+<meta name="learn-verification" content="LEARN-CAP-50768C03">
+<style>
+  :root{
+    --cream:#FAF6EF; --paper:#FFFFFF; --charcoal:#23272A; --steel:#5C6B78;
+    --line:#E4DCCB; --line-strong:#D7CCB4; --orange:#E8590C; --orange-soft:#FCE4D6;
+    --teal:#2F7A6E; --teal-soft:#E1F2EE; --amber:#9A6A04; --amber-soft:#FBF0D9;
+    --blue:#3457A6; --blue-soft:#E8EEFB;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--cream);color:var(--charcoal);
+    font-family:'Segoe UI',system-ui,-apple-system,sans-serif;
+    font-size:17px;line-height:1.65;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:920px;margin:0 auto;padding:0 22px}
+  h1,h2,h3{margin:0;line-height:1.15;letter-spacing:-.2px}
+  p{margin:0 0 14px}
+  a{color:#B8480A}
+
+  header{background:var(--charcoal);
+    background-image:radial-gradient(circle,rgba(255,255,255,.055) 1.5px,transparent 1.6px);
+    background-size:17px 17px;color:#fff;padding:52px 0 46px;border-bottom:4px solid var(--orange)}
+  header .wrap{display:flex;flex-direction:column;gap:16px}
+  .marca{display:flex;align-items:center;gap:14px}
+  .marca .ico{width:52px;height:52px;border-radius:13px;background:var(--orange);
+    display:flex;align-items:center;justify-content:center;flex:none}
+  header h1{font-size:clamp(30px,5vw,44px);color:#fff}
+  header p.lede{color:#C3CBD1;font-size:19px;max-width:56ch;margin:0}
+  .codigo{display:inline-flex;align-items:center;gap:9px;align-self:flex-start;
+    background:rgba(232,89,12,.16);border:1px solid rgba(232,89,12,.42);
+    border-radius:9px;padding:8px 14px;font-family:ui-monospace,Consolas,monospace;
+    font-size:13.5px;color:#FFB784}
+  .codigo b{color:#fff;letter-spacing:.6px}
+  .enlaces{display:flex;gap:11px;flex-wrap:wrap;margin-top:4px}
+  .enlaces a{display:inline-block;padding:11px 18px;border-radius:10px;
+    font-weight:600;font-size:15px;text-decoration:none}
+  .enlaces a.primario{background:var(--orange);color:#fff}
+  .enlaces a.secundario{background:transparent;color:#fff;border:1.5px solid rgba(255,255,255,.35)}
+
+  section{padding:44px 0;border-bottom:1px solid var(--line)}
+  section:last-of-type{border-bottom:none}
+  .kicker{font-family:ui-monospace,Consolas,monospace;font-size:11.5px;letter-spacing:1.1px;
+    text-transform:uppercase;color:var(--orange);display:block;margin-bottom:9px}
+  h2{font-size:29px;margin-bottom:16px}
+  h3{font-size:19px;margin:22px 0 8px}
+
+  .tarjetas{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:14px;margin-top:18px}
+  .t{background:var(--paper);border:1px solid var(--line);border-radius:13px;padding:19px}
+  .t .ico{width:40px;height:40px;border-radius:10px;display:flex;align-items:center;
+    justify-content:center;font-size:19px;margin-bottom:11px;background:var(--orange-soft)}
+  .t h3{font-size:17.5px;margin:0 0 6px}
+  .t p{font-size:15px;color:var(--steel);margin:0}
+
+  table{border-collapse:collapse;width:100%;background:var(--paper);
+    border:1px solid var(--line);border-radius:12px;overflow:hidden;margin-top:14px}
+  th,td{padding:11px 15px;text-align:left;border-bottom:1px solid var(--line);font-size:15.5px;vertical-align:top}
+  th{background:#F3EDE2;font-size:11.5px;letter-spacing:.7px;text-transform:uppercase;
+    color:var(--steel);font-family:ui-monospace,Consolas,monospace}
+  tr:last-child td{border-bottom:none}
+  .scroll{overflow-x:auto}
+
+  ol.pasos{counter-reset:paso;list-style:none;padding:0;margin:18px 0 0;
+    display:flex;flex-direction:column;gap:13px}
+  ol.pasos li{counter-increment:paso;background:var(--paper);border:1px solid var(--line);
+    border-radius:12px;padding:17px 19px 17px 62px;position:relative}
+  ol.pasos li::before{content:counter(paso);position:absolute;left:17px;top:17px;
+    width:30px;height:30px;border-radius:8px;background:var(--charcoal);color:#fff;
+    display:flex;align-items:center;justify-content:center;font-weight:700;font-size:15px}
+  ol.pasos b{display:block;margin-bottom:4px}
+  ol.pasos span{color:var(--steel);font-size:15px}
+  ol.pasos code{background:var(--cream);border:1px solid var(--line);border-radius:5px;
+    padding:1px 6px;font-family:ui-monospace,Consolas,monospace;font-size:13.5px}
+
+  .cifras{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:13px;margin-top:18px}
+  .cifra{background:var(--paper);border:1px solid var(--line);border-radius:12px;
+    padding:17px;border-top:3px solid var(--orange)}
+  .cifra b{display:block;font-size:30px;line-height:1;color:var(--orange)}
+  .cifra span{display:block;font-size:12.5px;color:var(--steel);margin-top:6px;
+    font-family:ui-monospace,Consolas,monospace;text-transform:uppercase;letter-spacing:.5px}
+
+  figure{margin:20px 0 0;background:var(--paper);border:1px solid var(--line);
+    border-radius:13px;padding:20px;overflow-x:auto}
+  figcaption{font-size:13.5px;color:var(--steel);margin-top:12px;text-align:center}
+
+  .aviso{background:var(--amber-soft);border:1px solid var(--amber);border-left-width:4px;
+    border-radius:10px;padding:15px 18px;margin-top:16px;font-size:15.5px}
+  .aviso b{color:var(--amber)}
+
+  footer{background:var(--charcoal);color:#8D979E;padding:34px 0;font-size:14.5px}
+  footer .wrap{display:flex;justify-content:space-between;gap:14px;flex-wrap:wrap}
+  footer a{color:#FFB784}
+
+  @media(max-width:620px){
+    body{font-size:16px}
+    section{padding:34px 0}
+    h2{font-size:24px}
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="wrap">
+    <div class="marca">
+      <span class="ico">
+        <svg width="30" height="30" viewBox="0 0 512 512" aria-hidden="true">
+          <path d="M232 216a36 36 0 0 1 50-33l-26 26 16 16 26-26a36 36 0 0 1-33 50 36 36 0 0 1-13-2l-46 46a17 17 0 1 1-24-24l46-46a36 36 0 0 1-2-13z" fill="#fff" transform="translate(-100,-100) scale(1.6)"/>
+        </svg>
+      </span>
+      <div>
+        <h1>Sistema Ferretería</h1>
+      </div>
+    </div>
+
+    <p class="lede">
+      Inventario, facturación, cotizaciones y control de abonos para una ferretería
+      de mostrador. Hecho para que el cajero cobre rápido y el dueño sepa sus números
+      sin pedírselos a nadie.
+    </p>
+
+    <span class="codigo">Código de verificación <b>LEARN-CAP-50768C03</b></span>
+
+    <div class="enlaces">
+      <a class="primario" href="https://www.oviedoarnold.lat/">Ver el producto</a>
+      <a class="secundario" href="https://github.com/oviedoarnold/Sistema-Ferreteria">Repositorio en GitHub</a>
+    </div>
+  </div>
+</header>
+
+<div class="wrap">
+
+<section>
+  <span class="kicker">01 · El problema</span>
+  <h2>Nadie sabe qué hay en bodega hasta que un cliente lo pide</h2>
+  <p>
+    Una ferretería de mostrador maneja cientos de productos distintos: cemento, varilla,
+    tornillería, pintura, herramienta, material eléctrico. La mayoría lleva el control en
+    cuadernos o en hojas de cálculo que solo entiende quien las hizo. El resultado es
+    siempre el mismo: cuando un cliente pregunta si hay determinado producto, alguien
+    tiene que ir a bodega a ver.
+  </p>
+  <p>
+    El problema se agrava con las ventas al crédito, que en el rubro son la norma con
+    constructoras y talleres. Se anotan aparte, los abonos se apuntan en el mismo cuaderno
+    y al final del mes nadie sabe con certeza cuánto le deben ni desde cuándo. Cuando el
+    dueño quiere saber cuánto vendió, tiene que sumar a mano.
+  </p>
+  <p>
+    Y hay un problema de confianza: si varias personas atienden el mostrador, no hay forma
+    de limitar quién ve los precios de costo, quién puede modificar el inventario o quién
+    tiene acceso a los números del negocio.
+  </p>
+</section>
+
+<section>
+  <span class="kicker">02 · La solución</span>
+  <h2>Una sola aplicación para todo el mostrador</h2>
+  <p>
+    El sistema reúne en un solo lugar lo que hoy está disperso. El cajero busca un producto,
+    lo agrega al carrito y cobra; el inventario se descuenta solo. Si la venta es al crédito,
+    queda registrada con su fecha de vencimiento y su saldo. Cuando el cliente abona, se
+    registra el pago y el saldo baja hasta que la factura queda cancelada.
+  </p>
+  <p>
+    El dueño entra al panel y ve las ventas del día y del mes, qué productos están por
+    agotarse, cuáles ya se agotaron y cuánto le deben en total. No tiene que pedirle
+    reportes a nadie.
+  </p>
+  <p>
+    Funciona en cualquier navegador y se instala como aplicación en el teléfono o en la
+    computadora del mostrador. Varias cajas trabajan sobre el mismo inventario a la vez,
+    y cada ferretería ve solo sus datos.
+  </p>
+</section>
+
+<section>
+  <span class="kicker">03 · Funcionalidades</span>
+  <h2>Qué hace, módulo por módulo</h2>
+
+  <div class="tarjetas">
+    <div class="t">
+      <div class="ico">📦</div>
+      <h3>Inventario</h3>
+      <p>Productos con código, categoría, precio y costo. Marca automáticamente lo que
+      está bajo en existencias y lo que ya se agotó.</p>
+    </div>
+    <div class="t">
+      <div class="ico">🧾</div>
+      <h3>Facturación</h3>
+      <p>Punto de venta con búsqueda, carrito y cálculo de ISV. Al contado o al crédito
+      con fecha de vencimiento. Descuenta el inventario al cobrar.</p>
+    </div>
+    <div class="t">
+      <div class="ico">📄</div>
+      <h3>Cotizaciones</h3>
+      <p>Con fecha de vigencia y aviso de vencida. Se exportan a PDF y se pueden
+      convertir en factura sin volver a teclear nada.</p>
+    </div>
+    <div class="t">
+      <div class="ico">💳</div>
+      <h3>Abonos</h3>
+      <p>Pagos parciales sobre facturas a crédito. Muestra lo abonado y lo que resta,
+      y pasa la factura a cancelada al llegar a cero.</p>
+    </div>
+    <div class="t">
+      <div class="ico">👥</div>
+      <h3>Clientes y proveedores</h3>
+      <p>RTN, teléfono y dirección, que se autocompletan al facturar. Directorio de
+      proveedores ligado a los productos.</p>
+    </div>
+    <div class="t">
+      <div class="ico">🔐</div>
+      <h3>Usuarios y permisos</h3>
+      <p>El dueño crea usuarios y habilita secciones una por una. Las ocho rutas
+      verifican el permiso, no solo esconden el botón.</p>
+    </div>
+    <div class="t">
+      <div class="ico">📊</div>
+      <h3>Panel de control</h3>
+      <p>Ventas del día y del mes, saldo por cobrar, productos más vendidos y alertas
+      de existencias en una sola pantalla.</p>
+    </div>
+    <div class="t">
+      <div class="ico">🏛️</div>
+      <h3>Datos fiscales</h3>
+      <p>CAI, rango autorizado y fecha límite de emisión. Avisa cuando el rango está
+      por agotarse o el CAI venció.</p>
+    </div>
+  </div>
+
+  <h3>El recorrido de una venta a crédito</h3>
+  <figure>
+    <svg viewBox="0 0 820 150" width="100%" height="auto" role="img" aria-label="Flujo desde la cotización hasta la factura cancelada">
+      <rect x="8" y="42" width="150" height="62" rx="10" fill="#EDE8F8" stroke="#6B3FA0"/>
+      <text x="83" y="68" text-anchor="middle" font-size="13.5" font-weight="700" fill="#6B3FA0">Cotización</text>
+      <text x="83" y="87" text-anchor="middle" font-size="11.5" fill="#6B3FA0">con vigencia</text>
+
+      <rect x="180" y="42" width="150" height="62" rx="10" fill="#E8EEFB" stroke="#3457A6"/>
+      <text x="255" y="68" text-anchor="middle" font-size="13.5" font-weight="700" fill="#3457A6">Factura</text>
+      <text x="255" y="87" text-anchor="middle" font-size="11.5" fill="#3457A6">pendiente</text>
+
+      <rect x="352" y="42" width="150" height="62" rx="10" fill="#FBF0D9" stroke="#9A6A04"/>
+      <text x="427" y="68" text-anchor="middle" font-size="13.5" font-weight="700" fill="#9A6A04">Abonos</text>
+      <text x="427" y="87" text-anchor="middle" font-size="11.5" fill="#9A6A04">saldo va bajando</text>
+
+      <rect x="524" y="42" width="150" height="62" rx="10" fill="#E3F5EC" stroke="#1E7A45"/>
+      <text x="599" y="68" text-anchor="middle" font-size="13.5" font-weight="700" fill="#1E7A45">Cancelada</text>
+      <text x="599" y="87" text-anchor="middle" font-size="11.5" fill="#1E7A45">saldo en cero</text>
+
+      <rect x="696" y="42" width="116" height="62" rx="10" fill="#F3EDE2" stroke="#D7CCB4"/>
+      <text x="754" y="68" text-anchor="middle" font-size="13.5" font-weight="700" fill="#5C6B78">Inventario</text>
+      <text x="754" y="87" text-anchor="middle" font-size="11.5" fill="#5C6B78">descontado</text>
+
+      <g stroke="#5C6B78" stroke-width="2" fill="#5C6B78">
+        <line x1="158" y1="73" x2="174" y2="73"/><polygon points="180,73 170,68 170,78"/>
+        <line x1="330" y1="73" x2="346" y2="73"/><polygon points="352,73 342,68 342,78"/>
+        <line x1="502" y1="73" x2="518" y2="73"/><polygon points="524,73 514,68 514,78"/>
+      </g>
+      <line x1="255" y1="104" x2="255" y2="126" stroke="#5C6B78" stroke-width="2" stroke-dasharray="4 3"/>
+      <line x1="255" y1="126" x2="748" y2="126" stroke="#5C6B78" stroke-width="2" stroke-dasharray="4 3"/>
+      <line x1="754" y1="126" x2="754" y2="110" stroke="#5C6B78" stroke-width="2" stroke-dasharray="4 3"/>
+      <polygon points="754,104 749,114 759,114" fill="#5C6B78"/>
+      <text x="500" y="143" text-anchor="middle" font-size="11" fill="#5C6B78">al facturar, el inventario se descuenta automáticamente</text>
+    </svg>
+    <figcaption>Una cotización aceptada se convierte en factura sin volver a capturar los productos.</figcaption>
+  </figure>
+</section>
+
+<section>
+  <span class="kicker">04 · Arquitectura</span>
+  <h2>Cómo está construido</h2>
+  <p>
+    Es una aplicación de una sola página servida como archivos estáticos con HTTPS. El
+    enrutado y el control de acceso ocurren en el navegador, y cada ruta privada verifica
+    el permiso del usuario antes de mostrar nada.
+  </p>
+
+  <figure>
+    <svg viewBox="0 0 840 330" width="100%" height="auto" role="img" aria-label="Diagrama de arquitectura del sistema">
+      <rect x="10" y="10" width="250" height="310" rx="12" fill="#F3EDE2" stroke="#D7CCB4"/>
+      <text x="135" y="36" text-anchor="middle" font-size="14" font-weight="700" fill="#23272A">Navegador del cajero</text>
+
+      <rect x="30" y="52" width="210" height="52" rx="9" fill="#fff" stroke="#E4DCCB"/>
+      <text x="135" y="74" text-anchor="middle" font-size="13" font-weight="600" fill="#23272A">Aplicación React</text>
+      <text x="135" y="92" text-anchor="middle" font-size="11.5" fill="#5C6B78">Rutas protegidas por permiso</text>
+
+      <rect x="30" y="118" width="210" height="46" rx="9" fill="#FCE4D6" stroke="#E8590C"/>
+      <text x="135" y="140" text-anchor="middle" font-size="13" font-weight="600" fill="#B8480A">Service Worker</text>
+      <text x="135" y="156" text-anchor="middle" font-size="11.5" fill="#B8480A">Abre sin conexión</text>
+
+      <rect x="30" y="178" width="210" height="46" rx="9" fill="#E1F2EE" stroke="#2F7A6E"/>
+      <text x="135" y="200" text-anchor="middle" font-size="13" font-weight="600" fill="#2F7A6E">Caché de la aplicación</text>
+      <text x="135" y="216" text-anchor="middle" font-size="11.5" fill="#2F7A6E">HTML, estilos y código</text>
+
+      <rect x="30" y="238" width="210" height="66" rx="9" fill="#fff" stroke="#E4DCCB"/>
+      <text x="135" y="260" text-anchor="middle" font-size="13" font-weight="600" fill="#23272A">Lógica de negocio</text>
+      <text x="135" y="277" text-anchor="middle" font-size="11.5" fill="#5C6B78">carrito · saldos · fiscal</text>
+      <text x="135" y="293" text-anchor="middle" font-size="11.5" fill="#2F7A6E">93% cubierta por pruebas</text>
+
+      <rect x="300" y="70" width="230" height="120" rx="12" fill="#E8EEFB" stroke="#3457A6"/>
+      <text x="415" y="96" text-anchor="middle" font-size="14" font-weight="700" fill="#3457A6">Vercel</text>
+      <text x="415" y="122" text-anchor="middle" font-size="12.5" fill="#3457A6">CDN estático con HTTPS</text>
+      <text x="415" y="144" text-anchor="middle" font-size="12.5" fill="#3457A6">5 headers de seguridad</text>
+      <text x="415" y="166" text-anchor="middle" font-size="12.5" fill="#3457A6">www.oviedoarnold.lat</text>
+
+      <rect x="570" y="40" width="255" height="180" rx="12" fill="#E1F2EE" stroke="#2F7A6E"/>
+      <text x="697" y="66" text-anchor="middle" font-size="14" font-weight="700" fill="#2F7A6E">Supabase</text>
+      <rect x="590" y="80" width="215" height="42" rx="8" fill="#fff" stroke="#2F7A6E"/>
+      <text x="697" y="106" text-anchor="middle" font-size="12.5" fill="#2F7A6E">PostgreSQL · 12 tablas</text>
+      <rect x="590" y="132" width="215" height="42" rx="8" fill="#fff" stroke="#2F7A6E"/>
+      <text x="697" y="158" text-anchor="middle" font-size="12.5" fill="#2F7A6E">Políticas por fila (RLS)</text>
+      <text x="697" y="196" text-anchor="middle" font-size="11.5" fill="#2F7A6E">Autenticación y almacenamiento</text>
+
+      <line x1="300" y1="130" x2="245" y2="90" stroke="#3457A6" stroke-width="2"/>
+      <polygon points="245,90 256,92 252,101" fill="#3457A6"/>
+      <line x1="530" y1="130" x2="588" y2="130" stroke="#2F7A6E" stroke-width="2"/>
+      <polygon points="588,130 577,125 577,135" fill="#2F7A6E"/>
+    </svg>
+    <figcaption>Los datos viven en PostgreSQL; el aislamiento entre ferreterías lo aplica la base, no el navegador.</figcaption>
+  </figure>
+
+  <h3>Control de acceso</h3>
+  <p>
+    Las ocho rutas privadas comprueban el permiso del usuario. Escribir la dirección
+    directamente no da acceso: el sistema redirige a la primera sección que la persona
+    sí tenga habilitada. Si no tiene ninguna, ve una pantalla de aviso en lugar de un
+    error.
+  </p>
+
+  <p>
+    Ocultar botones es comodidad, no seguridad. Lo que de verdad contiene a alguien con
+    conocimientos técnicos son las políticas de la base: cada tabla filtra por la
+    ferretería del usuario, y sin una sesión válida Supabase no devuelve una sola fila
+    de ninguna de las doce tablas. La regla se evalúa en el motor, no en el navegador.
+  </p>
+
+  <div class="aviso">
+    <b>Limitación declarada:</b> desde que los datos viven en la base, cobrar exige
+    conexión. Antes el mostrador seguía facturando desconectado porque todo estaba en el
+    navegador, y eso se perdió al ganar que dos cajas compartan el mismo inventario.
+    Recuperarlo pide una caché local con cola de sincronización, que está documentada y
+    no implementada.
+  </div>
+</section>
+
+<section>
+  <span class="kicker">05 · Tecnologías</span>
+  <h2>Con qué está hecho</h2>
+
+  <div class="scroll">
+    <table>
+      <thead><tr><th>Pieza</th><th>Tecnología</th><th>Por qué</th></tr></thead>
+      <tbody>
+        <tr><td>Interfaz</td><td>React 19</td><td>Componentes reutilizables y estado predecible</td></tr>
+        <tr><td>Empaquetado</td><td>Vite 8</td><td>Arranque rápido en desarrollo y build ligero</td></tr>
+        <tr><td>Rutas</td><td>React Router 7</td><td>Navegación sin recargar y guardas por permiso</td></tr>
+        <tr><td>Estilos</td><td>CSS propio con tokens</td><td>Un solo sistema de color y tipografía, sin dependencias</td></tr>
+        <tr><td>Documentos</td><td>jsPDF y html2canvas</td><td>Facturas y cotizaciones en PDF desde el navegador</td></tr>
+        <tr><td>Pruebas</td><td>Vitest y Testing Library</td><td>Lógica y componentes, con reporte de cobertura</td></tr>
+        <tr><td>Integración</td><td>GitHub Actions</td><td>Lint, pruebas y build en cada cambio</td></tr>
+        <tr><td>Publicación</td><td>Vercel</td><td>HTTPS, dominio propio y headers de seguridad</td></tr>
+        <tr><td>Base de datos</td><td>PostgreSQL en Supabase</td><td>Doce tablas, multi-empresa con políticas de acceso por fila</td></tr>
+        <tr><td>Sesiones</td><td>Supabase Auth</td><td>Contraseñas hasheadas en el servidor, permisos por sección</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="cifras">
+    <div class="cifra"><b>317</b><span>Pruebas</span></div>
+    <div class="cifra"><b>63,3%</b><span>Cobertura</span></div>
+    <div class="cifra"><b>0</b><span>Avisos de lint</span></div>
+    <div class="cifra"><b>5</b><span>Headers</span></div>
+  </div>
+</section>
+
+<section>
+  <span class="kicker">06 · Manual de uso</span>
+  <h2>Cómo se usa, paso a paso</h2>
+
+  <ol class="pasos">
+    <li>
+      <b>Entrar al sistema</b>
+      <span>Abre <code>www.oviedoarnold.lat</code> y pulsa «Iniciar sesión». Escribe tu
+      usuario y contraseña. Solo verás las secciones que el administrador te habilitó.</span>
+    </li>
+    <li>
+      <b>Cargar el inventario</b>
+      <span>En <code>Inventario</code> pulsa «Nuevo producto» y completa código, nombre,
+      categoría, precio y existencias. El campo «stock mínimo» define cuándo el sistema
+      te avisa que se está acabando.</span>
+    </li>
+    <li>
+      <b>Registrar un cliente</b>
+      <span>En <code>Clientes</code> agrega nombre, RTN, teléfono y dirección. Es obligatorio
+      para vender al crédito, y esos datos se imprimen solos en la factura.</span>
+    </li>
+    <li>
+      <b>Facturar una venta</b>
+      <span>En <code>Facturar</code> busca el producto y pulsa «Agregar». Elige contado o
+      crédito; si es crédito, selecciona el cliente y la fecha de vencimiento. Revisa el
+      total y pulsa «Generar factura».</span>
+    </li>
+    <li>
+      <b>Hacer una cotización</b>
+      <span>En <code>Cotizar</code> arma la lista igual que una venta, define hasta cuándo
+      es válida y guárdala. Puedes exportarla a PDF para enviarla al cliente.</span>
+    </li>
+    <li>
+      <b>Convertir la cotización en factura</b>
+      <span>Cuando el cliente acepte, pulsa «Facturar» en esa cotización. Los productos y
+      el cliente pasan al punto de venta ya cargados. Si algo cambió de precio o se agotó,
+      el sistema te avisa antes.</span>
+    </li>
+    <li>
+      <b>Registrar un abono</b>
+      <span>En <code>Historial</code> busca la factura a crédito y pulsa «Abonar». Escribe
+      el monto o usa «Pagar el saldo completo». La factura pasa a «Cancelada» cuando el
+      saldo llega a cero.</span>
+    </li>
+    <li>
+      <b>Revisar el negocio</b>
+      <span>El <code>Dashboard</code> muestra las ventas del día y del mes, cuánto te deben,
+      qué productos están bajos y cuáles se agotaron. En <code>Configuración</code> creas
+      usuarios y defines qué puede ver cada uno.</span>
+    </li>
+  </ol>
+</section>
+
+<section>
+  <span class="kicker">07 · El cliente</span>
+  <h2>Para quién se hizo</h2>
+  <p>
+    El sistema se desarrolló para <b>Ferretería Isaac</b>, en San Pedro Sula, Cortés. Es
+    una ferretería de barrio que atiende tanto al cliente que llega por un tornillo como
+    a constructoras que compran material a crédito y piden cotización antes.
+  </p>
+  <p>
+    Ese doble perfil marcó el diseño: el punto de venta tenía que ser lo bastante rápido
+    para no hacer esperar a quien compra poco, y el módulo de crédito lo bastante serio
+    para llevar cuenta de lo que deben las constructoras. Por eso las cotizaciones se
+    convierten en factura sin volver a teclear, y por eso los abonos muestran el saldo
+    en cada momento.
+  </p>
+  <p>
+    Trabajar sin Internet también salió de esa conversación. En la zona el servicio se
+    cae con frecuencia, y una ferretería no puede dejar de cobrar porque no haya señal.
+    La primera versión guardaba todo en el equipo y seguía funcionando desconectada.
+  </p>
+  <p>
+    <b>Eso se perdió al llevar los datos a una base compartida</b>, y conviene decirlo
+    sin rodeos. A cambio se ganó lo que hace vendible el producto: varias cajas sobre el
+    mismo inventario, contraseñas protegidas en el servidor y datos que una ferretería no
+    puede ver de otra. Hoy la aplicación abre sin conexión, pero cobrar requiere señal.
+  </p>
+  <p>
+    El siguiente paso, ya documentado, es devolverle al mostrador el trabajo
+    desconectado: una caché local con cola de sincronización que deje facturar sin red y
+    suba las ventas cuando vuelva. Está pendiente, y hasta que exista es una limitación
+    real para un negocio con conexión inestable.
+  </p>
+</section>
+
+<section>
+  <span class="kicker">08 · El autor</span>
+  <h2>Quién lo desarrolló</h2>
+  <p>
+    <b>Arnold Oviedo</b> — desarrollo completo del producto: interfaz, lógica de negocio,
+    pruebas, integración continua y publicación.
+  </p>
+  <p>
+    El proyecto se construyó con asistencia de inteligencia artificial, documentada en la
+    bitácora del repositorio con dos commits reales donde la propuesta de la herramienta
+    fue corregida o rechazada. En un caso la IA detectó que la funcionalidad pedida era
+    imposible sobre el modelo de datos existente y se replanteó el alcance; en otro, un
+    arreglo aparentemente simple destapó un problema de permisos que se cerró en el mismo
+    cambio.
+  </p>
+  <p>
+    Repositorio: <a href="https://github.com/oviedoarnold/Sistema-Ferreteria">github.com/oviedoarnold/Sistema-Ferreteria</a><br>
+    Producto: <a href="https://www.oviedoarnold.lat/">www.oviedoarnold.lat</a>
+  </p>
+</section>
+
+</div>
+
+<footer>
+  <div class="wrap">
+    <span>Sistema Ferretería · Arnold Oviedo · 2026</span>
+    <span><code>LEARN-CAP-50768C03</code></span>
+  </div>
+</footer>
+
+</body>
+</html>

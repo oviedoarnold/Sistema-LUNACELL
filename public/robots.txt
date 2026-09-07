@@ -1,0 +1,15 @@
+User-agent: *
+Allow: /$
+Allow: /login
+
+# El portal privado no aporta nada a un buscador y exige sesión.
+Disallow: /dashboard
+Disallow: /products
+Disallow: /clients
+Disallow: /suppliers
+Disallow: /pos
+Disallow: /quotes
+Disallow: /sales-history
+Disallow: /settings
+
+Sitemap: https://www.oviedoarnold.lat/sitemap.xml

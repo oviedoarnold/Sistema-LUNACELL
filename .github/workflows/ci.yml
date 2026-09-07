@@ -1,0 +1,73 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+# Las acciones se fijan por SHA de commit y no por etiqueta: una etiqueta
+# puede reapuntarse a otro código sin que nos enteremos.
+jobs:
+  verificar:
+    name: Lint, tests y build
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+
+    env:
+      SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+
+    steps:
+      - name: Descargar el código
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          # SonarCloud necesita el historial para atribuir el código nuevo.
+          fetch-depth: 0
+
+      - name: Preparar Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      # --ignore-scripts evita que un paquete ejecute código al instalarse.
+      # Los únicos que los usan aquí son core-js, que solo imprime un
+      # mensaje, y fsevents, que es exclusivo de macOS. Los binarios de
+      # rolldown llegan como paquetes por plataforma, no por script.
+      - name: Instalar dependencias
+        run: npm ci --ignore-scripts
+
+      # Los tres pasos siguientes bloquean: si el lint marca algo, un test
+      # falla o el build se rompe, el pipeline queda en rojo y el commit no
+      # se considera bueno.
+      - name: Lint
+        run: npm run lint
+
+      - name: Tests con cobertura
+        run: npm run coverage:ci
+
+      # Sin esto, saber que prueba fallo exige permisos de administrador
+      # para descargar los logs. Con esto queda escrito en la pagina del
+      # run, que cualquiera con acceso al repositorio puede leer.
+      - name: Anotar las pruebas que fallaron
+        if: failure()
+        run: node scripts/resumir-fallos.mjs >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Build de producción
+        run: npm run build
+
+      # Se omite mientras no exista el secreto SONAR_TOKEN, para no dejar
+      # el pipeline en rojo antes de conectar el proyecto en SonarCloud.
+      - name: SonarCloud
+        if: env.SONAR_TOKEN != ''
+        uses: SonarSource/sonarqube-scan-action@689fb39b34b9aa95ebc5f8f119343ddd51542402 # v4
+
+      - name: Publicar el reporte de cobertura
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: cobertura
+          path: coverage/
+          retention-days: 30

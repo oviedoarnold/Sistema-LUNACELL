@@ -1,0 +1,354 @@
+{
+    "motor": "postgres",
+    "tablas": [
+        {
+            "filas": 5,
+            "nombre": "abonos",
+            "indices": [
+                "abonos_pkey",
+                "idx_abonos_venta"
+            ],
+            "columnas": [
+                { "pk": true, "nulo": false, "tipo": "uuid", "nombre": "id" },
+                { "pk": false, "nulo": false, "tipo": "uuid", "nombre": "empresa_id" },
+                { "pk": false, "nulo": false, "tipo": "uuid", "nombre": "venta_id" },
+                { "pk": false, "nulo": true, "tipo": "uuid", "nombre": "usuario_id" },
+                { "pk": false, "nulo": false, "tipo": "numeric(12,2)", "nombre": "monto" },
+                { "pk": false, "nulo": false, "tipo": "timestamp with time zone", "nombre": "fecha" },
+                { "pk": false, "nulo": false, "tipo": "text", "nombre": "nota" }
+            ],
+            "relaciones": [
+                { "columna": "empresa_id", "referencia": "empresas.id" },
+                { "columna": "usuario_id", "referencia": "usuarios.id" },
+                { "columna": "venta_id", "referencia": "ventas.id" }
+            ],
+            "politicas_rls": [
+                "abonos_de_mi_empresa"
+            ]
+        },
+        {
+            "filas": 3,
+            "nombre": "clientes",
+            "indices": [
+                "clientes_pkey",
+                "idx_clientes_empresa",
+                "idx_clientes_nombre"
+            ],
+            "columnas": [
+                { "pk": true, "nulo": false, "tipo": "uuid", "nombre": "id" },
+                { "pk": false, "nulo": false, "tipo": "uuid", "nombre": "empresa_id" },
+                { "pk": false, "nulo": false, "tipo": "text", "nombre": "nombre" },
+                { "pk": false, "nulo": false, "tipo": "text", "nombre": "rtn" },
+                { "pk": false, "nulo": false, "tipo": "text", "nombre": "telefono" },
+                { "pk": false, "nulo": false, "tipo": "text", "nombre": "direccion" },
+                { "pk": false, "nulo": false, "tipo": "text", "nombre": "email" },
+                { "pk": false, "nulo": false, "tipo": "timestamp with time zone", "nombre": "creado_en" }
+            ],
+            "relaciones": [
+                { "columna": "empresa_id", "referencia": "empresas.id" }
+            ],
+            "politicas_rls": [
+                "clientes_de_mi_empresa"
+            ]
+        },
+        {
+            "filas": 2,
+            "nombre": "cotizaciones",
+            "indices": [
+                "cotizaciones_empresa_id_numero_key",
+                "cotizaciones_pkey",
+                "idx_cotizaciones_empresa"
+            ],
+            "columnas": [
+                { "pk": true, "nulo": false, "tipo": "uuid", "nombre": "id" },
+                { "pk": false, "nulo": false, "tipo": "uuid", "nombre": "empresa_id" },
+                { "pk": false, "nulo": true, "tipo": "uuid", "nombre": "cliente_id" },
+                { "pk": false, "nulo": true, "tipo": "uuid", "nombre": "usuario_id" },
+                { "pk": false, "nulo": false, "tipo": "text", "nombre": "numero" },
+                { "pk": false, "nulo": false, "tipo": "bigint", "nombre": "correlativo" },
+                { "pk": false, "nulo": false, "tipo": "timestamp with time zone", "nombre": "fecha" },
+                { "pk": false, "nulo": true, "tipo": "date", "nombre": "valida_hasta" },
+                { "pk": false, "nulo": false, "tipo": "text", "nombre": "nombre_cliente" },
+                { "pk": false, "nulo": false, "tipo": "text", "nombre": "rtn_cliente" },
+                { "pk": false, "nulo": false, "tipo": "boolean", "nombre": "incluye_isv" },
+                { "pk": false, "nulo": false, "tipo": "numeric(12,2)", "nombre": "subtotal" },
+                { "pk": false, "nulo": false, "tipo": "numeric(12,2)", "nombre": "isv" },
+                { "pk": false, "nulo": false, "tipo": "numeric(5,2)", "nombre": "tasa_isv" },
+                { "pk": false, "nulo": false, "tipo": "numeric(12,2)", "nombre": "total" },
+                { "pk": false, "nulo": false, "tipo": "text", "nombre": "notas" },
+                { "pk": false, "nulo": true, "tipo": "uuid", "nombre": "venta_id" }
+            ],
+            "relaciones": [
+                { "columna": "cliente_id", "referencia": "clientes.id" },
+                { "columna": "empresa_id", "referencia": "empresas.id" },
+                { "columna": "usuario_id", "referencia": "usuarios.id" },
+                { "columna": "venta_id", "referencia": "ventas.id" }
+            ],
+            "politicas_rls": [
+                "cotizaciones_de_mi_empresa"
+            ]
+        },
+        {
+            "filas": 2,
+            "nombre": "detalle_cotizacion",
+            "indices": [
+                "detalle_cotizacion_pkey",
+                "idx_detalle_cotizacion"
+            ],
+            "columnas": [
+                { "pk": true, "nulo": false, "tipo": "uuid", "nombre": "id" },
+                { "pk": false, "nulo": false, "tipo": "uuid", "nombre": "empresa_id" },
+                { "pk": false, "nulo": false, "tipo": "uuid", "nombre": "cotizacion_id" },
+                { "pk": false, "nulo": true, "tipo": "uuid", "nombre": "producto_id" },
+                { "pk": false, "nulo": false, "tipo": "text", "nombre": "nombre" },
+                { "pk": false, "nulo": false, "tipo": "text", "nombre": "codigo" },
+                { "pk": false, "nulo": false, "tipo": "integer", "nombre": "cantidad" },
+                { "pk": false, "nulo": false, "tipo": "numeric(12,2)", "nombre": "precio" },
+                { "pk": false, "nulo": false, "tipo": "numeric(12,2)", "nombre": "subtotal" }
+            ],
+            "relaciones": [
+                { "columna": "cotizacion_id", "referencia": "cotizaciones.id" },
+                { "columna": "empresa_id", "referencia": "empresas.id" },
+                { "columna": "producto_id", "referencia": "productos.id" }
+            ],
+            "politicas_rls": [
+                "detalle_cotizacion_de_mi_empresa"
+            ]
+        },
+        {
+            "filas": 9,
+            "nombre": "detalle_venta",
+            "indices": [
+                "detalle_venta_pkey",
+                "idx_detalle_venta"
+            ],
+            "columnas": [
+                { "pk": true, "nulo": false, "tipo": "uuid", "nombre": "id" },
+                { "pk": false, "nulo": false, "tipo": "uuid", "nombre": "empresa_id" },
+                { "pk": false, "nulo": false, "tipo": "uuid", "nombre": "venta_id" },
+                { "pk": false, "nulo": true, "tipo": "uuid", "nombre": "producto_id" },
+                { "pk": false, "nulo": false, "tipo": "text", "nombre": "nombre" },
+                { "pk": false, "nulo": false, "tipo": "text", "nombre": "codigo" },
+                { "pk": false, "nulo": false, "tipo": "integer", "nombre": "cantidad" },
+                { "pk": false, "nulo": false, "tipo": "numeric(12,2)", "nombre": "precio" },
+                { "pk": false, "nulo": false, "tipo": "numeric(12,2)", "nombre": "subtotal" }
+            ],
+            "relaciones": [
+                { "columna": "empresa_id", "referencia": "empresas.id" },
+                { "columna": "producto_id", "referencia": "productos.id" },
+                { "columna": "venta_id", "referencia": "ventas.id" }
+            ],
+            "politicas_rls": [
+                "detalle_venta_de_mi_empresa"
+            ]
+        },
+        {
+            "filas": 1,
+            "nombre": "empresas",
+            "indices": [
+                "empresas_pkey"
+            ],
+            "columnas": [
+                { "pk": true, "nulo": false, "tipo": "uuid", "nombre": "id" },
+                { "pk": false, "nulo": false, "tipo": "text", "nombre": "nombre" },
+                { "pk": false, "nulo": false, "tipo": "text", "nombre": "direccion" },
+                { "pk": false, "nulo": false, "tipo": "text", "nombre": "telefono" },
+                { "pk": false, "nulo": false, "tipo": "text", "nombre": "moneda" },
+                { "pk": false, "nulo": false, "tipo": "numeric(5,2)", "nombre": "tasa_isv" },
+                { "pk": false, "nulo": false, "tipo": "text", "nombre": "rtn" },
+                { "pk": false, "nulo": false, "tipo": "text", "nombre": "cai" },
+                { "pk": false, "nulo": false, "tipo": "text", "nombre": "establecimiento" },
+                { "pk": false, "nulo": false, "tipo": "text", "nombre": "punto_emision" },
+                { "pk": false, "nulo": false, "tipo": "text", "nombre": "tipo_documento" },
+                { "pk": false, "nulo": true, "tipo": "bigint", "nombre": "rango_desde" },
+                { "pk": false, "nulo": true, "tipo": "bigint", "nombre": "rango_hasta" },
+                { "pk": false, "nulo": true, "tipo": "date", "nombre": "fecha_limite_emision" },
+                { "pk": false, "nulo": false, "tipo": "bigint", "nombre": "proximo_correlativo_factura" },
+                { "pk": false, "nulo": false, "tipo": "bigint", "nombre": "proximo_correlativo_cotizacion" },
+                { "pk": false, "nulo": false, "tipo": "boolean", "nombre": "es_demo" },
+                { "pk": false, "nulo": false, "tipo": "timestamp with time zone", "nombre": "creada_en" }
+            ],
+            "relaciones": [],
+            "politicas_rls": [
+                "empresas_select",
+                "empresas_update"
+            ]
+        },
+        {
+            "filas": 19,
+            "nombre": "movimientos_inventario",
+            "indices": [
+                "idx_movimientos_empresa",
+                "idx_movimientos_producto",
+                "movimientos_inventario_pkey"
+            ],
+            "columnas": [
+                { "pk": true, "nulo": false, "tipo": "bigint", "nombre": "id" },
+                { "pk": false, "nulo": false, "tipo": "uuid", "nombre": "empresa_id" },
+                { "pk": false, "nulo": false, "tipo": "uuid", "nombre": "producto_id" },
+                { "pk": false, "nulo": true, "tipo": "uuid", "nombre": "usuario_id" },
+                { "pk": false, "nulo": true, "tipo": "uuid", "nombre": "venta_id" },
+                { "pk": false, "nulo": false, "tipo": "text", "nombre": "tipo" },
+                { "pk": false, "nulo": false, "tipo": "integer", "nombre": "cantidad" },
+                { "pk": false, "nulo": false, "tipo": "text", "nombre": "motivo" },
+                { "pk": false, "nulo": false, "tipo": "timestamp with time zone", "nombre": "fecha" }
+            ],
+            "relaciones": [
+                { "columna": "empresa_id", "referencia": "empresas.id" },
+                { "columna": "producto_id", "referencia": "productos.id" },
+                { "columna": "usuario_id", "referencia": "usuarios.id" },
+                { "columna": "venta_id", "referencia": "ventas.id" }
+            ],
+            "politicas_rls": [
+                "movimientos_inventario_de_mi_empresa"
+            ]
+        },
+        {
+            "filas": 18,
+            "nombre": "permisos_usuario",
+            "indices": [
+                "idx_permisos_empresa",
+                "permisos_usuario_pkey"
+            ],
+            "columnas": [
+                { "pk": true, "nulo": false, "tipo": "uuid", "nombre": "usuario_id" },
+                { "pk": false, "nulo": false, "tipo": "uuid", "nombre": "empresa_id" },
+                { "pk": true, "nulo": false, "tipo": "text", "nombre": "seccion" }
+            ],
+            "relaciones": [
+                { "columna": "empresa_id", "referencia": "empresas.id" },
+                { "columna": "usuario_id", "referencia": "usuarios.id" }
+            ],
+            "politicas_rls": [
+                "permisos_admin_escribe",
+                "permisos_propios_select"
+            ]
+        },
+        {
+            "filas": 9,
+            "nombre": "productos",
+            "indices": [
+                "idx_productos_empresa",
+                "productos_empresa_id_codigo_key",
+                "productos_pkey"
+            ],
+            "columnas": [
+                { "pk": true, "nulo": false, "tipo": "uuid", "nombre": "id" },
+                { "pk": false, "nulo": false, "tipo": "uuid", "nombre": "empresa_id" },
+                { "pk": false, "nulo": true, "tipo": "uuid", "nombre": "proveedor_id" },
+                { "pk": false, "nulo": false, "tipo": "text", "nombre": "codigo" },
+                { "pk": false, "nulo": false, "tipo": "text", "nombre": "nombre" },
+                { "pk": false, "nulo": false, "tipo": "text", "nombre": "categoria" },
+                { "pk": false, "nulo": false, "tipo": "numeric(12,2)", "nombre": "precio" },
+                { "pk": false, "nulo": false, "tipo": "numeric(12,2)", "nombre": "costo" },
+                { "pk": false, "nulo": false, "tipo": "integer", "nombre": "stock_minimo" },
+                { "pk": false, "nulo": false, "tipo": "boolean", "nombre": "activo" },
+                { "pk": false, "nulo": false, "tipo": "timestamp with time zone", "nombre": "creado_en" },
+                { "pk": false, "nulo": true, "tipo": "text", "nombre": "imagen_url" }
+            ],
+            "relaciones": [
+                { "columna": "empresa_id", "referencia": "empresas.id" },
+                { "columna": "proveedor_id", "referencia": "proveedores.id" }
+            ],
+            "politicas_rls": [
+                "productos_de_mi_empresa"
+            ]
+        },
+        {
+            "filas": 2,
+            "nombre": "proveedores",
+            "indices": [
+                "idx_proveedores_empresa",
+                "proveedores_pkey"
+            ],
+            "columnas": [
+                { "pk": true, "nulo": false, "tipo": "uuid", "nombre": "id" },
+                { "pk": false, "nulo": false, "tipo": "uuid", "nombre": "empresa_id" },
+                { "pk": false, "nulo": false, "tipo": "text", "nombre": "nombre" },
+                { "pk": false, "nulo": false, "tipo": "text", "nombre": "contacto" },
+                { "pk": false, "nulo": false, "tipo": "text", "nombre": "telefono" },
+                { "pk": false, "nulo": false, "tipo": "text", "nombre": "email" },
+                { "pk": false, "nulo": false, "tipo": "text", "nombre": "notas" },
+                { "pk": false, "nulo": false, "tipo": "timestamp with time zone", "nombre": "creado_en" }
+            ],
+            "relaciones": [
+                { "columna": "empresa_id", "referencia": "empresas.id" }
+            ],
+            "politicas_rls": [
+                "proveedores_de_mi_empresa"
+            ]
+        },
+        {
+            "filas": 3,
+            "nombre": "usuarios",
+            "indices": [
+                "idx_usuarios_email",
+                "idx_usuarios_empresa",
+                "usuarios_auth_id_key",
+                "usuarios_empresa_id_email_key",
+                "usuarios_pkey"
+            ],
+            "columnas": [
+                { "pk": true, "nulo": false, "tipo": "uuid", "nombre": "id" },
+                { "pk": false, "nulo": true, "tipo": "uuid", "nombre": "auth_id" },
+                { "pk": false, "nulo": false, "tipo": "uuid", "nombre": "empresa_id" },
+                { "pk": false, "nulo": false, "tipo": "text", "nombre": "email" },
+                { "pk": false, "nulo": false, "tipo": "text", "nombre": "nombre" },
+                { "pk": false, "nulo": false, "tipo": "text", "nombre": "rol" },
+                { "pk": false, "nulo": false, "tipo": "boolean", "nombre": "activo" },
+                { "pk": false, "nulo": false, "tipo": "timestamp with time zone", "nombre": "invitado_en" },
+                { "pk": false, "nulo": true, "tipo": "timestamp with time zone", "nombre": "entro_en" }
+            ],
+            "relaciones": [
+                { "columna": "auth_id", "referencia": "users.id" },
+                { "columna": "empresa_id", "referencia": "empresas.id" }
+            ],
+            "politicas_rls": [
+                "usuarios_admin",
+                "usuarios_select"
+            ]
+        },
+        {
+            "filas": 7,
+            "nombre": "ventas",
+            "indices": [
+                "idx_ventas_empresa_fecha",
+                "idx_ventas_pendientes",
+                "ventas_empresa_id_numero_factura_key",
+                "ventas_pkey"
+            ],
+            "columnas": [
+                { "pk": true, "nulo": false, "tipo": "uuid", "nombre": "id" },
+                { "pk": false, "nulo": false, "tipo": "uuid", "nombre": "empresa_id" },
+                { "pk": false, "nulo": true, "tipo": "uuid", "nombre": "cliente_id" },
+                { "pk": false, "nulo": true, "tipo": "uuid", "nombre": "usuario_id" },
+                { "pk": false, "nulo": false, "tipo": "text", "nombre": "numero_factura" },
+                { "pk": false, "nulo": false, "tipo": "bigint", "nombre": "correlativo" },
+                { "pk": false, "nulo": false, "tipo": "timestamp with time zone", "nombre": "fecha" },
+                { "pk": false, "nulo": false, "tipo": "text", "nombre": "nombre_cliente" },
+                { "pk": false, "nulo": false, "tipo": "text", "nombre": "rtn_comprador" },
+                { "pk": false, "nulo": false, "tipo": "numeric(12,2)", "nombre": "subtotal" },
+                { "pk": false, "nulo": false, "tipo": "numeric(12,2)", "nombre": "isv" },
+                { "pk": false, "nulo": false, "tipo": "numeric(5,2)", "nombre": "tasa_isv" },
+                { "pk": false, "nulo": false, "tipo": "numeric(12,2)", "nombre": "total" },
+                { "pk": false, "nulo": false, "tipo": "text", "nombre": "forma_pago" },
+                { "pk": false, "nulo": true, "tipo": "date", "nombre": "fecha_vencimiento" },
+                { "pk": false, "nulo": false, "tipo": "text", "nombre": "estado" },
+                { "pk": false, "nulo": false, "tipo": "text", "nombre": "cai_emision" },
+                { "pk": false, "nulo": true, "tipo": "bigint", "nombre": "rango_desde_emision" },
+                { "pk": false, "nulo": true, "tipo": "bigint", "nombre": "rango_hasta_emision" },
+                { "pk": false, "nulo": true, "tipo": "date", "nombre": "fecha_limite_emision_emision" },
+                { "pk": false, "nulo": false, "tipo": "text", "nombre": "nota" }
+            ],
+            "relaciones": [
+                { "columna": "cliente_id", "referencia": "clientes.id" },
+                { "columna": "empresa_id", "referencia": "empresas.id" },
+                { "columna": "usuario_id", "referencia": "usuarios.id" }
+            ],
+            "politicas_rls": [
+                "ventas_de_mi_empresa"
+            ]
+        }
+    ],
+    "generado_at": "2026-09-03T22:34:02Z"
+}

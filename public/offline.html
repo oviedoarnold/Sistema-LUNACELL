@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sin conexión · Sistema Ferretería</title>
+<style>
+  :root{--charcoal:#23272A;--orange:#E8590C;--paper:#fff;--steel:#5C6B78;--line:#E4DCCB}
+  *{box-sizing:border-box}
+  body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px;
+    background:var(--charcoal);
+    background-image:radial-gradient(circle,rgba(255,255,255,.05) 1.6px,transparent 1.7px);
+    background-size:18px 18px;
+    font-family:'Source Sans 3','Segoe UI',system-ui,sans-serif;color:var(--charcoal)}
+  .card{background:var(--paper);border-radius:18px;box-shadow:0 16px 40px rgba(35,39,42,.3);
+    width:100%;max-width:400px;padding:34px 28px;text-align:center}
+  .mark{width:56px;height:56px;border-radius:14px;background:var(--orange);
+    display:flex;align-items:center;justify-content:center;font-size:28px;margin:0 auto 18px}
+  h1{font-family:'Oswald','Arial Narrow',sans-serif;font-size:24px;margin:0 0 8px}
+  p{color:var(--steel);font-size:15.5px;line-height:1.6;margin:0 0 20px}
+  button{width:100%;padding:14px;border:none;border-radius:10px;background:var(--orange);
+    color:#fff;font-size:16px;font-weight:600;font-family:inherit;cursor:pointer}
+  button:hover{background:#C44D0A}
+  .nota{margin-top:18px;padding-top:16px;border-top:1px dashed var(--line);
+    font-size:13px;color:var(--steel);text-align:left;line-height:1.6}
+</style>
+</head>
+<body>
+  <div class="card">
+    <div class="mark">🔧</div>
+    <h1>Sin conexión</h1>
+    <p>No se pudo cargar esta parte del sistema porque no hay Internet.</p>
+    <button onclick="location.reload()">Reintentar</button>
+    <p class="nota">
+      Si ya habías abierto el sistema en este equipo, puedes seguir facturando:
+      los datos están guardados en el navegador y se conservan hasta que vuelva
+      la conexión.
+    </p>
+  </div>
+</body>
+</html>

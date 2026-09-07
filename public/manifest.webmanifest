@@ -1,0 +1,25 @@
+{
+  "name": "Sistema Ferretería",
+  "short_name": "Ferretería",
+  "description": "Inventario, facturación, cotizaciones y abonos para ferreterías.",
+  "id": "/",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#23272A",
+  "theme_color": "#23272A",
+  "lang": "es-HN",
+  "dir": "ltr",
+  "categories": ["business", "productivity"],
+  "icons": [
+    { "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "shortcuts": [
+    { "name": "Facturar", "short_name": "Facturar", "url": "/pos" },
+    { "name": "Cotizar", "short_name": "Cotizar", "url": "/quotes" },
+    { "name": "Inventario", "short_name": "Inventario", "url": "/products" }
+  ]
+}

@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="robots" content="noindex">
+<title>Página no encontrada · Sistema Ferretería</title>
+<style>
+  :root{--charcoal:#23272A;--orange:#E8590C;--paper:#fff;--steel:#5C6B78;--line:#E4DCCB}
+  *{box-sizing:border-box}
+  body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px;
+    background:var(--charcoal);
+    background-image:radial-gradient(circle,rgba(255,255,255,.05) 1.6px,transparent 1.7px);
+    background-size:18px 18px;
+    font-family:'Source Sans 3','Segoe UI',system-ui,sans-serif;color:var(--charcoal)}
+  .card{background:var(--paper);border-radius:18px;box-shadow:0 16px 40px rgba(35,39,42,.3);
+    width:100%;max-width:420px;padding:34px 28px;text-align:center}
+  .mark{width:56px;height:56px;border-radius:14px;background:var(--orange);
+    display:flex;align-items:center;justify-content:center;font-size:28px;margin:0 auto 18px}
+  .codigo{font-family:'IBM Plex Mono','Consolas',monospace;font-size:13px;letter-spacing:.14em;
+    text-transform:uppercase;color:var(--steel);margin:0 0 6px}
+  h1{font-family:'Oswald','Arial Narrow',sans-serif;font-size:25px;margin:0 0 10px}
+  p{color:var(--steel);font-size:15.5px;line-height:1.6;margin:0 0 22px}
+  .acciones{display:flex;flex-direction:column;gap:10px}
+  a{display:block;padding:13px;border-radius:10px;text-decoration:none;font-weight:600;font-size:15.5px}
+  .primaria{background:var(--orange);color:#fff}
+  .primaria:hover{background:#C44D0A}
+  .secundaria{border:1.5px solid var(--line);color:var(--charcoal)}
+  .secundaria:hover{background:#FAF6EF}
+  @media (max-width:480px){
+    .card{padding:26px 20px}
+    h1{font-size:22px}
+  }
+</style>
+</head>
+<body>
+  <div class="card">
+    <div class="mark">🔧</div>
+    <p class="codigo">Error 404</p>
+    <h1>Esta página no existe</h1>
+    <p>
+      La dirección que abriste no corresponde a ninguna sección del sistema.
+      Puede que el enlace esté mal escrito o que la página haya cambiado de
+      lugar.
+    </p>
+    <div class="acciones">
+      <a class="primaria" href="/dashboard">Ir al panel</a>
+      <a class="secundaria" href="/">Volver al inicio</a>
+    </div>
+  </div>
+</body>
+</html>
