@@ -28,7 +28,7 @@ export const config = {
   ],
 }
 
-const MARCA = "ferreteria-sesion"
+const MARCA = "lunacell-sesion"
 
 function tieneMarcaDeSesion(peticion) {
   const cookies = peticion.headers.get("cookie") || ""
