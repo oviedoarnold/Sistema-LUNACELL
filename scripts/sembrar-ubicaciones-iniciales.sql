@@ -1,9 +1,9 @@
 -- Siembra las cuatro ubicaciones con las que arranca LUNACELL. NO es una
 -- migración.
 --
--- Vive entre los scripts y no entre las migraciones por la misma razón que
--- limpiar-datos-fiscales-de-muestra.sql: no es un paso del esquema sino
--- una decisión del negocio. Qué lugares tiene LUNACELL hoy es algo que
+-- Vive entre los scripts y no entre las migraciones porque no es un paso del
+-- esquema sino una decisión del negocio. Qué lugares tiene LUNACELL hoy es
+-- algo que
 -- cambia —se compra un camión, se cierra una tienda— y una migración que
 -- lo fije convertiría ese cambio en un problema de base de datos.
 --
