@@ -1,5 +1,5 @@
 /*
-  Service Worker del Sistema Ferretería.
+  Service Worker de LUNACELL.
 
   Estrategia principal: stale-while-revalidate sobre los archivos propios.
   Se responde de inmediato con lo que hay en caché y en segundo plano se
@@ -14,7 +14,7 @@
   llenarla.
 */
 
-const CACHE_NAME = "ferreteria-v1"
+const CACHE_NAME = "lunacell-v1"
 
 const ARCHIVOS_BASE = [
   "/",
@@ -74,10 +74,15 @@ self.addEventListener("install", (event) => {
 /*
   Borra los archivos con hash de compilaciones anteriores.
 
-  El nombre del cache no lleva version a proposito: cambiarlo tiraria
-  tambien lo que se fue guardando en uso. Se limpian solo las entradas de
+  Dentro de una misma version del cache se limpian solo las entradas de
   /assets/ que ya no estan en esta compilacion, que son exactamente las que
-  nadie va a volver a pedir.
+  nadie va a volver a pedir. Lo demas —el index, los iconos— se conserva,
+  porque tirarlo obligaria a volver a descargarlo sin motivo.
+
+  El cambio de version del cache es otra cosa y lo resuelve activate:
+  cualquier cache con nombre distinto al actual se borra entera. Asi se
+  retiro "ferreteria-v1", heredado del sistema anterior, sin pedirle nada
+  al usuario.
 */
 async function limpiarAssetsViejos() {
   const cache = await caches.open(CACHE_NAME)
@@ -95,6 +100,16 @@ async function limpiarAssetsViejos() {
   )
 }
 
+/*
+  Al activar se borra toda cache que no sea la de esta version.
+
+  Es lo que retira de golpe la cache de una version anterior —incluida
+  "ferreteria-v1", la del sistema del que salio este— en el primer arranque
+  despues de desplegar. Con skipWaiting() en la instalacion y clients.claim()
+  aqui, el service worker nuevo toma el control sin esperar a que el usuario
+  cierre todas las pestañas, que es lo que dejaba a la gente viendo la
+  version vieja despues de un despliegue.
+*/
 self.addEventListener("activate", (event) => {
   event.waitUntil(
     caches

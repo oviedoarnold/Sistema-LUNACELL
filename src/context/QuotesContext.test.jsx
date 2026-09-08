@@ -93,7 +93,7 @@ async function cotizar(result, cotizacion) {
 }
 
 describe("QuotesContext", () => {
-  it("arranca sin cotizaciones cuando la ferretería no tiene ninguna", async () => {
+  it("arranca sin cotizaciones cuando la empresa no tiene ninguna", async () => {
     const { result } = await montarCotizaciones()
 
     expect(result.current.quotes).toEqual([])

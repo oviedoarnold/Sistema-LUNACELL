@@ -113,7 +113,7 @@ describe("Login", () => {
     expect(screen.queryByText("Dashboard")).not.toBeInTheDocument()
   })
 
-  it("explica cuándo la cuenta no está asignada a una ferretería", async () => {
+  it("explica cuándo la cuenta no está asignada a una empresa", async () => {
     await renderLogin()
     escribir("huerfano@ferreteria.test", "Huerf2026")
     enviar()

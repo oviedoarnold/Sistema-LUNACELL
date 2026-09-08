@@ -10,7 +10,6 @@
 const URL_SUPABASE = process.env.VITE_SUPABASE_URL
 const CLAVE_PUBLICABLE = process.env.VITE_SUPABASE_PUBLISHABLE_KEY
 
-const CODIGO_VERIFICACION = "LEARN-CAP-50768C03"
 
 async function medir(ruta) {
   const empezo = Date.now()
@@ -72,10 +71,9 @@ export default async function handler(request, response) {
 
   response.status(sana ? 200 : 503).json({
     estado: sana ? "ok" : "degradado",
-    servicio: "sistema-ferreteria",
+    servicio: "lunacell",
     version: process.env.VERCEL_GIT_COMMIT_SHA?.slice(0, 7) || "local",
     momento: new Date().toISOString(),
-    codigoVerificacion: CODIGO_VERIFICACION,
     dependencias,
   })
 }

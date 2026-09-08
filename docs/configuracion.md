@@ -32,6 +32,44 @@ en un chat. Si alguna vez se expone, hay que rotarla en Supabase de
 inmediato; cambiar de lugar el archivo no sirve, porque la clave expuesta
 sigue siendo válida hasta que se rote.
 
+## El proyecto de Supabase también está escrito en vercel.json
+
+Cambiar las dos variables de arriba **no basta** para mudarse a otro
+proyecto de Supabase. La política de seguridad de contenido (CSP) que
+declara [`vercel.json`](../vercel.json) nombra el host una por una:
+
+```
+connect-src 'self' https://<ref>.supabase.co wss://<ref>.supabase.co
+img-src    'self' data: blob: https://<ref>.supabase.co
+```
+
+Hoy ese `<ref>` es `qlzkriyibpbnesidtiiy`, el proyecto de LUNACELL.
+`connect-src` cubre las consultas y el tiempo real; `img-src`, las fotos
+de producto que se sirven desde Storage.
+
+**Vercel no interpola variables de entorno dentro de `vercel.json`**, así
+que el host no se puede leer de `VITE_SUPABASE_URL`: hay que escribirlo a
+mano en los dos sitios.
+
+Esto ya nos costó una tarde. Con las variables bien puestas pero la CSP
+apuntando al proyecto anterior, el navegador bloqueaba cada petición antes
+de que saliera; `signInWithPassword` fallaba por red,
+[`AuthContext`](../src/context/AuthContext.jsx) no distingue ese caso del
+de credenciales malas, y el login respondía *"Correo o contraseña
+incorrectos"* con la contraseña correcta. Contra `curl` no se reproducía
+nunca, porque la CSP solo la aplica el navegador.
+
+**Al cambiar de proyecto de Supabase hay que tocar tres lugares:** las dos
+variables de entorno en Vercel, y estos dos hosts en `vercel.json`.
+
+### Y después, forzar la recarga
+
+Si el arreglo solo toca cabeceras y no el HTML, el ETag no cambia. El
+navegador revalida, Vercel responde `304 Not Modified` —que **no reenvía
+la cabecera CSP**— y el navegador sigue aplicando la que tenía guardada.
+Un `F5` no alcanza: hace falta `Ctrl`+`Shift`+`R`, o vaciar los datos del
+sitio.
+
 ## Por qué no hay un `.env.example` en el repositorio
 
 Un archivo de ejemplo con nombre de archivo de entorno invita a un accidente
@@ -47,7 +85,7 @@ cualquier archivo `.env` salvo este documento.
 Con la aplicación desplegada:
 
 ```
-curl https://www.oviedoarnold.lat/api/health
+curl https://lunacell.oviedoarnold.lat/api/health
 ```
 
 Debe responder `"estado": "ok"` con la base y la autenticación arriba. Si

@@ -76,7 +76,7 @@ async function renderSettings({ empresa = EMPRESA, correlativo = 1000 } = {}) {
     </AuthProvider>
   )
 
-  await screen.findByText(/datos de la ferretería/i)
+  await screen.findByText(/datos de la empresa/i)
 
   // El formulario se llena cuando la empresa termina de llegar de la base.
   await waitFor(() => {
@@ -89,7 +89,7 @@ const campo = (nombre) => document.querySelector(`[name="${nombre}"]`)
 const escribir = (nombre, valor) =>
   fireEvent.change(campo(nombre), { target: { value: valor } })
 
-describe("Settings: datos de la ferretería", () => {
+describe("Settings: datos de la empresa", () => {
   it("carga los datos guardados en el formulario", async () => {
     await renderSettings()
 

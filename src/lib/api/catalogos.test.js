@@ -138,7 +138,7 @@ describe("traducción de filas a lo que esperan las pantallas", () => {
     expect(proveedor.notes).toBe("")
   })
 
-  it("una ferretería sin configurar trae los valores por omisión", () => {
+  it("una empresa sin configurar trae los valores por omisión", () => {
     const empresa = aEmpresaDeApp(FILA_VACIA)
 
     expect(empresa.currency).toBe("L")
@@ -422,7 +422,7 @@ describe("proveedores", () => {
   })
 })
 
-describe("ferretería", () => {
+describe("empresa", () => {
   it("devuelve null si todavía no hay ninguna", async () => {
     montar()
 
@@ -487,7 +487,7 @@ describe("ferretería", () => {
     montar({ fallarEn: { empresas: { update: { message: "sin permiso" } } } })
 
     await expect(actualizarEmpresa("e1", { name: "x" })).rejects.toThrow(
-      /No se pudo guardar los datos de la ferretería/i
+      /No se pudo guardar los datos de la empresa/i
     )
   })
 })

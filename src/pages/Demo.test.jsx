@@ -11,38 +11,81 @@ const renderDemo = () =>
     </MemoryRouter>
   )
 
-describe("Demo", () => {
-  it("muestra la cuenta con la que se entra", () => {
-    renderDemo()
-
-    expect(screen.getByText("demo@oviedoarnold.lat")).toBeInTheDocument()
-    expect(screen.getByText("Demo2026")).toBeInTheDocument()
-  })
-
-  it("explica que la cuenta tiene permisos recortados", () => {
+describe("Demo · recorrido de módulos", () => {
+  it("presenta el sistema de LUNACELL", () => {
     renderDemo()
 
     expect(
-      screen.getByText(/Inventario, Proveedores ni Configuración/i)
+      screen.getByRole("heading", { name: /qué hace el sistema lunacell/i })
     ).toBeInTheDocument()
   })
 
+  it("lista los módulos que ya funcionan", () => {
+    renderDemo()
+
+    expect(screen.getByRole("heading", { name: /^dashboard/i })).toBeInTheDocument()
+    expect(screen.getByRole("heading", { name: /^facturación/i })).toBeInTheDocument()
+    expect(screen.getByRole("heading", { name: /^ubicaciones/i })).toBeInTheDocument()
+  })
+
   /*
-    La página dejó de sembrar datos cuando el sistema pasó a la base: ya no
-    hay nada que preparar, solo por dónde entrar.
+    Lo que todavía no existe tiene que verse como tal. Un módulo planificado
+    presentado como terminado es la forma más rápida de que alguien cuente
+    con él para trabajar y se encuentre con que no está.
   */
+  it("separa lo planificado de lo disponible", () => {
+    renderDemo()
+
+    expect(screen.getByRole("heading", { name: /disponible hoy/i })).toBeInTheDocument()
+    expect(screen.getByRole("heading", { name: /^planificado$/i })).toBeInTheDocument()
+  })
+
+  it("marca cada módulo con su estado", () => {
+    renderDemo()
+
+    expect(screen.getAllByText("Disponible").length).toBeGreaterThan(0)
+    expect(screen.getAllByText("Planificado").length).toBeGreaterThan(0)
+  })
+
+  it("advierte que lo planificado todavía no se puede usar", () => {
+    renderDemo()
+
+    expect(screen.getByText(/todavía no está construido/i)).toBeInTheDocument()
+  })
+
+  it("el inventario por ubicación aparece como planificado, no como hecho", () => {
+    renderDemo()
+
+    const tarjeta = screen
+      .getByRole("heading", { name: /inventario por ubicación/i })
+      .closest("article")
+
+    expect(tarjeta).toHaveTextContent("Planificado")
+  })
+
+  /*
+    La pantalla publicaba un usuario y una contraseña de otro sistema. No
+    debe volver a publicar credenciales de ningún tipo.
+  */
+  it("no publica ninguna credencial", () => {
+    const { container } = renderDemo()
+
+    expect(container.textContent).not.toMatch(/contraseña/i)
+    expect(container.textContent).not.toMatch(/@/)
+    expect(screen.getByText(/no publica credenciales/i)).toBeInTheDocument()
+  })
+
+  it("no menciona la ferretería del sistema anterior", () => {
+    const { container } = renderDemo()
+
+    expect(container.textContent).not.toMatch(/ferreter/i)
+  })
+
   it("lleva al login", () => {
     renderDemo()
 
-    expect(screen.getByRole("link", { name: /iniciar sesión/i })).toHaveAttribute(
-      "href",
-      "/login"
-    )
-  })
-
-  it("advierte que lo que se registre queda guardado", () => {
-    renderDemo()
-
-    expect(screen.getByText(/queda guardado/i)).toBeInTheDocument()
+    screen
+      .getAllByRole("link", { name: /ingresar al sistema/i })
+      .forEach((enlace) => expect(enlace).toHaveAttribute("href", "/login"))
   })
 })

@@ -36,7 +36,7 @@ function POS() {
   const { addSale } = useContext(SalesContext)
 
   /*
-    La tasa sale de la configuración de la ferretería. Tenerla fija aquí
+    La tasa sale de la configuración de la empresa. Tenerla fija aquí
     hacía que cambiarla en Configuración no afectara lo que se cobra.
   */
   const tasaISV = Number(company?.taxRate ?? ISV_POR_OMISION)

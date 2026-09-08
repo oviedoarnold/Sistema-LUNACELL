@@ -47,7 +47,7 @@ const clientePrueba = {
 }
 
 describe("ClientsContext", () => {
-  it("arranca sin clientes cuando la ferretería no tiene ninguno", async () => {
+  it("arranca sin clientes cuando la empresa no tiene ninguno", async () => {
     const { result } = await montarContexto()
 
     expect(result.current.clients).toEqual([])

@@ -1,22 +1,16 @@
-# Sistema Ferretería
+# LUNACELL
 
-Sistema de gestión para ferreterías: inventario, facturación al contado y al crédito,
+Sistema de gestión para LUNACELL: inventario, facturación al contado y al crédito,
 cotizaciones en PDF, control de abonos y administración de usuarios con permisos.
 
-**Producto publicado:** https://www.oviedoarnold.lat/
-
-**Código de verificación:** `LEARN-CAP-50768C03`
-
-El mismo código está publicado en el sitio en dos lugares:
-[`/verification.txt`](https://www.oviedoarnold.lat/verification.txt) y en un `<meta name="learn-verification">`
-dentro del `index.html`.
+**Producto publicado:** https://lunacell.oviedoarnold.lat/
 
 ---
 
 ## El problema
 
-Una ferretería de mostrador lleva el inventario en cuadernos o en hojas de cálculo sueltas.
-Nadie sabe con certeza qué queda en bodega hasta que un cliente pide algo y toca ir a ver.
+LUNACELL vende accesorios para celulares desde una bodega, una tienda y camiones en ruta.
+Sin un sistema, nadie sabe con certeza qué queda en cada lugar hasta que un cliente lo pide.
 Las ventas al crédito se anotan aparte y los abonos se pierden. Al cierre del mes no hay
 forma rápida de saber cuánto se vendió ni cuánto deben.
 
@@ -31,7 +25,7 @@ dueño ve los números sin pedirle nada a nadie.
 |---|---|
 | **Inventario** | Productos por categoría y precio, con alerta de stock bajo y agotado |
 | **Facturar** | Punto de venta con carrito, al contado o al crédito, que descuenta existencias |
-| **Cotizar** | Cotizaciones con vigencia, exportables a PDF con el formato de la ferretería |
+| **Cotizar** | Cotizaciones con vigencia, exportables a PDF con el formato de la empresa |
 | **Abonos** | Registro de pagos parciales sobre facturas a crédito, con saldo y paso a cancelada |
 | **Clientes** | RTN, teléfono y dirección, que se autocompletan en facturas y cotizaciones |
 | **Proveedores** | Directorio de proveedores |
@@ -51,7 +45,7 @@ URL directamente redirige a la primera sección que el usuario sí tenga habilit
 - **React 19** con React Router 7
 - **Vite 8** como bundler
 - **Tailwind 4** disponible, aunque la interfaz usa un sistema de estilos propio
-  (`src/styles/ferreteria.css`) con tokens CSS
+  (`src/styles/lunacell.css`) con tokens CSS
 - **jsPDF** y **html2canvas** para exportar facturas y cotizaciones
 - **SweetAlert2** para confirmaciones
 - Desplegado en **Vercel** con HTTPS
@@ -96,19 +90,22 @@ Los headers se configuran en [`vercel.json`](vercel.json):
 
 ## Estado del proyecto
 
-La persistencia actual es `localStorage`, lo que mantiene los datos en el navegador de cada
-equipo. La migración a PostgreSQL con backend está en curso; las decisiones quedarán
-documentadas en `docs/arquitectura.md`.
+Los datos viven en PostgreSQL gestionado por Supabase, con aislamiento por
+empresa aplicado con *row-level security* en el motor y no en el frontend
+(ver [ADR-1](docs/adr/adr-001-postgresql-multiempresa.md)). La autenticación
+es Supabase Auth y las fotos de producto van a Supabase Storage.
 
-## Demostración
+En curso: separar el inventario del producto para que cada ubicación
+—bodega, tienda y camiones— lleve sus propias existencias sobre el mismo
+catálogo. Las ubicaciones ya existen como entidad; el inventario todavía es
+uno solo.
 
-Recorrido guiado de 5 minutos con datos de ejemplo:
+## Recorrido
 
-1. https://www.oviedoarnold.lat/demo — prepara la ferretería de ejemplo
-2. https://www.oviedoarnold.lat/login — entra con `demo` / `Demo2026`
-
-Los datos son ficticios y se guardan solo en tu navegador. El guion completo
-está en [docs/demo.md](docs/demo.md).
+[`/demo`](https://lunacell.oviedoarnold.lat/demo) repasa los módulos del
+sistema y separa los que ya funcionan de los que están planificados. Es una
+página pública y **no publica credenciales**: el acceso es por
+[`/login`](https://lunacell.oviedoarnold.lat/login), con cuenta propia.
 
 ## Documentación
 
@@ -119,8 +116,7 @@ está en [docs/demo.md](docs/demo.md).
 | [ADR-1](docs/adr/adr-001-postgresql-multiempresa.md) | PostgreSQL multi-empresa |
 | [ADR-2](docs/adr/adr-002-permisos-por-ruta.md) | Permisos por ruta |
 | [PWA](docs/pwa.md) | Service worker y funcionamiento sin conexión |
-| [Demostración](docs/demo.md) | Recorrido guiado |
-| [Bitácora de IA](docs/bitacora-ia.md) | Uso de IA en el desarrollo |
+| [Recorrido](docs/demo.md) | Qué muestra la página pública /demo |
 
 ## Autor
 

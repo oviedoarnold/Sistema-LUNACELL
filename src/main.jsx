@@ -1,7 +1,7 @@
 import React from 'react'
 import ReactDOM from 'react-dom/client'
 import App from './App'
-import './styles/ferreteria.css'
+import './styles/lunacell.css'
 import './index.css'
 
 import {AuthProvider} from './context/AuthContext'

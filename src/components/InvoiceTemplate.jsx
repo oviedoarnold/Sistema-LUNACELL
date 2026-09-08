@@ -8,7 +8,7 @@ import { formatDocumentNumber } from "../utils/fiscal"
 import { formatMoney } from "../utils/format"
 
 /*
-  Sin datos de la ferretería el encabezado sale vacío, y así debe ser: el
+  Sin datos de la empresa el encabezado sale vacío, y así debe ser: el
   sistema se vende a varias, y un documento con el nombre y la dirección de
   otra es peor que un documento incompleto.
 */
@@ -75,7 +75,7 @@ function InvoiceTemplate({
       <div className="inv-header">
         <div className="inv-header-left">
           <div className="inv-logo">
-            🔧
+            📱
           </div>
 
           <div>

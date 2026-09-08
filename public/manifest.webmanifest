@@ -1,7 +1,7 @@
 {
-  "name": "Sistema Ferretería",
-  "short_name": "Ferretería",
-  "description": "Inventario, facturación, cotizaciones y abonos para ferreterías.",
+  "name": "LUNACELL",
+  "short_name": "LUNACELL",
+  "description": "Inventario, facturación, cotizaciones y abonos de LUNACELL.",
   "id": "/",
   "start_url": "/",
   "scope": "/",

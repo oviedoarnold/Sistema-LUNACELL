@@ -17,7 +17,7 @@
   de seguridad, y conviene no confundirlas.
 */
 
-const NOMBRE = "ferreteria-sesion"
+const NOMBRE = "lunacell-sesion"
 
 const hayNavegador = () => typeof document !== "undefined"
 

@@ -65,21 +65,21 @@ const enlaces = () =>
   screen.queryAllByRole("link").map((a) => a.getAttribute("href"))
 
 describe("Navbar", () => {
-  it("muestra el nombre de la ferretería que trae la base", async () => {
+  it("muestra el nombre de la empresa que trae la base", async () => {
     await renderNavbar({ secciones: [PERMISSIONS.DASHBOARD] })
 
     expect(screen.getByText("Ferretería de prueba")).toBeInTheDocument()
   })
 
   /*
-    Antes el nombre estaba escrito en el código, así que toda ferretería
+    Antes el nombre estaba escrito en el código, así que toda empresa
     veía el de la primera. Sin datos cargados se muestra el del sistema y
     no el de nadie.
   */
-  it("sin datos de la ferretería no muestra el nombre de otra", async () => {
+  it("sin datos de la empresa no muestra el nombre de otra", async () => {
     await renderNavbar({ secciones: [PERMISSIONS.DASHBOARD], empresa: null })
 
-    expect(screen.getByText("Sistema Ferretería")).toBeInTheDocument()
+    expect(screen.getByText("LUNACELL")).toBeInTheDocument()
   })
 
   it("muestra el nombre del usuario en sesión", async () => {

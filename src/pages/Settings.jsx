@@ -70,7 +70,7 @@ function Settings() {
   ] = useState(company)
 
   /*
-    La ferretería llega de la base después del primer render, y vuelve a
+    La empresa llega de la base después del primer render, y vuelve a
     llegar cada vez que se guarda. Cuando cambia, el formulario se vuelve
     a llenar con lo que quedó guardado.
   */
@@ -177,7 +177,7 @@ function Settings() {
       title:
         "Configuración guardada",
       text:
-        "Los datos de la ferretería fueron actualizados.",
+        "Los datos de la empresa fueron actualizados.",
     })
   }
 
@@ -669,7 +669,7 @@ function Settings() {
 
           <p className="sub">
             Datos de tu
-            ferretería y
+            empresa y
             administración de
             usuarios
           </p>
@@ -686,7 +686,7 @@ function Settings() {
 
           <h3>
             Datos de la
-            ferretería
+            empresa
           </h3>
 
           <p
@@ -864,11 +864,11 @@ function Settings() {
               <div className="form-grid">
 
                 <div className="field">
-                  <label htmlFor="settings-rtn-de-la-ferreteria">
-                    RTN de la ferretería
+                  <label htmlFor="settings-rtn-de-la-empresa">
+                    RTN de la empresa
                   </label>
 
-                  <input id="settings-rtn-de-la-ferreteria"
+                  <input id="settings-rtn-de-la-empresa"
                     type="text"
                     name="rtn"
                     placeholder="08019012345678"

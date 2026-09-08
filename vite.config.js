@@ -111,7 +111,7 @@ export default defineConfig({
       rango: @media(max-width:720px) sale publicado como (width<=620px).
       Safari anterior a 16.4 y Chrome anterior a 104 no la entienden, y en
       esos navegadores el diseño responsive se pierde por completo. En una
-      caja de ferretería es perfectamente posible encontrarse una máquina
+      caja de mostrador es perfectamente posible encontrarse una máquina
       así.
     */
     cssTarget: ['chrome87', 'safari14', 'firefox78', 'edge88'],
@@ -137,7 +137,6 @@ export default defineConfig({
 
     coverage: {
       provider: 'v8',
-      // json-summary genera coverage/coverage-summary.json, que el proyecto versiona.
       reporter: ['text', 'html', 'lcov', 'json-summary'],
       reportsDirectory: './coverage',
       include: ['src/**/*.{js,jsx}'],

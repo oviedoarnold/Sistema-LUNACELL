@@ -171,7 +171,7 @@ describe("login", () => {
     expect(respuesta.ok).toBe(true)
   })
 
-  it("explica cuándo la cuenta no está asignada a una ferretería", async () => {
+  it("explica cuándo la cuenta no está asignada a una empresa", async () => {
     const { result } = await renderAuth()
 
     let respuesta

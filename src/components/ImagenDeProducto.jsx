@@ -6,7 +6,7 @@ import { revisarImagen } from "../lib/api/catalogos"
   Cuando un producto no tiene foto no se deja el hueco vacío: se muestra su
   inicial. Un catálogo con recuadros en blanco se lee peor que uno donde
   cada renglón tiene algo, y el cajero ubica el producto por la forma de la
-  fila aunque la ferretería nunca suba una sola imagen.
+  fila aunque la empresa nunca suba una sola imagen.
 */
 export function MiniaturaDeProducto({ url, nombre, tamano = 40 }) {
   const [fallo, setFallo] = useState(false)

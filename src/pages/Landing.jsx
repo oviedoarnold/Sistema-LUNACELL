@@ -3,64 +3,89 @@ import { Link } from "react-router-dom"
 
 import "../styles/landing.css"
 
-const FEATURES = [
+/*
+  Página pública de LUNACELL & ASOCS.
+
+  Solo describe lo que el sistema hace hoy. No lleva teléfonos, direcciones,
+  número de clientes, años de operación ni cifras de ventas: nada de eso se
+  ha definido, e inventarlo para llenar la página convertiría la portada en
+  una promesa que el sistema no respalda.
+
+  El diseño visual definitivo —la paleta negro y dorado, el logotipo— llega
+  en su propia fase. La estructura de secciones queda tal cual para que ese
+  cambio sea de estilos y no de marcado.
+*/
+
+const EMPRESA = "LUNACELL & ASOCS."
+const LEMA = "Accesorios que marcan la diferencia."
+
+const MODULOS = [
   {
     icon: "📦",
     tone: "ico-o",
-    title: "Inventario al día",
-    text: "Cataloga productos por categoría y precio, y detecta al instante lo que está bajo en stock o agotado antes de que un cliente te lo pida.",
+    title: "Inventario y catálogo",
+    text: "Productos con código, categoría, precio, costo y foto. El sistema avisa de lo que está bajo mínimo o agotado antes de que un cliente lo pida.",
   },
   {
     icon: "🧾",
     tone: "ico-b",
-    title: "Facturación rápida",
-    text: "Punto de venta pensado para el mostrador: busca, agrega al carrito y cobra en segundos, al contado o al crédito.",
+    title: "Facturación",
+    text: "Punto de venta con carrito y búsqueda, al contado o al crédito. La numeración fiscal y el descuento de existencias los resuelve el sistema.",
   },
   {
     icon: "📄",
     tone: "ico-t",
     title: "Cotizaciones en PDF",
-    text: "Arma una cotización con validez definida y expórtala en PDF con el formato de tu ferretería, lista para enviar al cliente.",
+    text: "Cotizaciones con fecha de vigencia, exportables en PDF y convertibles en factura sin volver a capturar los productos.",
   },
   {
     icon: "👥",
     tone: "ico-p",
-    title: "Clientes y RTN",
-    text: "Guarda RTN, teléfono, correo y dirección de cada cliente para que se completen solos en facturas y cotizaciones.",
+    title: "Clientes y proveedores",
+    text: "RTN, teléfono, correo y dirección de cada cliente, que se completan solos al facturar. Y el directorio de quienes abastecen.",
   },
   {
     icon: "💳",
     tone: "ico-a",
-    title: "Control de crédito",
-    text: "Lleva cuenta de lo que te deben. El panel te muestra el saldo por cobrar de las ventas a crédito sin que tengas que sacar cuentas.",
+    title: "Cuentas por cobrar",
+    text: "Las ventas al crédito quedan con su saldo a la vista. Cada abono lo descuenta y la factura pasa a cancelada sola cuando llega a cero.",
   },
   {
-    icon: "🔐",
+    icon: "🏬",
     tone: "ico-g",
-    title: "Usuarios y permisos",
-    text: "Crea usuarios con roles y decide qué puede ver o tocar cada quien. El cajero factura, el dueño ve los números.",
+    title: "Ubicaciones",
+    text: "Bodegas, tiendas y camiones registrados como puntos de inventario. Es la base sobre la que cada lugar llevará sus propias existencias.",
   },
 ]
 
-const STEPS = [
+const PASOS = [
   {
     n: "1",
-    title: "Carga tu inventario",
-    text: "Registra tus productos con precio, existencia y stock mínimo. Es el único paso que toma tiempo, y se hace una sola vez.",
+    title: "Registra tus ubicaciones",
+    text: "La bodega, la tienda y cada camión quedan dados de alta como puntos de inventario independientes.",
   },
   {
     n: "2",
-    title: "Vende y cotiza",
-    text: "Tu equipo factura desde el punto de venta y genera cotizaciones en PDF. El inventario se descuenta solo.",
+    title: "Carga el catálogo",
+    text: "Productos con su precio, su costo y su existencia inicial. Es el paso que toma tiempo, y se hace una sola vez.",
   },
   {
     n: "3",
-    title: "Revisa los números",
-    text: "El panel resume ventas del día y del mes, productos más vendidos, stock crítico y cuentas por cobrar.",
+    title: "Vende y cobra",
+    text: "Tu equipo factura y cotiza; el inventario se descuenta solo y el panel resume el día, el mes y lo que falta por cobrar.",
   },
 ]
 
-const BARS = [38, 54, 45, 71, 86, 100]
+/*
+  Vista previa del panel. Muestra las ubicaciones que administra el sistema
+  —que son un dato real— y no cifras de ventas, que no lo serían.
+*/
+const UBICACIONES_DE_MUESTRA = [
+  { nombre: "Bodega Principal", tipo: "Bodega", tono: "o" },
+  { nombre: "Lunacell Store", tipo: "Tienda", tono: "b" },
+  { nombre: "Camión 01", tipo: "Camión", tono: "w" },
+  { nombre: "Camión 02", tipo: "Camión", tono: "g" },
+]
 
 function Landing() {
   const rootRef = useRef(null)
@@ -111,18 +136,18 @@ function Landing() {
       <nav className={`lp-nav ${stuck ? "is-stuck" : ""}`}>
         <div className="wrap">
           <Link to="/" className="lp-brand">
-            <span className="mark">🔧</span>
+            <span className="mark">📱</span>
             <span>
-              <b>Sistema Ferretería</b>
-              <span>GESTIÓN DE MOSTRADOR</span>
+              <b>{EMPRESA}</b>
+              <span>ACCESORIOS PARA CELULARES</span>
             </span>
           </Link>
 
           <div className="lp-nav-links">
-            <a href="#funciones">Funciones</a>
+            <a href="#modulos">Módulos</a>
             <a href="#como-funciona">Cómo funciona</a>
             <Link to="/login" className="btn btn-primary">
-              Iniciar sesión
+              Ingresar al sistema
             </Link>
           </div>
         </div>
@@ -132,29 +157,30 @@ function Landing() {
         <div className="wrap">
           <div>
             <span className="lp-eyebrow" data-rise style={{ "--d": "0s" }}>
-              Hecho para ferreterías
+              {LEMA}
             </span>
 
             <h1 data-rise style={{ "--d": ".07s" }}>
-              Tu ferretería, <em>ordenada</em> de la bodega a la caja.
+              Todo LUNACELL, <em>ordenado</em> de la bodega a la ruta.
             </h1>
 
             <p className="lead" data-rise style={{ "--d": ".14s" }}>
-              Inventario, facturación, cotizaciones y clientes en un solo lugar.
-              Sin hojas de cálculo sueltas y sin adivinar qué te queda en bodega.
+              Inventario, facturación, cotizaciones, clientes y cobros en un
+              solo sistema, con cada bodega, tienda y camión registrado como su
+              propio punto de inventario.
             </p>
 
             <div className="lp-cta-row" data-rise style={{ "--d": ".21s" }}>
               <Link to="/login" className="btn btn-primary btn-lg">
-                Entrar al sistema
+                INGRESAR AL SISTEMA
               </Link>
-              <a href="#funciones" className="btn btn-secondary btn-lg">
-                Ver funciones
-              </a>
+              <Link to="/demo" className="btn btn-secondary btn-lg">
+                Ver los módulos
+              </Link>
             </div>
 
             <p className="lp-note" data-rise style={{ "--d": ".28s" }}>
-              Corre en tu navegador · Precios en lempiras · Formato RTN
+              Corre en el navegador · Precios en lempiras · Formato RTN
             </p>
           </div>
 
@@ -163,69 +189,52 @@ function Landing() {
               <i></i>
               <i></i>
               <i></i>
-              <span>panel · hoy</span>
+              <span>ubicaciones</span>
             </div>
 
             <div className="lp-mock-body">
-              <div className="lp-stat o">
-                <span className="k">Ventas hoy</span>
-                <span className="v">L 18,450</span>
-                <span className="d">Total del día</span>
-              </div>
-              <div className="lp-stat b">
-                <span className="k">Ventas del mes</span>
-                <span className="v">L 312,900</span>
-                <span className="d">Mes actual</span>
-              </div>
-              <div className="lp-stat w">
-                <span className="k">Stock bajo</span>
-                <span className="v">7</span>
-                <span className="d">productos</span>
-              </div>
-              <div className="lp-stat g">
-                <span className="k">Por cobrar</span>
-                <span className="v">L 24,100</span>
-                <span className="d">ventas a crédito</span>
-              </div>
+              {UBICACIONES_DE_MUESTRA.map((ubicacion) => (
+                <div className={`lp-stat ${ubicacion.tono}`} key={ubicacion.nombre}>
+                  <span className="k">{ubicacion.tipo}</span>
+                  <span className="v lp-mock-nombre">{ubicacion.nombre}</span>
+                  <span className="d">Punto de inventario</span>
+                </div>
+              ))}
             </div>
 
             <div className="lp-mock-foot">
-              <div className="t">Ventas por mes</div>
-              <div className="lp-bars">
-                {BARS.map((height, index) => (
-                  <i
-                    key={height}
-                    style={{ height: `${height}%`, "--i": index }}
-                  ></i>
-                ))}
-              </div>
+              <div className="t">Un catálogo, varios lugares</div>
+              <p className="lp-mock-pie">
+                Cada ubicación lleva sus propias existencias sobre el mismo
+                catálogo de productos.
+              </p>
             </div>
           </div>
         </div>
       </header>
 
-      <section className="lp-features" id="funciones">
+      <section className="lp-features" id="modulos">
         <div className="wrap">
           <div className="lp-head" data-reveal>
-            <span className="kicker">Funciones</span>
-            <h2>Todo lo que se hace en el mostrador</h2>
+            <span className="kicker">Módulos</span>
+            <h2>Lo que el sistema hace hoy</h2>
             <p>
-              Cada módulo resuelve una tarea concreta del día a día de una
-              ferretería, sin funciones de más que nadie usa.
+              Cada módulo resuelve una tarea concreta del día a día de LUNACELL,
+              sin funciones de más que nadie usa.
             </p>
           </div>
 
           <div className="lp-grid">
-            {FEATURES.map((feature, index) => (
+            {MODULOS.map((modulo, index) => (
               <article
                 className="lp-card"
-                key={feature.title}
+                key={modulo.title}
                 data-reveal
                 style={{ "--d": `${index * 0.07}s` }}
               >
-                <div className={`ico ${feature.tone}`}>{feature.icon}</div>
-                <h3>{feature.title}</h3>
-                <p>{feature.text}</p>
+                <div className={`ico ${modulo.tone}`}>{modulo.icon}</div>
+                <h3>{modulo.title}</h3>
+                <p>{modulo.text}</p>
               </article>
             ))}
           </div>
@@ -238,22 +247,22 @@ function Landing() {
             <span className="kicker">Cómo funciona</span>
             <h2>Tres pasos y estás operando</h2>
             <p>
-              No necesitas instalar nada ni contratar a alguien para que te lo
-              configure.
+              No hay nada que instalar: el sistema se abre en el navegador y los
+              datos viven en la nube.
             </p>
           </div>
 
           <div className="lp-grid">
-            {STEPS.map((step, index) => (
+            {PASOS.map((paso, index) => (
               <div
                 className="lp-step"
-                key={step.n}
+                key={paso.n}
                 data-reveal
                 style={{ "--d": `${index * 0.1}s` }}
               >
-                <span className="n">{step.n}</span>
-                <h3>{step.title}</h3>
-                <p>{step.text}</p>
+                <span className="n">{paso.n}</span>
+                <h3>{paso.title}</h3>
+                <p>{paso.text}</p>
               </div>
             ))}
           </div>
@@ -262,14 +271,14 @@ function Landing() {
 
       <section className="lp-cta">
         <div className="wrap" data-reveal>
-          <h2>Empieza a ordenar tu ferretería hoy</h2>
+          <h2>Entra a LUNACELL</h2>
           <p>
-            Entra con tu usuario y encuentra el inventario, las ventas y los
+            Accede con tu usuario y encuentra el inventario, las ventas y los
             clientes donde deben estar.
           </p>
           <div className="lp-cta-row">
             <Link to="/login" className="btn btn-primary btn-lg">
-              Iniciar sesión
+              INGRESAR AL SISTEMA
             </Link>
           </div>
         </div>
@@ -278,12 +287,14 @@ function Landing() {
       <footer className="lp-footer">
         <div className="wrap">
           <div className="lp-brand">
-            <span className="mark">🔧</span>
+            <span className="mark">📱</span>
             <span>
-              <b>Sistema Ferretería</b>
+              <b>{EMPRESA}</b>
             </span>
           </div>
-          <p>© {new Date().getFullYear()} Sistema Ferretería</p>
+          <p>
+            © {new Date().getFullYear()} {EMPRESA} · {LEMA}
+          </p>
         </div>
       </footer>
     </div>

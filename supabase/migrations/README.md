@@ -54,14 +54,15 @@ base vacía— pero conviene saberlo antes de repetirla por costumbre.
 
 ## Por qué falta el 0008
 
-Existió y se movió a
-[`scripts/limpiar-datos-fiscales-de-muestra.sql`](../../scripts/limpiar-datos-fiscales-de-muestra.sql).
+Existió y se convirtió en un script fuera de las migraciones.
 
 Deshacía la parte fiscal del 0006, así que aplicar la cadena entera dejaba
 la base en un estado contradictorio: una migración ponía el CAI de muestra y
-la siguiente lo quitaba. No es un paso del esquema sino una decisión del
-negocio —el día que la ferretería tenga su CAI real— y por eso vive entre
-los scripts y no aquí.
+la siguiente lo quitaba. No era un paso del esquema sino una decisión del
+negocio, y por eso salió de aquí.
+
+Ese script se eliminó al migrar a LUNACELL: lo único que hacía era limpiar el
+CAI de muestra de la empresa de demostración, que en esta base nunca existió.
 
 El número no se reutiliza: renumerar migraciones ya aplicadas rompe el
 registro de cuáles se corrieron.

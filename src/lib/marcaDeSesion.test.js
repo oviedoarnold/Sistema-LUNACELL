@@ -31,7 +31,7 @@ describe("marca de sesión", () => {
   it("no guarda el token ni ningún dato de la cuenta", () => {
     marcarSesionAbierta()
 
-    expect(document.cookie).toBe("ferreteria-sesion=1")
+    expect(document.cookie).toBe("lunacell-sesion=1")
   })
 
   it("marcar dos veces no duplica la cookie", () => {
@@ -40,7 +40,7 @@ describe("marca de sesión", () => {
 
     const marcas = document.cookie
       .split(";")
-      .filter((t) => t.trim().startsWith("ferreteria-sesion="))
+      .filter((t) => t.trim().startsWith("lunacell-sesion="))
 
     expect(marcas).toHaveLength(1)
   })
