@@ -23,6 +23,7 @@ export const config = {
     "/suppliers",
     "/sales-history",
     "/quotes",
+    "/locations",
     "/settings",
   ],
 }

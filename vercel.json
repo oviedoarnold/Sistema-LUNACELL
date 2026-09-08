@@ -6,11 +6,11 @@
       "destination": "/login.html"
     },
     {
-      "source": "/(demo|dashboard|pos|products|clients|suppliers|sales-history|quotes|settings)",
+      "source": "/(demo|dashboard|pos|products|clients|suppliers|sales-history|quotes|locations|settings)",
       "destination": "/index.html"
     },
     {
-      "source": "/(demo|dashboard|pos|products|clients|suppliers|sales-history|quotes|settings)/(.*)",
+      "source": "/(demo|dashboard|pos|products|clients|suppliers|sales-history|quotes|locations|settings)/(.*)",
       "destination": "/index.html"
     }
   ],
