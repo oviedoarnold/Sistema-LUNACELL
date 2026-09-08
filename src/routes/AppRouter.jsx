@@ -13,6 +13,7 @@ import Products from "../pages/Products"
 import POS from "../pages/POS"
 import Quotes from "../pages/Quotes"
 import SalesHistory from "../pages/SalesHistory"
+import Locations from "../pages/Locations"
 import Clients from "../pages/Clients"
 import Suppliers from "../pages/Suppliers"
 import Settings from "../pages/Settings"
@@ -125,6 +126,19 @@ function AppRouter() {
             </ProtectedRoute>
           }
         />
+
+        {/* UBICACIONES */}
+        <Route
+          path="/locations"
+          element={
+            <ProtectedRoute permission={PERMISSIONS.LOCATIONS}>
+              <MainLayout>
+                <Locations />
+              </MainLayout>
+            </ProtectedRoute>
+          }
+        />
+
         {/* CONFIGURACIÓN */}
         <Route
           path="/settings"
