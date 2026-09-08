@@ -47,6 +47,14 @@ async function renderEnRuta(rutaInicial) {
             }
           />
           <Route
+            path="/locations"
+            element={
+              <ProtectedRoute permission={PERMISSIONS.LOCATIONS}>
+                <Pantalla nombre="Ubicaciones" />
+              </ProtectedRoute>
+            }
+          />
+          <Route
             path="/settings"
             element={
               <ProtectedRoute permission={PERMISSIONS.SETTINGS}>
@@ -75,6 +83,12 @@ describe("ProtectedRoute sin sesión", () => {
 
   it("manda al login", async () => {
     await renderEnRuta("/dashboard")
+
+    expect(await screen.findByText("Pantalla de login")).toBeInTheDocument()
+  })
+
+  it("también manda al login desde Ubicaciones", async () => {
+    await renderEnRuta("/locations")
 
     expect(await screen.findByText("Pantalla de login")).toBeInTheDocument()
   })
@@ -186,6 +200,35 @@ describe("ProtectedRoute con sesión", () => {
     await renderEnRuta("/dashboard")
 
     expect(await screen.findByText("Pantalla de login")).toBeInTheDocument()
+  })
+
+  it("deja entrar a Ubicaciones a quien tiene el permiso", async () => {
+    montarSupabaseFalso({
+      usuarios: [usuarioDePrueba()],
+      permisos: permisosDe("u-1", [PERMISSIONS.LOCATIONS]),
+      sesionInicial: sesionDe("auth-1"),
+    })
+
+    await renderEnRuta("/locations")
+
+    expect(await screen.findByText("Ubicaciones")).toBeInTheDocument()
+  })
+
+  /*
+    Ubicaciones no es una excepción: se comporta como cualquier otra
+    sección privada, y quien no la tenga habilitada no la ve.
+  */
+  it("desvía fuera de Ubicaciones a quien no tiene el permiso", async () => {
+    montarSupabaseFalso({
+      usuarios: [usuarioDePrueba()],
+      permisos: permisosDe("u-1", [PERMISSIONS.POS]),
+      sesionInicial: sesionDe("auth-1"),
+    })
+
+    await renderEnRuta("/locations")
+
+    expect(await screen.findByText("Facturar")).toBeInTheDocument()
+    expect(screen.queryByText("Ubicaciones")).not.toBeInTheDocument()
   })
 
   it("una cuenta sin invitación va al login", async () => {
