@@ -127,12 +127,27 @@ const COLUMNA_DE_FECHA = {
   productos: "creado_en",
   clientes: "creado_en",
   proveedores: "creado_en",
+  ubicaciones: "creada_en",
+}
+
+/*
+  Otras columnas con default en el esquema. Misma razón que las fechas: la
+  aplicación no las envía porque la base las rellena, y sin esto la fila
+  recién insertada vuelve sin ellas. Se agregan solo las que alguna prueba
+  necesita; declararlas todas obligaría a mantener aquí una copia del
+  esquema.
+*/
+const VALORES_POR_OMISION = {
+  ubicaciones: { activa: true },
 }
 
 function valoresPorOmision(tabla) {
   const columna = COLUMNA_DE_FECHA[tabla]
 
-  return columna ? { [columna]: new Date().toISOString() } : {}
+  return {
+    ...(columna ? { [columna]: new Date().toISOString() } : {}),
+    ...(VALORES_POR_OMISION[tabla] || {}),
+  }
 }
 
 export function crearSupabaseFalso({

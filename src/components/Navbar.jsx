@@ -14,6 +14,7 @@ import {
   FaTruck,
   FaHistory,
   FaFileAlt,
+  FaWarehouse,
   FaCog,
 } from "react-icons/fa"
 
@@ -71,6 +72,12 @@ function Navbar() {
     label: "Historial",
     Icon: FaHistory,
     permission: PERMISSIONS.SALES_HISTORY,
+  },
+  {
+    to: "/locations",
+    label: "Ubicaciones",
+    Icon: FaWarehouse,
+    permission: PERMISSIONS.LOCATIONS,
   },
   {
     to: "/settings",

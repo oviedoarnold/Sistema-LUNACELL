@@ -270,6 +270,13 @@ function Settings() {
       description:
         "Consultar ventas y facturas anteriores.",
     },
+    {
+      id:
+        permissions.LOCATIONS,
+      label: "Ubicaciones",
+      description:
+        "Consultar y administrar bodegas, tiendas y camiones.",
+    },
   ]
 
   const resetUserForm =

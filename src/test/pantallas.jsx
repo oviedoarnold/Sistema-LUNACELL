@@ -127,6 +127,19 @@ const aFilaDeProveedor = (proveedor) => ({
   notas: proveedor.notes || "",
 })
 
+/*
+  Una ubicacion se describe en las pruebas como la ve la aplicacion
+  (name, type, active) y aqui se traduce a las columnas de la base.
+*/
+const aFilaDeUbicacion = (ubicacion) => ({
+  id: ubicacion.id,
+  empresa_id: EMPRESA,
+  nombre: ubicacion.name,
+  tipo: ubicacion.type || "bodega",
+  activa: ubicacion.active !== false,
+  creada_en: "2026-01-01",
+})
+
 const aFilaDeVenta = (venta) => ({
   id: venta.id,
   empresa_id: EMPRESA,
@@ -224,6 +237,7 @@ export function montarDatos({
   productos = [],
   clientes = [],
   proveedores = [],
+  ubicaciones = [],
   ventas = [],
   cotizaciones = [],
   empresa = EMPRESA_PRUEBA,
@@ -240,6 +254,7 @@ export function montarDatos({
         .filter((m) => m.cantidad !== 0),
       clientes: clientes.map(aFilaDeCliente),
       proveedores: proveedores.map(aFilaDeProveedor),
+      ubicaciones: ubicaciones.map(aFilaDeUbicacion),
       ventas: ventas.map(aFilaDeVenta),
       detalle_venta: aplanar(ventas.map(renglonesDe)),
       abonos: aplanar(ventas.map(abonosDe)),

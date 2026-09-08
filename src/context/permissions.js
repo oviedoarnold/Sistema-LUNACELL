@@ -6,6 +6,7 @@ export const PERMISSIONS = {
   CLIENTS: "clients",
   SUPPLIERS: "suppliers",
   SALES_HISTORY: "sales-history",
+  LOCATIONS: "locations",
   SETTINGS: "settings",
 }
 
