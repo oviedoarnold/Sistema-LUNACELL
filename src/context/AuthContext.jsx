@@ -94,7 +94,7 @@ export function AuthProvider({ children }) {
 
       /*
         La marca acompaña al perfil y no a la sesión de Supabase: una
-        cuenta válida que no está asignada a ninguna ferretería no entra,
+        cuenta válida que no está asignada a ninguna empresa no entra,
         y no debe quedar marcada como si hubiera entrado.
       */
       if (perfil) marcarSesionAbierta()
@@ -144,7 +144,7 @@ export function AuthProvider({ children }) {
       return {
         ok: false,
         mensaje:
-          "Tu cuenta no está asignada a ninguna ferretería. Pídele al administrador que te dé acceso.",
+          "Tu cuenta no está asignada a ninguna empresa. Pídele al administrador que te dé acceso.",
       }
     }
 

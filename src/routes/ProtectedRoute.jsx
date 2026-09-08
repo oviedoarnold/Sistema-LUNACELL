@@ -63,7 +63,7 @@ function ComprobandoSesion() {
             marginBottom: 10,
           }}
         >
-          🔧
+          📱
         </div>
 
         <p

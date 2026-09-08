@@ -67,7 +67,7 @@ function SalesProvider({ children }) {
   }, [empresaId])
 
   /*
-    Los datos de la ferretería son encabezado de la factura impresa, no
+    Los datos de la empresa son encabezado de la factura impresa, no
     parte de la venta. Aplicarlos aquí evita recargar el historial entero
     cada vez que cambian, que era donde se perdía una venta recién hecha.
   */

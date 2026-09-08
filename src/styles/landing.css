@@ -36,13 +36,14 @@
 .lp-stat .k{font-family:var(--font-mono);font-size:10.5px;text-transform:uppercase;letter-spacing:.5px;color:var(--steel);display:block;margin-bottom:5px;}
 .lp-stat .v{font-family:var(--font-display);font-size:24px;font-weight:600;line-height:1;display:block;}
 .lp-stat .d{font-size:11.5px;color:var(--steel);margin-top:4px;display:block;}
+/* El panel muestra nombres de ubicación, no importes: hace falta menos
+   cuerpo y que la línea pueda romper. */
+.lp-mock-nombre{font-size:16px;line-height:1.25;}
 .lp-stat.o .v{color:var(--orange);} .lp-stat.b .v{color:var(--blue);}
 .lp-stat.w .v{color:var(--amber);} .lp-stat.g .v{color:var(--teal);}
 .lp-mock-foot{border-top:1px solid var(--line);padding:13px 16px 16px;}
 .lp-mock-foot .t{font-family:var(--font-mono);font-size:10.5px;text-transform:uppercase;letter-spacing:.5px;color:var(--steel);margin-bottom:9px;}
-.lp-bars{display:flex;align-items:flex-end;gap:9px;height:92px;}
-.lp-bars i{flex:1;background:var(--orange-light);border-radius:4px 4px 0 0;display:block;}
-.lp-bars i:nth-child(5){background:var(--orange);} .lp-bars i:nth-child(6){background:var(--orange);}
+.lp-mock-pie{margin:0;font-size:12.5px;line-height:1.55;color:var(--steel);}
 
 /* SECTION HEAD */
 .lp-head{text-align:center;max-width:640px;margin:0 auto 44px;}
@@ -89,12 +90,10 @@
 /* ── ANIMACIONES ── */
 @keyframes lpRise{from{opacity:0;transform:translateY(15px);}to{opacity:1;transform:translateY(0);}}
 @keyframes lpMock{from{opacity:0;transform:translateY(22px) scale(.985);}to{opacity:1;transform:translateY(0) scale(1);}}
-@keyframes lpBar{from{transform:scaleY(0);}to{transform:scaleY(1);}}
 
 /* Entrada del hero, escalonada */
 .lp-hero [data-rise]{opacity:0;animation:lpRise .5s cubic-bezier(.2,.8,.3,1) forwards;animation-delay:var(--d,0s);}
 .lp-mock{opacity:0;animation:lpMock .6s cubic-bezier(.2,.8,.3,1) .26s forwards;}
-.lp-bars i{transform-origin:bottom;transform:scaleY(0);animation:lpBar .5s cubic-bezier(.2,.8,.3,1) forwards;animation-delay:calc(.62s + var(--i,0) * .07s);}
 
 /* Reveal al entrar en pantalla */
 [data-reveal]{opacity:0;transform:translateY(16px);transition:opacity .5s cubic-bezier(.2,.8,.3,1),transform .5s cubic-bezier(.2,.8,.3,1);transition-delay:var(--d,0s);}
@@ -115,9 +114,17 @@
 
 /* Respeta a quien pide menos movimiento */
 @media(prefers-reduced-motion:reduce){
-  .lp-hero [data-rise],.lp-mock,.lp-bars i{animation:none;opacity:1;transform:none;}
+  .lp-hero [data-rise],.lp-mock{animation:none;opacity:1;transform:none;}
   [data-reveal]{opacity:1;transform:none;transition:none;}
   .lp-card:hover{transform:none;}
   .lp-card:hover .ico{transform:none;}
   .lp-nav-links a:not(.btn)::after{transition:none;}
 }
+
+/* ── RECORRIDO DE MÓDULOS (/demo) ── */
+.demo-seccion{font-family:var(--font-display);font-size:20px;margin:34px 0 6px;}
+.demo-seccion:first-of-type{margin-top:8px;}
+.demo-aviso{color:var(--steel);font-size:14px;margin:0 0 14px;max-width:60ch;}
+.demo-etiqueta{font-family:var(--font-mono);font-size:10px;text-transform:uppercase;letter-spacing:.5px;padding:3px 7px;border-radius:999px;vertical-align:middle;white-space:nowrap;}
+.demo-etiqueta-disponible{background:var(--teal-light);color:var(--teal);}
+.demo-etiqueta-planificado{background:var(--amber-light);color:var(--amber);}

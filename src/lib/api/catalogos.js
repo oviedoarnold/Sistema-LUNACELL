@@ -305,7 +305,7 @@ export async function traerEmpresa() {
     .limit(1)
     .maybeSingle()
 
-  if (error) fallo(error, "cargar los datos de la ferretería")
+  if (error) fallo(error, "cargar los datos de la empresa")
 
   return data ? aEmpresaDeApp(data) : null
 }
@@ -332,7 +332,7 @@ export async function actualizarEmpresa(id, empresa) {
     })
     .eq("id", id)
 
-  if (error) fallo(error, "guardar los datos de la ferretería")
+  if (error) fallo(error, "guardar los datos de la empresa")
 }
 
 // ── IMÁGENES DE PRODUCTO ───────────────────────────────────
@@ -365,7 +365,7 @@ const extensionDe = (archivo) =>
 
 /*
   El archivo va en una carpeta con el id de la empresa: de ahí sale el
-  aislamiento entre ferreterías, porque las políticas del bucket comparan
+  aislamiento entre empresas, porque las políticas del bucket comparan
   esa carpeta contra la empresa de quien sube.
 
   Al nombre se le agrega la marca de tiempo para que el navegador no siga

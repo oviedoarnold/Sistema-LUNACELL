@@ -6,9 +6,9 @@
   </g>
   <rect x="80" y="150" width="72" height="72" rx="18" fill="#E8590C"/>
   <text x="102" y="205" font-family="Segoe UI, sans-serif" font-size="40">🔧</text>
-  <text x="80" y="320" font-family="Oswald, Arial Narrow, sans-serif" font-size="76" font-weight="600" fill="#FFFFFF">Sistema Ferretería</text>
-  <text x="80" y="392" font-family="Oswald, Arial Narrow, sans-serif" font-size="76" font-weight="600" fill="#E8590C">de la bodega a la caja</text>
+  <text x="80" y="320" font-family="Oswald, Arial Narrow, sans-serif" font-size="76" font-weight="600" fill="#FFFFFF">LUNACELL</text>
+  <text x="80" y="392" font-family="Oswald, Arial Narrow, sans-serif" font-size="76" font-weight="600" fill="#E8590C">de la bodega al camión</text>
   <text x="80" y="462" font-family="Source Sans 3, Segoe UI, sans-serif" font-size="30" fill="#C3CBD1">Inventario · Facturación · Cotizaciones · Abonos</text>
   <rect x="80" y="516" width="326" height="4" fill="#E8590C"/>
-  <text x="80" y="566" font-family="IBM Plex Mono, Consolas, monospace" font-size="22" fill="#8D979E">www.oviedoarnold.lat</text>
+  <text x="80" y="566" font-family="IBM Plex Mono, Consolas, monospace" font-size="22" fill="#8D979E">lunacell.oviedoarnold.lat</text>
 </svg>

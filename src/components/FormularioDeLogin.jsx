@@ -21,9 +21,9 @@ function FormularioDeLogin({
   return (
     <div id="login-screen">
       <div className="login-card">
-        <div style={{ fontSize: 36, marginBottom: 10 }}>🔧</div>
+        <div style={{ fontSize: 36, marginBottom: 10 }}>📱</div>
         <h2>Iniciar sesión</h2>
-        <p className="sub">Accede al sistema de tu ferretería</p>
+        <p className="sub">Accede al sistema LUNACELL</p>
         <div className={`login-error ${error ? "show" : ""}`}>{error}</div>
 
         <form onSubmit={onSubmit}>

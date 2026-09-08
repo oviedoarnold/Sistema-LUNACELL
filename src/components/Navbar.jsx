@@ -116,7 +116,7 @@ const visibleTabs = tabs.filter((tab) =>
         <div className="topbar-top">
           <div className="brand">
             <div className="brand-mark">
-              🔧
+              📱
             </div>
 
             <div className="brand-text">
@@ -125,7 +125,7 @@ const visibleTabs = tabs.filter((tab) =>
                   margin: 0,
                 }}
               >
-                {company?.name || "Sistema Ferretería"}
+                {company?.name || "LUNACELL"}
               </h1>
 
               <p

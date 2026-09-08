@@ -12,4 +12,4 @@ Disallow: /quotes
 Disallow: /sales-history
 Disallow: /settings
 
-Sitemap: https://www.oviedoarnold.lat/sitemap.xml
+Sitemap: https://lunacell.oviedoarnold.lat/sitemap.xml
