@@ -1,9 +1,10 @@
 # Modelo de datos
 
-El esquema real está exportado en [db-export.json](db-export.json), generado
-con [../scripts/exportar-esquema.sql](../scripts/exportar-esquema.sql)
-consultando el catálogo de PostgreSQL. Si este documento y ese archivo
-alguna vez difieren, el que manda es el archivo.
+El esquema real se exporta con
+[../scripts/exportar-esquema.sql](../scripts/exportar-esquema.sql), que consulta
+el catálogo de PostgreSQL. El volcado no se versiona: queda desactualizado en
+cuanto corre una migración, y entonces miente. Si este documento y la base
+alguna vez difieren, la que manda es la base.
 
 ## Declaraciones
 
@@ -23,7 +24,7 @@ lo que identifica un permiso es el par y no un identificador propio: así la
 base misma impide asignar dos veces la misma sección al mismo usuario.
 
 Todas tienen además Row Level Security activada. El aislamiento entre
-ferreterías no lo hace el frontend.
+empresas no lo hace el frontend.
 
 ## La decisión de modelado: el stock no es una columna
 
@@ -34,10 +35,11 @@ ajuste queda anotado con su motivo, su fecha y quién lo hizo.
 
 **Por qué.** Con una columna, el día que el conteo físico no cuadra con el
 sistema no hay forma de averiguar qué pasó: solo se ve el número actual y
-nadie sabe si faltan tres martillos porque se vendieron, porque se
-quebraron, porque alguien tecleó mal o porque se los llevaron. En una
-ferretería el descuadre de inventario no es hipotético, es rutina. Con el
-libro se responde "el 12 de agosto salieron 3 por la factura FAC-01203".
+nadie sabe si faltan tres cables porque se vendieron, porque se dañaron,
+porque alguien tecleó mal o porque se los llevaron. Con mercadería repartida
+entre una bodega, una tienda y dos camiones, el descuadre de inventario no
+es hipotético: es rutina. Con el libro se responde "el 12 de agosto salieron
+3 por la factura FAC-01203".
 
 Esa es también la razón de que eliminar un producto lo desactive en vez de
 borrarlo: las facturas emitidas lo señalan y tienen que seguir mostrando qué
@@ -46,7 +48,7 @@ se vendió.
 **Qué costó.** Leer el catálogo dejó de ser un `select` sobre una tabla y
 pasó a ser una agregación: la vista `productos_con_stock` hace un
 `GROUP BY` sobre el libro cada vez. Hoy son 19 movimientos y no se nota. Con
-una ferretería facturando un año seguido serán decenas de miles, y esa
+un año de facturación seguida serán decenas de miles, y esa
 consulta corre cada vez que se abre el punto de venta, que es justo la
 pantalla que no puede tardar.
 
@@ -81,4 +83,4 @@ correcto, aunque a primera vista parezca un error de sincronización.
 Por eso las llaves foráneas de los documentos hacia el catálogo son
 `on delete set null` y no `cascade`: borrar un cliente no puede llevarse sus
 facturas por delante. Hacia `empresas` sí son `cascade`, porque si se da de
-baja una ferretería no queda nada suyo que conservar.
+baja una empresa no queda nada suyo que conservar.

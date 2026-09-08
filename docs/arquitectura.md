@@ -1,9 +1,11 @@
-# Arquitectura — Sistema Ferretería
+# Arquitectura — LUNACELL
 
-Código de verificación: `LEARN-CAP-50768C03`
+Producto publicado: https://lunacell.oviedoarnold.lat/
+Repositorio: https://github.com/oviedoarnold/Sistema-LUNACELL
 
-Producto publicado: https://www.oviedoarnold.lat/
-Repositorio: https://github.com/oviedoarnold/Sistema-Ferreteria
+> Los diagramas C4 de más abajo todavía describen el sistema del que salió
+> este: sus actores son los de una ferretería de mostrador y no contemplan
+> ubicaciones ni camiones. Actualizarlos es una fase propia, con su ADR.
 
 ---
 

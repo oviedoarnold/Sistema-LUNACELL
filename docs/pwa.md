@@ -1,13 +1,11 @@
 # PWA y funcionamiento sin conexión
 
-Código de verificación: `LEARN-CAP-50768C03`
-
 ## Datos exactos
 
 | Dato | Valor |
 |---|---|
 | Ruta del service worker | `public/sw.js` → servido en `/sw.js` |
-| Nombre del caché en `caches.open()` | `ferreteria-v1` |
+| Nombre del caché en `caches.open()` | `lunacell-v1` |
 | Manifest | `public/manifest.webmanifest` → servido en `/manifest.webmanifest` |
 | `start_url` | `/` |
 | `scope` | `/` |
@@ -54,7 +52,7 @@ depender del Internet**: un mostrador desconectado tiene que poder facturar, y q
 esa factura tarde unos minutos en aparecer en la computadora del dueño es
 aceptable. Lo que falta para volver a esa frontera es una caché local con cola de
 sincronización, que el [ADR-1](adr/adr-001-postgresql-multiempresa.md) ya
-anticipaba. Mientras no exista, una ferretería con Internet inestable va a sentirlo,
+anticipaba. Mientras no exista, un negocio con Internet inestable va a sentirlo,
 y conviene decírselo antes de venderle el sistema.
 
 ## Verificación pendiente
@@ -69,6 +67,6 @@ crea el caché en ese modo. Lo verificado hasta ahora:
 - `offline.html` se sirve correctamente
 
 **Queda confirmar en un navegador real** que el service worker se instala, que el
-caché `ferreteria-v1` se crea y que la aplicación abre sin conexión. Esa comprobación
+caché `lunacell-v1` se crea y que la aplicación abre sin conexión. Esa comprobación
 coincide con la evidencia que pide el requisito 12: la PWA instalada en un teléfono
 real.
