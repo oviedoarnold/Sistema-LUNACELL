@@ -7,6 +7,14 @@ import ProductProvider from "../context/ProductContext"
 import ClientsProvider from "../context/ClientsContext"
 import SalesProvider from "../context/SalesContext"
 import { renderizarPantalla } from "../test/pantallas"
+import {
+  CAMPOS_DEL_CLIENTE,
+  abrirClienteNuevo as abrirAltaDeCliente,
+  filasDelCarrito,
+  modalDeCliente,
+  paso,
+  quitarDelCarrito,
+} from "../test/carrito"
 import POS from "./POS"
 
 vi.mock("../lib/supabase", () => ({
@@ -58,6 +66,10 @@ const buscar = (texto) =>
   fireEvent.change(screen.getByPlaceholderText(/buscar producto/i), {
     target: { value: texto },
   })
+
+const abrirClienteNuevo = () => abrirAltaDeCliente(/nombre/i)
+
+const quitar = quitarDelCarrito
 
 describe("POS: catálogo", () => {
   it("lista los productos disponibles", async () => {
@@ -111,6 +123,93 @@ describe("POS: carrito", () => {
     agregar("Martillo de uña")
 
     expect(totales()).toHaveTextContent("L 414.00")
+  })
+
+  it("sube la cantidad desde el carrito", async () => {
+    await renderPOS()
+    agregar("Martillo de uña")
+
+    paso("Martillo de uña", "+")
+
+    expect(totales()).toHaveTextContent("L 414.00")
+  })
+
+  it("baja la cantidad desde el carrito", async () => {
+    await renderPOS()
+    agregar("Martillo de uña")
+    paso("Martillo de uña", "+")
+
+    paso("Martillo de uña", "−")
+
+    expect(totales()).toHaveTextContent("L 207.00")
+  })
+
+  /*
+    El tope es la existencia del producto. Sin esto se podría facturar
+    mercadería que no está, y la venta fallaría recién al guardarse.
+  */
+  it("no deja subir la cantidad por encima de la existencia", async () => {
+    await renderPOS()
+    agregar("Cemento gris")
+    paso("Cemento gris", "+")
+
+    paso("Cemento gris", "+")
+
+    expect(totales()).toHaveTextContent("L 575.00")
+  })
+
+  it("quita un producto del carrito", async () => {
+    await renderPOS()
+    agregar("Martillo de uña")
+
+    quitar("Martillo de uña")
+
+    expect(filasDelCarrito()).toHaveLength(0)
+    expect(totales()).toHaveTextContent("L 0.00")
+  })
+})
+
+describe("POS: alta de cliente", () => {
+  it("abre el formulario de cliente nuevo", async () => {
+    await renderPOS()
+
+    abrirClienteNuevo()
+
+    expect(
+      screen.getByRole("heading", { name: /nuevo cliente/i })
+    ).toBeInTheDocument()
+  })
+
+  it("el formulario pide nombre, RTN, teléfono, correo y dirección", async () => {
+    await renderPOS()
+
+    abrirClienteNuevo()
+
+    const modal = modalDeCliente()
+
+    CAMPOS_DEL_CLIENTE.forEach((campo) =>
+      expect(modal.getByLabelText(campo)).toBeInTheDocument()
+    )
+  })
+
+  it("arrastra al formulario lo que ya se había escrito", async () => {
+    await renderPOS()
+
+    fireEvent.change(screen.getByPlaceholderText(/nombre/i), {
+      target: { value: "Taller Nuevo" },
+    })
+    abrirClienteNuevo()
+
+    expect(modalDeCliente().getByLabelText(/^nombre$/i)).toHaveValue("Taller Nuevo")
+  })
+
+  it("exige nombre, teléfono y dirección", async () => {
+    const { falso } = await renderPOS()
+
+    abrirClienteNuevo()
+    fireEvent.click(screen.getByRole("button", { name: /guardar cliente/i }))
+
+    expect(falso.datos.clientes).toHaveLength(1)
   })
 })
 
