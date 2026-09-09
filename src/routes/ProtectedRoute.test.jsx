@@ -76,6 +76,25 @@ beforeEach(() => {
   vi.resetModules()
 })
 
+/*
+  Monta el doble con una sesión ya abierta.
+
+  Todas las pruebas de aquí abajo necesitaban el mismo bloque de tres
+  líneas —el usuario invitado, sus permisos y la sesión— y solo cambiaban
+  en qué secciones tiene habilitadas. Con el bloque repetido, lo que cada
+  prueba comprueba de verdad quedaba enterrado entre el andamiaje.
+
+  Los rasgos del usuario (rol, activo) pasan tal cual a usuarioDePrueba,
+  así que la prueba que los necesita los sigue declarando a la vista.
+*/
+function entrarComo({ secciones = [], ...rasgos } = {}) {
+  montarSupabaseFalso({
+    usuarios: [usuarioDePrueba(rasgos)],
+    permisos: permisosDe("u-1", secciones),
+    sesionInicial: sesionDe("auth-1"),
+  })
+}
+
 describe("ProtectedRoute sin sesión", () => {
   beforeEach(() => {
     montarSupabaseFalso()
@@ -102,11 +121,7 @@ describe("ProtectedRoute sin sesión", () => {
 
 describe("ProtectedRoute mientras se comprueba la sesión", () => {
   it("espera en vez de expulsar al login", async () => {
-    montarSupabaseFalso({
-      usuarios: [usuarioDePrueba()],
-      permisos: permisosDe("u-1", [PERMISSIONS.DASHBOARD]),
-      sesionInicial: sesionDe("auth-1"),
-    })
+    entrarComo({ secciones: [PERMISSIONS.DASHBOARD] })
 
     const { AuthProvider } = await import("../context/AuthContext")
     const ProtectedRoute = (await import("./ProtectedRoute")).default
@@ -142,11 +157,7 @@ describe("ProtectedRoute mientras se comprueba la sesión", () => {
 
 describe("ProtectedRoute con sesión", () => {
   it("deja pasar cuando el usuario tiene el permiso", async () => {
-    montarSupabaseFalso({
-      usuarios: [usuarioDePrueba()],
-      permisos: permisosDe("u-1", [PERMISSIONS.DASHBOARD]),
-      sesionInicial: sesionDe("auth-1"),
-    })
+    entrarComo({ secciones: [PERMISSIONS.DASHBOARD] })
 
     await renderEnRuta("/dashboard")
 
@@ -154,11 +165,7 @@ describe("ProtectedRoute con sesión", () => {
   })
 
   it("desvía a la primera página habilitada cuando falta el permiso", async () => {
-    montarSupabaseFalso({
-      usuarios: [usuarioDePrueba()],
-      permisos: permisosDe("u-1", [PERMISSIONS.POS]),
-      sesionInicial: sesionDe("auth-1"),
-    })
+    entrarComo({ secciones: [PERMISSIONS.POS] })
 
     await renderEnRuta("/settings")
 
@@ -167,11 +174,7 @@ describe("ProtectedRoute con sesión", () => {
   })
 
   it("el administrador entra a todo", async () => {
-    montarSupabaseFalso({
-      usuarios: [usuarioDePrueba({ rol: "admin" })],
-      permisos: [],
-      sesionInicial: sesionDe("auth-1"),
-    })
+    entrarComo({ rol: "admin" })
 
     await renderEnRuta("/settings")
 
@@ -179,11 +182,7 @@ describe("ProtectedRoute con sesión", () => {
   })
 
   it("muestra la pantalla de sin acceso cuando no tiene ninguna página", async () => {
-    montarSupabaseFalso({
-      usuarios: [usuarioDePrueba()],
-      permisos: [],
-      sesionInicial: sesionDe("auth-1"),
-    })
+    entrarComo()
 
     await renderEnRuta("/dashboard")
 
@@ -191,11 +190,7 @@ describe("ProtectedRoute con sesión", () => {
   })
 
   it("un usuario desactivado va al login", async () => {
-    montarSupabaseFalso({
-      usuarios: [usuarioDePrueba({ activo: false })],
-      permisos: permisosDe("u-1", [PERMISSIONS.DASHBOARD]),
-      sesionInicial: sesionDe("auth-1"),
-    })
+    entrarComo({ activo: false, secciones: [PERMISSIONS.DASHBOARD] })
 
     await renderEnRuta("/dashboard")
 
@@ -203,11 +198,7 @@ describe("ProtectedRoute con sesión", () => {
   })
 
   it("deja entrar a Ubicaciones a quien tiene el permiso", async () => {
-    montarSupabaseFalso({
-      usuarios: [usuarioDePrueba()],
-      permisos: permisosDe("u-1", [PERMISSIONS.LOCATIONS]),
-      sesionInicial: sesionDe("auth-1"),
-    })
+    entrarComo({ secciones: [PERMISSIONS.LOCATIONS] })
 
     await renderEnRuta("/locations")
 
@@ -219,11 +210,7 @@ describe("ProtectedRoute con sesión", () => {
     sección privada, y quien no la tenga habilitada no la ve.
   */
   it("desvía fuera de Ubicaciones a quien no tiene el permiso", async () => {
-    montarSupabaseFalso({
-      usuarios: [usuarioDePrueba()],
-      permisos: permisosDe("u-1", [PERMISSIONS.POS]),
-      sesionInicial: sesionDe("auth-1"),
-    })
+    entrarComo({ secciones: [PERMISSIONS.POS] })
 
     await renderEnRuta("/locations")
 
