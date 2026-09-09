@@ -1,4 +1,8 @@
-import { Link } from "react-router-dom"
+import {
+  CabeceraPublica,
+  LlamadaAIngresar,
+  PiePublico,
+} from "../components/PaginaPublica"
 
 import "../styles/landing.css"
 
@@ -125,23 +129,7 @@ function ListaDeModulos({ estado }) {
 function Demo() {
   return (
     <div className="landing">
-      <nav className="lp-nav is-stuck">
-        <div className="wrap">
-          <Link to="/" className="lp-brand">
-            <span className="mark">📱</span>
-            <span>
-              <b>LUNACELL &amp; ASOCS.</b>
-              <span>ACCESORIOS PARA CELULARES</span>
-            </span>
-          </Link>
-
-          <div className="lp-nav-links">
-            <Link to="/login" className="btn btn-primary">
-              Ingresar al sistema
-            </Link>
-          </div>
-        </div>
-      </nav>
+      <CabeceraPublica fija />
 
       <section className="lp-features">
         <div className="wrap">
@@ -167,32 +155,12 @@ function Demo() {
         </div>
       </section>
 
-      <section className="lp-cta">
-        <div className="wrap">
-          <h2>¿Tienes una cuenta?</h2>
-          <p>Entra con tu usuario para trabajar en el sistema.</p>
-          <div className="lp-cta-row">
-            <Link to="/login" className="btn btn-primary btn-lg">
-              INGRESAR AL SISTEMA
-            </Link>
-          </div>
-        </div>
-      </section>
+      <LlamadaAIngresar
+        titulo="¿Tienes una cuenta?"
+        texto="Entra con tu usuario para trabajar en el sistema."
+      />
 
-      <footer className="lp-footer">
-        <div className="wrap">
-          <div className="lp-brand">
-            <span className="mark">📱</span>
-            <span>
-              <b>LUNACELL &amp; ASOCS.</b>
-            </span>
-          </div>
-          <p>
-            © {new Date().getFullYear()} LUNACELL &amp; ASOCS. · Accesorios que
-            marcan la diferencia.
-          </p>
-        </div>
-      </footer>
+      <PiePublico />
     </div>
   )
 }
