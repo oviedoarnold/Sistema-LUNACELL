@@ -7,6 +7,14 @@ import ProductProvider from "../context/ProductContext"
 import ClientsProvider from "../context/ClientsContext"
 import QuotesProvider from "../context/QuotesContext"
 import { EMPRESA_PRUEBA, renderizarPantalla } from "../test/pantallas"
+import {
+  CAMPOS_DEL_CLIENTE,
+  abrirClienteNuevo as abrirAltaDeCliente,
+  filasDelCarrito,
+  modalDeCliente,
+  paso,
+  quitarDelCarrito,
+} from "../test/carrito"
 import Quotes from "./Quotes"
 
 vi.mock("../lib/supabase", () => ({
@@ -72,6 +80,10 @@ const agregar = (nombre) => {
 const filaDe = (numero) =>
   screen.getByText(numero, { exact: false }).closest(".sale-card")
 
+const abrirClienteNuevo = () => abrirAltaDeCliente(/nombre del cliente/i)
+
+const quitar = quitarDelCarrito
+
 describe("Quotes: catálogo", () => {
   it("lista los productos para cotizar", async () => {
     await renderQuotes()
@@ -114,12 +126,101 @@ describe("Quotes: armado", () => {
     expect(totales()).toHaveTextContent("L 180.00")
   })
 
+  it("sube la cantidad desde el carrito", async () => {
+    await renderQuotes()
+    agregar("Martillo de uña")
+
+    paso("Martillo de uña", "+")
+
+    expect(totales()).toHaveTextContent("L 414.00")
+  })
+
+  it("baja la cantidad desde el carrito", async () => {
+    await renderQuotes()
+    agregar("Martillo de uña")
+    paso("Martillo de uña", "+")
+
+    paso("Martillo de uña", "−")
+
+    expect(totales()).toHaveTextContent("L 207.00")
+  })
+
+  /*
+    Una cotización tampoco ofrece más de lo que hay: el tope es la
+    existencia, igual que al facturar.
+  */
+  it("no deja subir la cantidad por encima de la existencia", async () => {
+    await renderQuotes()
+    agregar("Cemento gris")
+    paso("Cemento gris", "+")
+    paso("Cemento gris", "+")
+    paso("Cemento gris", "+")
+
+    paso("Cemento gris", "+")
+
+    expect(totales()).toHaveTextContent("L 1,150.00")
+  })
+
+  it("quita un producto del carrito", async () => {
+    await renderQuotes()
+    agregar("Martillo de uña")
+
+    quitar("Martillo de uña")
+
+    expect(filasDelCarrito()).toHaveLength(0)
+  })
+
   it("acumula al agregar el mismo producto dos veces", async () => {
     await renderQuotes()
     agregar("Martillo de uña")
     agregar("Martillo de uña")
 
     expect(totales()).toHaveTextContent("L 414.00")
+  })
+})
+
+describe("Quotes: alta de cliente", () => {
+  it("abre el formulario de cliente nuevo", async () => {
+    await renderQuotes()
+
+    abrirClienteNuevo()
+
+    expect(
+      screen.getByRole("heading", { name: /nuevo cliente/i })
+    ).toBeInTheDocument()
+  })
+
+  it("el formulario pide nombre, RTN, teléfono, correo y dirección", async () => {
+    await renderQuotes()
+
+    abrirClienteNuevo()
+    const modal = modalDeCliente()
+
+    CAMPOS_DEL_CLIENTE.forEach((campo) =>
+      expect(modal.getByLabelText(campo)).toBeInTheDocument()
+    )
+  })
+
+  it("arrastra al formulario lo que ya se había escrito", async () => {
+    await renderQuotes()
+
+    fireEvent.change(screen.getByPlaceholderText(/nombre del cliente/i), {
+      target: { value: "Taller Nuevo" },
+    })
+    abrirClienteNuevo()
+
+    expect(modalDeCliente().getByLabelText(/^nombre$/i)).toHaveValue(
+      "Taller Nuevo"
+    )
+  })
+
+  it("exige nombre, teléfono y dirección", async () => {
+    const { falso } = await renderQuotes()
+
+    abrirClienteNuevo()
+    fireEvent.click(screen.getByRole("button", { name: /guardar cliente/i }))
+
+    expect(falso.datos.clientes ?? []).toHaveLength(0)
   })
 })
 

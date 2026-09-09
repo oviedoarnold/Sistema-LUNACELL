@@ -8,6 +8,9 @@ import { SalesContext } from "../context/contexts"
 import { ClientsContext } from "../context/contexts"
 import InvoiceTemplate from "../components/InvoiceTemplate"
 import ClientAutocomplete from "../components/documents/ClientAutocomplete"
+import ModalDeCliente from "../components/documents/ModalDeCliente"
+import { useCarrito } from "../hooks/useCarrito"
+import { useClienteDelDocumento } from "../hooks/useClienteDelDocumento"
 import DocumentPreviewModal from "../components/documents/DocumentPreviewModal"
 
 import {
@@ -17,16 +20,8 @@ import {
 } from "../utils/format"
 
 import {
-  addProductToCart,
-  buildStockWarningMessage,
   calculateCartTotals,
   filterProductsBySearchText,
-  findCartLine,
-  getStockAvailableToAdd,
-  normalizeRequestedQuantity,
-  removeProductFromCart,
-  setCartLineQuantity,
-  validateQuantityAgainstStock,
 } from "../utils/cart"
 
 const ISV_POR_OMISION = 15
@@ -59,36 +54,55 @@ function POS() {
   const saleDraft = location.state?.saleDraft
 
   const [search, setSearch] = useState("")
-  const [cart, setCart] = useState(
-    () => saleDraft?.cart || []
-  )
-  const [qtyMap, setQtyMap] = useState({})
-
   const [paymentType, setPaymentType] = useState("contado")
-  const [clientSearch, setClientSearch] = useState(
-    () => saleDraft?.clientName || ""
-  )
-  const [selectedClient, setSelectedClient] = useState(
-    () =>
-      clients.find(
-        (candidate) =>
-          String(candidate.id) ===
-          String(saleDraft?.clientId)
-      ) || null
-  )
+
   const [buyerRTN, setBuyerRTN] = useState(
     () => saleDraft?.rtn || ""
   )
+
   const [dueDate, setDueDate] = useState(toISODateInDays(30))
 
-  const [clientModalOpen, setClientModalOpen] = useState(false)
+  /*
+    El carrito y el alta de cliente son los mismos que en cotizaciones y
+    viven en hooks compartidos. Se renombran al vocabulario que ya usaba
+    esta pantalla para no reescribir el resto del archivo.
+  */
+  const {
+    lineas: cart,
+    cantidadPedida: qtyMap,
+    setCantidadPedida: setQtyMap,
+    agregar: addToCartWithQty,
+    quitar: removeFromCart,
+    cambiarCantidad: changeQuantity,
+    vaciar: vaciarCarrito,
+    disponibleDe: availableStockFor,
+  } = useCarrito({
+    productos: products,
+    lineasIniciales: saleDraft?.cart || [],
+  })
 
-  const [clientForm, setClientForm] = useState({
-    name: "",
-    rtn: "",
-    phone: "",
-    address: "",
-    email: "",
+  const {
+    busqueda: clientSearch,
+    seleccionado: selectedClient,
+    formulario: clientForm,
+    setFormulario: setClientForm,
+    modalAbierto: clientModalOpen,
+    seleccionar: handleSelectClient,
+    escribirBusqueda: handleClientSearchChange,
+    soltar: handleClearClient,
+    abrirAlta: openNewClientModal,
+    cerrarAlta: cerrarModalDeCliente,
+    guardarNuevo: saveNewClient,
+  } = useClienteDelDocumento({
+    addClient,
+    busquedaInicial: saleDraft?.clientName || "",
+    clienteInicial:
+      clients.find(
+        (candidate) =>
+          String(candidate.id) === String(saleDraft?.clientId)
+      ) || null,
+    // El RTN del comprador acompaña al cliente que se elija.
+    alCambiar: (cliente) => setBuyerRTN(cliente?.rtn || ""),
   })
 
   const [previewOpen, setPreviewOpen] = useState(false)
@@ -123,113 +137,6 @@ function POS() {
     [products, search]
   )
 
-  const availableStockFor = (product) =>
-    getStockAvailableToAdd(product, cart)
-
-  const addToCartWithQty = (
-    product,
-    requestedQty
-  ) => {
-    const quantity =
-      normalizeRequestedQuantity(
-        requestedQty
-      )
-
-    const validation =
-      validateQuantityAgainstStock(
-        product,
-        cart,
-        quantity
-      )
-
-    if (!validation.isAllowed) {
-      Swal.fire({
-        icon: "warning",
-        title: "Stock insuficiente",
-        text: buildStockWarningMessage(
-          product.name,
-          validation
-        ),
-      })
-
-      return
-    }
-
-    setCart((currentCart) =>
-      addProductToCart(
-        currentCart,
-        product,
-        quantity
-      )
-    )
-
-    setQtyMap((current) => ({
-      ...current,
-      [product.id]: 1,
-    }))
-  }
-
-  const removeFromCart = (
-    productId
-  ) => {
-    setCart((currentCart) =>
-      removeProductFromCart(
-        currentCart,
-        productId
-      )
-    )
-  }
-
-  const changeQuantity = (
-    productId,
-    delta
-  ) => {
-    const product = products.find(
-      (item) =>
-        String(item.id) ===
-        String(productId)
-    )
-
-    const cartItem = findCartLine(
-      cart,
-      productId
-    )
-
-    if (!product || !cartItem) return
-
-    const nextQuantity =
-      cartItem.quantity + delta
-
-    if (
-      nextQuantity >
-      Number(product.stock || 0)
-    ) {
-      Swal.fire({
-        icon: "warning",
-        title: "Stock insuficiente",
-        text: buildStockWarningMessage(
-          product.name,
-          {
-            reason: "excede-existencias",
-            availableToAdd: Number(
-              product.stock || 0
-            ),
-          }
-        ),
-      })
-
-      return
-    }
-
-    setCart((currentCart) =>
-      setCartLineQuantity(
-        currentCart,
-        productId,
-        nextQuantity
-      )
-    )
-  }
-
   const {
     subtotal,
     tax,
@@ -247,102 +154,10 @@ function POS() {
     type
   ) => {
     setPaymentType(type)
-    setSelectedClient(null)
-    setClientSearch("")
-    setBuyerRTN("")
+    handleClearClient()
 
     if (type === "credito") {
       setDueDate(toISODateInDays(30))
-    }
-  }
-
-  const handleClientSearchChange = (
-    value
-  ) => {
-    setClientSearch(value)
-
-    if (selectedClient) {
-      setSelectedClient(null)
-      setBuyerRTN("")
-    }
-  }
-
-  const handleSelectClient = (
-    client
-  ) => {
-    setSelectedClient(client)
-    setClientSearch(client.name)
-    setBuyerRTN(client.rtn || "")
-  }
-
-  const handleClearClient = () => {
-    setSelectedClient(null)
-    setClientSearch("")
-    setBuyerRTN("")
-  }
-
-  const openNewClientModal = () => {
-    setClientForm({
-      name: clientSearch.trim(),
-      rtn: "",
-      phone: "",
-      address: "",
-      email: "",
-    })
-
-    setClientModalOpen(true)
-  }
-
-  const saveNewClient = () => {
-    const name =
-      clientForm.name.trim()
-
-    const phone =
-      clientForm.phone.trim()
-
-    const address =
-      clientForm.address.trim()
-
-    if (!name || !phone || !address) {
-      Swal.fire({
-        icon: "warning",
-        title: "Faltan datos",
-        text:
-          "Nombre, teléfono y dirección son obligatorios.",
-      })
-      return
-    }
-
-    try {
-      const newClient = addClient({
-        ...clientForm,
-        name,
-        phone,
-        address,
-        rtn: clientForm.rtn.trim(),
-        email:
-          clientForm.email.trim(),
-      })
-
-      setClientModalOpen(false)
-
-      if (newClient) {
-        handleSelectClient(
-          newClient
-        )
-      }
-
-      Swal.fire({
-        icon: "success",
-        title: "Cliente guardado",
-      })
-    } catch (error) {
-      Swal.fire({
-        icon: "error",
-        title:
-          "No se pudo guardar el cliente",
-        text: error.message,
-      })
     }
   }
 
@@ -540,13 +355,10 @@ function POS() {
     // Termino un cobro: el siguiente es una operacion distinta.
     setClaveDeVenta(claveDeIdempotencia())
 
-    setCart([])
-    setQtyMap({})
+    vaciarCarrito()
     setSearch("")
     setPaymentType("contado")
-    setSelectedClient(null)
-    setClientSearch("")
-    setBuyerRTN("")
+    handleClearClient()
     setDueDate(toISODateInDays(30))
   }
 
@@ -1183,191 +995,14 @@ function POS() {
         </aside>
       </div>
 
-      {clientModalOpen && (
-        <div className="modal-overlay open">
-          <div className="modal">
-            <div className="modal-head">
-              <h3>
-                Nuevo cliente
-              </h3>
-
-              <button
-                type="button"
-                className="icon-btn"
-                onClick={() =>
-                  setClientModalOpen(
-                    false
-                  )
-                }
-              >
-                ✕
-              </button>
-            </div>
-
-            <div className="modal-body">
-              <div className="form-grid">
-                <div className="field">
-                  <label htmlFor="pos-nombre">
-                    Nombre
-                  </label>
-
-                  <input id="pos-nombre"
-                    value={
-                      clientForm.name
-                    }
-                    onChange={(
-                      event
-                    ) =>
-                      setClientForm(
-                        (
-                          current
-                        ) => ({
-                          ...current,
-                          name: event
-                            .target
-                            .value,
-                        })
-                      )
-                    }
-                  />
-                </div>
-
-                <div className="field">
-                  <label htmlFor="pos-rtn-opcional">
-                    RTN (opcional)
-                  </label>
-
-                  <input id="pos-rtn-opcional"
-                    value={
-                      clientForm.rtn
-                    }
-                    onChange={(
-                      event
-                    ) =>
-                      setClientForm(
-                        (
-                          current
-                        ) => ({
-                          ...current,
-                          rtn: event
-                            .target
-                            .value,
-                        })
-                      )
-                    }
-                  />
-                </div>
-
-                <div className="field">
-                  <label htmlFor="pos-telefono">
-                    Teléfono
-                  </label>
-
-                  <input id="pos-telefono"
-                    value={
-                      clientForm.phone
-                    }
-                    onChange={(
-                      event
-                    ) =>
-                      setClientForm(
-                        (
-                          current
-                        ) => ({
-                          ...current,
-                          phone:
-                            event
-                              .target
-                              .value,
-                        })
-                      )
-                    }
-                  />
-                </div>
-
-                <div className="field">
-                  <label htmlFor="pos-correo">
-                    Correo
-                  </label>
-
-                  <input id="pos-correo"
-                    type="email"
-                    value={
-                      clientForm.email
-                    }
-                    onChange={(
-                      event
-                    ) =>
-                      setClientForm(
-                        (
-                          current
-                        ) => ({
-                          ...current,
-                          email:
-                            event
-                              .target
-                              .value,
-                        })
-                      )
-                    }
-                  />
-                </div>
-
-                <div className="field full">
-                  <label htmlFor="pos-direccion">
-                    Dirección
-                  </label>
-
-                  <input id="pos-direccion"
-                    value={
-                      clientForm.address
-                    }
-                    onChange={(
-                      event
-                    ) =>
-                      setClientForm(
-                        (
-                          current
-                        ) => ({
-                          ...current,
-                          address:
-                            event
-                              .target
-                              .value,
-                        })
-                      )
-                    }
-                  />
-                </div>
-              </div>
-            </div>
-
-            <div className="modal-foot">
-              <button
-                type="button"
-                className="btn btn-primary"
-                onClick={
-                  saveNewClient
-                }
-              >
-                Guardar cliente
-              </button>
-
-              <button
-                type="button"
-                className="btn btn-secondary"
-                onClick={() =>
-                  setClientModalOpen(
-                    false
-                  )
-                }
-              >
-                Cancelar
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <ModalDeCliente
+        abierto={clientModalOpen}
+        prefijo="pos"
+        formulario={clientForm}
+        onCambiar={setClientForm}
+        onGuardar={saveNewClient}
+        onCerrar={cerrarModalDeCliente}
+      />
 
       <DocumentPreviewModal
         open={

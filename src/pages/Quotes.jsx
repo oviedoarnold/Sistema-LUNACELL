@@ -13,8 +13,10 @@ import { claveDeIdempotencia } from "../utils/ids"
 
 import QuoteTemplate from "../components/QuoteTemplate"
 
-
 import ClientAutocomplete from "../components/documents/ClientAutocomplete"
+import ModalDeCliente from "../components/documents/ModalDeCliente"
+import { useCarrito } from "../hooks/useCarrito"
+import { useClienteDelDocumento } from "../hooks/useClienteDelDocumento"
 import DocumentPreviewModal from "../components/documents/DocumentPreviewModal"
 
 import {
@@ -22,17 +24,7 @@ import {
   toISODateInDays,
 } from "../utils/format"
 
-import {
-  addProductToCart,
-  buildStockWarningMessage,
-  filterProductsBySearchText,
-  findCartLine,
-  getQuantityInCart,
-  normalizeRequestedQuantity,
-  removeProductFromCart,
-  setCartLineQuantity,
-  validateQuantityAgainstStock,
-} from "../utils/cart"
+import { filterProductsBySearchText } from "../utils/cart"
 
 import { useNavigate } from "react-router-dom"
 
@@ -102,21 +94,35 @@ function Quotes() {
     setHistorySearch,
   ] = useState("")
 
-  const [cart, setCart] =
-    useState([])
+  /*
+    El carrito y el alta de cliente son los mismos que en el punto de venta
+    y viven en hooks compartidos. Se renombran al vocabulario que ya usaba
+    esta pantalla para no reescribir el resto del archivo.
+  */
+  const {
+    lineas: cart,
+    cantidadPedida: qtyMap,
+    setCantidadPedida: setQtyMap,
+    agregar: addToCart,
+    quitar: removeFromCart,
+    cambiarCantidad: changeQuantity,
+    vaciar: vaciarCarrito,
+    cantidadEnCarrito: cartQuantityFor,
+  } = useCarrito({ productos: products })
 
-  const [qtyMap, setQtyMap] =
-    useState({})
-
-  const [
-    clientSearch,
-    setClientSearch,
-  ] = useState("")
-
-  const [
-    selectedClient,
-    setSelectedClient,
-  ] = useState(null)
+  const {
+    busqueda: clientSearch,
+    seleccionado: selectedClient,
+    formulario: clientForm,
+    setFormulario: setClientForm,
+    modalAbierto: clientModalOpen,
+    seleccionar: handleSelectClient,
+    escribirBusqueda: handleClientChange,
+    soltar: clearSelectedClient,
+    abrirAlta: openNewClientModal,
+    cerrarAlta: cerrarModalDeCliente,
+    guardarNuevo: saveNewClient,
+  } = useClienteDelDocumento({ addClient })
 
   const [validity, setValidity] =
     useState(
@@ -130,22 +136,6 @@ function Quotes() {
     includeTax,
     setIncludeTax,
   ] = useState(true)
-
-  const [
-    clientModalOpen,
-    setClientModalOpen,
-  ] = useState(false)
-
-  const [
-    clientForm,
-    setClientForm,
-  ] = useState({
-    name: "",
-    rtn: "",
-    phone: "",
-    address: "",
-    email: "",
-  })
 
   const [
     previewOpen,
@@ -182,118 +172,6 @@ function Quotes() {
     [quotes, historySearch]
   )
 
-  const cartQuantityFor = (
-    productId
-  ) =>
-    getQuantityInCart(
-      cart,
-      productId
-    )
-
-  const addToCart = (
-    product,
-    requestedQty
-  ) => {
-    const quantity =
-      normalizeRequestedQuantity(
-        requestedQty
-      )
-
-    const validation =
-      validateQuantityAgainstStock(
-        product,
-        cart,
-        quantity
-      )
-
-    if (!validation.isAllowed) {
-      Swal.fire({
-        icon: "warning",
-        title: "Stock insuficiente",
-        text: buildStockWarningMessage(
-          product.name,
-          validation
-        ),
-      })
-
-      return
-    }
-
-    setCart((currentCart) =>
-      addProductToCart(
-        currentCart,
-        product,
-        quantity
-      )
-    )
-
-    setQtyMap((current) => ({
-      ...current,
-      [product.id]: 1,
-    }))
-  }
-
-  const changeQuantity = (
-    productId,
-    delta
-  ) => {
-    const product = products.find(
-      (item) =>
-        String(item.id) ===
-        String(productId)
-    )
-
-    const cartItem = findCartLine(
-      cart,
-      productId
-    )
-
-    if (!product || !cartItem) return
-
-    const nextQuantity =
-      cartItem.quantity + delta
-
-    if (
-      nextQuantity >
-      Number(product.stock || 0)
-    ) {
-      Swal.fire({
-        icon: "warning",
-        title: "Stock insuficiente",
-        text: buildStockWarningMessage(
-          product.name,
-          {
-            reason: "excede-existencias",
-            availableToAdd: Number(
-              product.stock || 0
-            ),
-          }
-        ),
-      })
-
-      return
-    }
-
-    setCart((currentCart) =>
-      setCartLineQuantity(
-        currentCart,
-        productId,
-        nextQuantity
-      )
-    )
-  }
-
-  const removeFromCart = (
-    productId
-  ) => {
-    setCart((currentCart) =>
-      removeProductFromCart(
-        currentCart,
-        productId
-      )
-    )
-  }
-
   const {
     subtotal,
     tax,
@@ -306,121 +184,6 @@ function Quotes() {
       }),
     [cart, includeTax, taxRate]
   )
-
-  const handleClientChange = (
-    value
-  ) => {
-    setClientSearch(value)
-
-    if (selectedClient) {
-      setSelectedClient(null)
-    }
-  }
-
-  const handleSelectClient = (
-    client
-  ) => {
-    setSelectedClient(client)
-
-    setClientSearch(
-      client.name
-    )
-  }
-
-  const clearSelectedClient =
-    () => {
-      setSelectedClient(null)
-
-      setClientSearch("")
-    }
-
-  const openNewClientModal =
-    () => {
-      setClientForm({
-        name:
-          clientSearch.trim(),
-
-        rtn: "",
-        phone: "",
-        address: "",
-        email: "",
-      })
-
-      setClientModalOpen(true)
-    }
-
-  const saveNewClient = () => {
-    const name =
-      clientForm.name.trim()
-
-    const phone =
-      clientForm.phone.trim()
-
-    const address =
-      clientForm.address.trim()
-
-    if (
-      !name ||
-      !phone ||
-      !address
-    ) {
-      Swal.fire({
-        icon: "warning",
-
-        title:
-          "Faltan datos",
-
-        text:
-          "Nombre, teléfono y dirección son obligatorios.",
-      })
-
-      return
-    }
-
-    try {
-      const newClient =
-        addClient({
-          ...clientForm,
-
-          name,
-          phone,
-          address,
-
-          rtn:
-            clientForm.rtn.trim(),
-
-          email:
-            clientForm.email.trim(),
-        })
-
-      setClientModalOpen(
-        false
-      )
-
-      if (newClient) {
-        handleSelectClient(
-          newClient
-        )
-      }
-
-      Swal.fire({
-        icon: "success",
-
-        title:
-          "Cliente guardado",
-      })
-    } catch (error) {
-      Swal.fire({
-        icon: "error",
-
-        title:
-          "No se pudo guardar el cliente",
-
-        text:
-          error.message,
-      })
-    }
-  }
 
   const buildQuote = () => {
     const customerName =
@@ -528,11 +291,8 @@ function Quotes() {
     setClaveDeCotizacion(claveDeIdempotencia())
 
     setSearch("")
-    setCart([])
-    setQtyMap({})
-
-    setClientSearch("")
-    setSelectedClient(null)
+    vaciarCarrito()
+    clearSelectedClient()
 
     setValidity(
       toISODateInDays(15)
@@ -1107,7 +867,7 @@ function Quotes() {
                           type="button"
                           onClick={() =>
                             changeQuantity(
-                              item.productId,
+                              item.id,
                               -1
                             )
                           }
@@ -1125,7 +885,7 @@ function Quotes() {
                           type="button"
                           onClick={() =>
                             changeQuantity(
-                              item.productId,
+                              item.id,
                               1
                             )
                           }
@@ -1149,7 +909,7 @@ function Quotes() {
                         title="Eliminar producto"
                         onClick={() =>
                           removeFromCart(
-                            item.productId
+                            item.id
                           )
                         }
                       >
@@ -1458,199 +1218,14 @@ function Quotes() {
       )}
 
       {/* NUEVO CLIENTE */}
-      {clientModalOpen && (
-        <div className="modal-overlay open">
-          <div className="modal">
-            <div className="modal-head">
-              <h3>
-                Nuevo cliente
-              </h3>
-
-              <button
-                type="button"
-                className="icon-btn"
-                onClick={() =>
-                  setClientModalOpen(
-                    false
-                  )
-                }
-              >
-                ✕
-              </button>
-            </div>
-
-            <div className="modal-body">
-              <div className="form-grid">
-                <div className="field">
-                  <label htmlFor="quotes-nombre">
-                    Nombre
-                  </label>
-
-                  <input id="quotes-nombre"
-                    value={
-                      clientForm.name
-                    }
-                    onChange={(
-                      event
-                    ) =>
-                      setClientForm(
-                        (
-                          current
-                        ) => ({
-                          ...current,
-
-                          name:
-                            event
-                              .target
-                              .value,
-                        })
-                      )
-                    }
-                  />
-                </div>
-
-                <div className="field">
-                  <label htmlFor="quotes-rtn-opcional">
-                    RTN
-                    (opcional)
-                  </label>
-
-                  <input id="quotes-rtn-opcional"
-                    value={
-                      clientForm.rtn
-                    }
-                    onChange={(
-                      event
-                    ) =>
-                      setClientForm(
-                        (
-                          current
-                        ) => ({
-                          ...current,
-
-                          rtn:
-                            event
-                              .target
-                              .value,
-                        })
-                      )
-                    }
-                  />
-                </div>
-
-                <div className="field">
-                  <label htmlFor="quotes-telefono">
-                    Teléfono
-                  </label>
-
-                  <input id="quotes-telefono"
-                    value={
-                      clientForm.phone
-                    }
-                    onChange={(
-                      event
-                    ) =>
-                      setClientForm(
-                        (
-                          current
-                        ) => ({
-                          ...current,
-
-                          phone:
-                            event
-                              .target
-                              .value,
-                        })
-                      )
-                    }
-                  />
-                </div>
-
-                <div className="field">
-                  <label htmlFor="quotes-correo">
-                    Correo
-                  </label>
-
-                  <input id="quotes-correo"
-                    type="email"
-                    value={
-                      clientForm.email
-                    }
-                    onChange={(
-                      event
-                    ) =>
-                      setClientForm(
-                        (
-                          current
-                        ) => ({
-                          ...current,
-
-                          email:
-                            event
-                              .target
-                              .value,
-                        })
-                      )
-                    }
-                  />
-                </div>
-
-                <div className="field full">
-                  <label htmlFor="quotes-direccion">
-                    Dirección
-                  </label>
-
-                  <input id="quotes-direccion"
-                    value={
-                      clientForm.address
-                    }
-                    onChange={(
-                      event
-                    ) =>
-                      setClientForm(
-                        (
-                          current
-                        ) => ({
-                          ...current,
-
-                          address:
-                            event
-                              .target
-                              .value,
-                        })
-                      )
-                    }
-                  />
-                </div>
-              </div>
-            </div>
-
-            <div className="modal-foot">
-              <button
-                type="button"
-                className="btn btn-primary"
-                onClick={
-                  saveNewClient
-                }
-              >
-                Guardar cliente
-              </button>
-
-              <button
-                type="button"
-                className="btn btn-secondary"
-                onClick={() =>
-                  setClientModalOpen(
-                    false
-                  )
-                }
-              >
-                Cancelar
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <ModalDeCliente
+        abierto={clientModalOpen}
+        prefijo="quotes"
+        formulario={clientForm}
+        onCambiar={setClientForm}
+        onGuardar={saveNewClient}
+        onCerrar={cerrarModalDeCliente}
+      />
 
       {/* VISTA / PDF / IMPRESIÓN */}
       <DocumentPreviewModal
