@@ -1,6 +1,13 @@
 import { useEffect, useRef, useState } from "react"
 import { Link } from "react-router-dom"
 
+import {
+  CabeceraPublica,
+  LlamadaAIngresar,
+  PiePublico,
+  LEMA,
+} from "../components/PaginaPublica"
+
 import "../styles/landing.css"
 
 /*
@@ -15,9 +22,6 @@ import "../styles/landing.css"
   en su propia fase. La estructura de secciones queda tal cual para que ese
   cambio sea de estilos y no de marcado.
 */
-
-const EMPRESA = "LUNACELL & ASOCS."
-const LEMA = "Accesorios que marcan la diferencia."
 
 const MODULOS = [
   {
@@ -133,25 +137,10 @@ function Landing() {
 
   return (
     <div className="landing" ref={rootRef}>
-      <nav className={`lp-nav ${stuck ? "is-stuck" : ""}`}>
-        <div className="wrap">
-          <Link to="/" className="lp-brand">
-            <span className="mark">📱</span>
-            <span>
-              <b>{EMPRESA}</b>
-              <span>ACCESORIOS PARA CELULARES</span>
-            </span>
-          </Link>
-
-          <div className="lp-nav-links">
-            <a href="#modulos">Módulos</a>
-            <a href="#como-funciona">Cómo funciona</a>
-            <Link to="/login" className="btn btn-primary">
-              Ingresar al sistema
-            </Link>
-          </div>
-        </div>
-      </nav>
+      <CabeceraPublica fija={stuck}>
+        <a href="#modulos">Módulos</a>
+        <a href="#como-funciona">Cómo funciona</a>
+      </CabeceraPublica>
 
       <header className="lp-hero">
         <div className="wrap">
@@ -269,34 +258,12 @@ function Landing() {
         </div>
       </section>
 
-      <section className="lp-cta">
-        <div className="wrap" data-reveal>
-          <h2>Entra a LUNACELL</h2>
-          <p>
-            Accede con tu usuario y encuentra el inventario, las ventas y los
-            clientes donde deben estar.
-          </p>
-          <div className="lp-cta-row">
-            <Link to="/login" className="btn btn-primary btn-lg">
-              INGRESAR AL SISTEMA
-            </Link>
-          </div>
-        </div>
-      </section>
+      <LlamadaAIngresar
+        titulo="Entra a LUNACELL"
+        texto="Accede con tu usuario y encuentra el inventario, las ventas y los clientes donde deben estar."
+      />
 
-      <footer className="lp-footer">
-        <div className="wrap">
-          <div className="lp-brand">
-            <span className="mark">📱</span>
-            <span>
-              <b>{EMPRESA}</b>
-            </span>
-          </div>
-          <p>
-            © {new Date().getFullYear()} {EMPRESA} · {LEMA}
-          </p>
-        </div>
-      </footer>
+      <PiePublico />
     </div>
   )
 }

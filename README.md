@@ -117,6 +117,7 @@ página pública y **no publica credenciales**: el acceso es por
 | [ADR-2](docs/adr/adr-002-permisos-por-ruta.md) | Permisos por ruta |
 | [PWA](docs/pwa.md) | Service worker y funcionamiento sin conexión |
 | [Recorrido](docs/demo.md) | Qué muestra la página pública /demo |
+| [Deuda técnica](docs/deuda-tecnica.md) | Lo que sabemos que falta arreglar, y por qué |
 
 ## Autor
 
