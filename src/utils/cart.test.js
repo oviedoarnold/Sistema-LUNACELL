@@ -210,6 +210,39 @@ describe("validateRequestedQuantity", () => {
 
     expect(resultado.isAllowed).toBe(true)
   })
+
+  /*
+    Las tres cifras viajan en el resultado para que el aviso al usuario
+    pueda explicarlas sin volver a calcularlas.
+  */
+  it("devuelve las cuentas con las que decidió", () => {
+    const resultado = validateRequestedQuantity({
+      requestedQuantity: 6,
+      availableStock: 15,
+      quantityInCart: 3,
+    })
+
+    expect(resultado).toMatchObject({
+      availableStock: 15,
+      quantityInCart: 3,
+      availableToAdd: 12,
+    })
+  })
+
+  it("también las devuelve cuando rechaza", () => {
+    const resultado = validateRequestedQuantity({
+      requestedQuantity: 5,
+      availableStock: 4,
+      quantityInCart: 4,
+    })
+
+    expect(resultado.isAllowed).toBe(false)
+    expect(resultado).toMatchObject({
+      availableStock: 4,
+      quantityInCart: 4,
+      availableToAdd: 0,
+    })
+  })
 })
 
 describe("pluralizeUnits", () => {
@@ -223,33 +256,126 @@ describe("pluralizeUnits", () => {
   })
 })
 
+/*
+  El aviso enseña las tres cifras con las que se decidió: cuánto hay, qué
+  parte ya está en el carrito y cuánto cabe todavía. Antes solo mostraba
+  la última, y el usuario no podía cuadrar ese número con las unidades que
+  la pantalla decía tener disponibles.
+*/
 describe("buildStockWarningMessage", () => {
-  it("avisa cuando no queda nada", () => {
-    const mensaje = buildStockWarningMessage(cemento.name, {
-      reason: SIN_EXISTENCIAS,
-      availableToAdd: 0,
+  const aviso = (validation) =>
+    buildStockWarningMessage("Cargador", validation)
+
+  describe("con unidades ya en el carrito", () => {
+    it("explica existencia, carrito y cuánto cabe todavía", () => {
+      const mensaje = aviso({
+        availableStock: 15,
+        quantityInCart: 3,
+        availableToAdd: 12,
+      })
+
+      expect(mensaje).toBe(
+        "Cargador tiene 15 unidades disponibles. Ya tienes 3 en el carrito, " +
+          "por lo que puedes agregar 12 unidades más."
+      )
     })
 
-    expect(mensaje).toContain("No quedan unidades")
-    expect(mensaje).toContain(cemento.name)
+    /*
+      Las cifras salen de la validación, no de constantes: con otra
+      existencia el mismo mensaje dice otra cosa.
+    */
+    it("usa las cifras que recibe y no unas fijas", () => {
+      const mensaje = aviso({
+        availableStock: 7,
+        quantityInCart: 5,
+        availableToAdd: 2,
+      })
+
+      expect(mensaje).toBe(
+        "Cargador tiene 7 unidades disponibles. Ya tienes 5 en el carrito, " +
+          "por lo que puedes agregar 2 unidades más."
+      )
+    })
+
+    it("concuerda en singular cuando solo cabe una más", () => {
+      const mensaje = aviso({
+        availableStock: 4,
+        quantityInCart: 3,
+        availableToAdd: 1,
+      })
+
+      expect(mensaje).toContain("puedes agregar 1 unidad más")
+    })
+
+    it("concuerda en singular cuando la existencia es de una", () => {
+      const mensaje = aviso({
+        availableStock: 1,
+        quantityInCart: 1,
+        availableToAdd: 0,
+      })
+
+      expect(mensaje).toContain("Cargador tiene 1 unidad disponible.")
+    })
+
+    it("lo dice claro cuando el carrito ya agotó la existencia", () => {
+      const mensaje = aviso({
+        availableStock: 4,
+        quantityInCart: 4,
+        availableToAdd: 0,
+      })
+
+      expect(mensaje).toBe(
+        "Cargador tiene 4 unidades disponibles. Ya tienes 4 en el carrito, " +
+          "así que no puedes agregar más."
+      )
+    })
   })
 
-  it("dice cuántas se pueden agregar todavía", () => {
-    const mensaje = buildStockWarningMessage(cemento.name, {
-      reason: EXCEDE_EXISTENCIAS,
-      availableToAdd: 2,
+  describe("con el carrito vacío", () => {
+    it("solo dice cuánto hay y que no puede pedirse más", () => {
+      const mensaje = aviso({
+        availableStock: 12,
+        quantityInCart: 0,
+        availableToAdd: 12,
+      })
+
+      expect(mensaje).toBe(
+        "Cargador tiene 12 unidades disponibles. " +
+          "No puedes agregar una cantidad mayor a la existencia actual."
+      )
     })
 
-    expect(mensaje).toContain("2 unidades")
+    it("no menciona el carrito", () => {
+      const mensaje = aviso({
+        availableStock: 12,
+        quantityInCart: 0,
+        availableToAdd: 12,
+      })
+
+      expect(mensaje).not.toContain("carrito")
+    })
   })
 
-  it("concuerda en singular con una sola unidad", () => {
-    const mensaje = buildStockWarningMessage(cemento.name, {
-      reason: EXCEDE_EXISTENCIAS,
-      availableToAdd: 1,
-    })
+  describe("sin existencia", () => {
+    it("no promete unidades que no hay", () => {
+      const mensaje = aviso({
+        availableStock: 0,
+        quantityInCart: 0,
+        availableToAdd: 0,
+      })
 
-    expect(mensaje).toContain("1 unidad más")
+      expect(mensaje).toBe("Cargador no tiene unidades disponibles.")
+    })
+  })
+
+  it("siempre nombra el producto", () => {
+    const mensajes = [
+      aviso({ availableStock: 0, quantityInCart: 0, availableToAdd: 0 }),
+      aviso({ availableStock: 9, quantityInCart: 0, availableToAdd: 9 }),
+      aviso({ availableStock: 9, quantityInCart: 2, availableToAdd: 7 }),
+    ]
+
+    mensajes.forEach((mensaje) => expect(mensaje).toContain("Cargador"))
   })
 })
 

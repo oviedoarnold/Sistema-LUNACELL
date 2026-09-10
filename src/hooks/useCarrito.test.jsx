@@ -49,6 +49,11 @@ const seAviso = () =>
     ([opciones]) => opciones?.title === "Stock insuficiente"
   )
 
+const textoDelAviso = () =>
+  Swal.fire.mock.calls.find(
+    ([opciones]) => opciones?.title === "Stock insuficiente"
+  )?.[0]?.text || ""
+
 beforeEach(() => {
   Swal.fire.mockClear()
 })
@@ -286,5 +291,91 @@ describe("sin existencia suministrada, la toma del catálogo", () => {
 
     expect(result.current.lineas).toHaveLength(0)
     expect(seAviso()).toBe(true)
+  })
+})
+
+/*
+  El texto que ve el usuario, armado con las cifras del momento y no con
+  constantes. Se prueba desde el hook —y no solo contra
+  buildStockWarningMessage— porque lo que interesa es que las cifras que
+  llegan al mensaje sean las del carrito real.
+*/
+describe("qué dice el aviso de existencias", () => {
+  const CARGADOR = {
+    id: "p9",
+    code: "11",
+    name: "Cargador",
+    category: "Accesorios",
+    price: 250,
+    stock: 15,
+  }
+
+  const conCargador = (opciones = {}) =>
+    renderHook(() => useCarrito({ productos: [CARGADOR], ...opciones }))
+
+  it("explica existencia, carrito y cuánto cabe todavía", () => {
+    // Arrange: 15 disponibles, 3 ya en el carrito
+    const { result } = conCargador()
+    act(() => result.current.agregar(CARGADOR, 3))
+    Swal.fire.mockClear()
+
+    // Act: pedir 13 más, que no caben
+    act(() => result.current.agregar(CARGADOR, 13))
+
+    // Assert
+    expect(textoDelAviso()).toBe(
+      "Cargador tiene 15 unidades disponibles. Ya tienes 3 en el carrito, " +
+        "por lo que puedes agregar 12 unidades más."
+    )
+  })
+
+  it("con el carrito vacío no menciona el carrito", () => {
+    const { result } = conCargador()
+
+    act(() => result.current.agregar(CARGADOR, 20))
+
+    expect(textoDelAviso()).toBe(
+      "Cargador tiene 15 unidades disponibles. " +
+        "No puedes agregar una cantidad mayor a la existencia actual."
+    )
+  })
+
+  it("al subir la cantidad desde el carrito dice cuánto queda de verdad", () => {
+    const { result } = conCargador()
+    act(() => result.current.agregar(CARGADOR, 15))
+    Swal.fire.mockClear()
+
+    act(() => result.current.cambiarCantidad("p9", 1))
+
+    expect(textoDelAviso()).toBe(
+      "Cargador tiene 15 unidades disponibles. Ya tienes 15 en el carrito, " +
+        "así que no puedes agregar más."
+    )
+  })
+
+  /*
+    Las cifras siguen a la existencia que se inyecte, que es lo que
+    permitirá que el aviso hable de la ubicación activa.
+  */
+  it("las cifras siguen a la existencia suministrada", () => {
+    const { result } = conCargador({ existenciaDe: () => 5 })
+    act(() => result.current.agregar(CARGADOR, 2))
+    Swal.fire.mockClear()
+
+    act(() => result.current.agregar(CARGADOR, 9))
+
+    expect(textoDelAviso()).toBe(
+      "Cargador tiene 5 unidades disponibles. Ya tienes 2 en el carrito, " +
+        "por lo que puedes agregar 3 unidades más."
+    )
+  })
+
+  it("un producto sin existencia no promete unidades", () => {
+    const agotado = { id: "p8", name: "Funda", price: 100, stock: 0 }
+    const { result } = renderHook(() => useCarrito({ productos: [agotado] }))
+
+    act(() => result.current.agregar(agotado, 1))
+
+    expect(textoDelAviso()).toBe("Funda no tiene unidades disponibles.")
   })
 })

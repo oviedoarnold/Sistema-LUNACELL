@@ -104,7 +104,9 @@ export function useCarrito({
     if (!hasEnoughStock(siguiente, existencia)) {
       avisarDeExistencias(producto, {
         reason: EXCEDE_EXISTENCIAS,
-        availableToAdd: existencia,
+        availableStock: existencia,
+        quantityInCart: linea.quantity,
+        availableToAdd: getAvailableToAdd(existencia, linea.quantity),
       })
 
       return
