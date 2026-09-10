@@ -15,11 +15,26 @@ export function getQuantityInCart(cart, productId) {
   return line ? Number(line.quantity) || 0 : 0
 }
 
-export function getStockAvailableToAdd(product, cart) {
-  const stock = Number(product?.stock || 0)
-  const alreadyInCart = getQuantityInCart(cart, product?.id)
+/*
+  Las reglas de existencias trabajan con números, no con productos.
 
-  return Math.max(0, stock - alreadyInCart)
+  Antes recibían el producto entero y leían `product.stock` por dentro, y
+  eso ataba la regla a que la existencia fuera un solo número global
+  colgado del catálogo. Ahora la existencia llega como dato: de dónde sale
+  lo decide quien llama, que es lo que permitirá consultarla por ubicación
+  sin volver a tocar este archivo.
+*/
+export function getAvailableToAdd(availableStock, quantityInCart) {
+  return Math.max(0, Number(availableStock || 0) - Number(quantityInCart || 0))
+}
+
+/*
+  Alcanza para servir esta cantidad. Es la misma pregunta que se hacen el
+  paso de cantidad del carrito, la validación previa a facturar y el aviso
+  de faltantes al convertir una cotización.
+*/
+export function hasEnoughStock(requestedQuantity, availableStock) {
+  return Number(requestedQuantity || 0) <= Number(availableStock || 0)
 }
 
 export function normalizeRequestedQuantity(value) {
@@ -28,34 +43,86 @@ export function normalizeRequestedQuantity(value) {
   return Math.max(1, Number.isFinite(parsed) ? parsed : 1)
 }
 
-export function validateQuantityAgainstStock(product, cart, requestedQuantity) {
-  const availableToAdd = getStockAvailableToAdd(product, cart)
+/*
+  El resultado lleva los tres números con los que se decidió —cuánto hay,
+  cuánto está ya en el carrito y cuánto cabe todavía— para que quien avise
+  al usuario pueda explicárselos sin volver a calcularlos.
+*/
+export function validateRequestedQuantity({
+  requestedQuantity,
+  availableStock,
+  quantityInCart = 0,
+}) {
+  const stock = Number(availableStock || 0)
+  const inCart = Number(quantityInCart || 0)
+  const availableToAdd = getAvailableToAdd(stock, inCart)
+
+  const cuentas = {
+    availableStock: stock,
+    quantityInCart: inCart,
+    availableToAdd,
+  }
 
   if (availableToAdd <= 0) {
-    return { isAllowed: false, reason: SIN_EXISTENCIAS, availableToAdd }
+    return { isAllowed: false, reason: SIN_EXISTENCIAS, ...cuentas }
   }
 
   if (requestedQuantity > availableToAdd) {
-    return { isAllowed: false, reason: EXCEDE_EXISTENCIAS, availableToAdd }
+    return { isAllowed: false, reason: EXCEDE_EXISTENCIAS, ...cuentas }
   }
 
-  return { isAllowed: true, reason: null, availableToAdd }
+  return { isAllowed: true, reason: null, ...cuentas }
 }
 
 export function pluralizeUnits(quantity) {
   return Number(quantity) === 1 ? "unidad" : "unidades"
 }
 
+// "1 unidad disponible" / "15 unidades disponibles": concuerda el adjetivo.
+function describeAvailableStock(quantity) {
+  return Number(quantity) === 1
+    ? "1 unidad disponible"
+    : `${quantity} unidades disponibles`
+}
+
+/*
+  El aviso cuando no alcanza la existencia.
+
+  Decía "Solo puedes agregar 12 unidades más", y ese 12 salía de restar el
+  carrito a la existencia sin decirlo: el usuario veía un tope que no
+  coincidía con las unidades que la pantalla mostraba como disponibles y no
+  tenía forma de saber de dónde salía la diferencia. Ahora el mensaje
+  enseña las tres cifras con las que se decidió.
+
+  No decide nada: eso ya lo resolvió validateRequestedQuantity. Aquí solo
+  se redacta lo que aquellos números significan.
+*/
 export function buildStockWarningMessage(productName, validation) {
-  if (validation.reason === SIN_EXISTENCIAS) {
-    return `No quedan unidades disponibles de ${productName}.`
+  const availableStock = Number(validation?.availableStock || 0)
+  const quantityInCart = Number(validation?.quantityInCart || 0)
+  const availableToAdd = Number(validation?.availableToAdd || 0)
+
+  if (availableStock <= 0) {
+    return `${productName} no tiene unidades disponibles.`
   }
 
-  const { availableToAdd } = validation
+  const existencia = `${productName} tiene ${describeAvailableStock(
+    availableStock
+  )}.`
 
-  return `Solo puedes agregar ${availableToAdd} ${pluralizeUnits(
+  if (quantityInCart <= 0) {
+    return `${existencia} No puedes agregar una cantidad mayor a la existencia actual.`
+  }
+
+  const yaTienes = `Ya tienes ${quantityInCart} en el carrito`
+
+  if (availableToAdd <= 0) {
+    return `${existencia} ${yaTienes}, así que no puedes agregar más.`
+  }
+
+  return `${existencia} ${yaTienes}, por lo que puedes agregar ${availableToAdd} ${pluralizeUnits(
     availableToAdd
-  )} más de ${productName}.`
+  )} más.`
 }
 
 export function createCartLineFromProduct(product, quantity) {
