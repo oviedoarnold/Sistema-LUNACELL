@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest"
-import { screen, fireEvent, within } from "@testing-library/react"
+import { screen, fireEvent, waitFor, within } from "@testing-library/react"
 import { MemoryRouter } from "react-router-dom"
 
 import { AuthProvider } from "../context/AuthContext"
@@ -70,6 +70,26 @@ const buscar = (texto) =>
 const abrirClienteNuevo = () => abrirAltaDeCliente(/nombre/i)
 
 const quitar = quitarDelCarrito
+
+const llenarAltaDeCliente = ({
+  nombre = "Taller Nuevo",
+  rtn = "0801199912345",
+  telefono = "9999-1111",
+  direccion = "San Pedro Sula",
+} = {}) => {
+  const modal = modalDeCliente()
+  const escribir = (etiqueta, valor) =>
+    fireEvent.change(modal.getByLabelText(etiqueta), { target: { value: valor } })
+
+  escribir(/^nombre$/i, nombre)
+  escribir(/^rtn/i, rtn)
+  escribir(/^teléfono$/i, telefono)
+  escribir(/^dirección$/i, direccion)
+}
+
+const guardarCliente = () =>
+  fireEvent.click(screen.getByRole("button", { name: /guardar cliente/i }))
+
 
 describe("POS: catálogo", () => {
   it("lista los productos disponibles", async () => {
@@ -207,9 +227,89 @@ describe("POS: alta de cliente", () => {
     const { falso } = await renderPOS()
 
     abrirClienteNuevo()
-    fireEvent.click(screen.getByRole("button", { name: /guardar cliente/i }))
+    guardarCliente()
 
     expect(falso.datos.clientes).toHaveLength(1)
+  })
+
+  /*
+    addClient es asíncrona: devuelve el cliente ya creado, con el
+    identificador que le asignó la base. Antes no se esperaba y lo que
+    quedaba seleccionado era la promesa, así que el RTN del comprador
+    —que cuelga del cliente elegido— se quedaba vacío.
+  */
+  it("deja seleccionado el cliente que devolvió la base", async () => {
+    await renderPOS()
+
+    abrirClienteNuevo()
+    llenarAltaDeCliente()
+    guardarCliente()
+
+    await waitFor(() =>
+      expect(screen.getByPlaceholderText(/nombre/i)).toHaveValue("Taller Nuevo")
+    )
+  })
+
+  it("hereda el RTN del cliente recién creado", async () => {
+    await renderPOS()
+
+    abrirClienteNuevo()
+    llenarAltaDeCliente()
+    guardarCliente()
+
+    await waitFor(() =>
+      expect(screen.getByLabelText(/rtn del comprador/i)).toHaveValue(
+        "0801199912345"
+      )
+    )
+  })
+
+  it("guarda el cliente una sola vez", async () => {
+    const { falso } = await renderPOS()
+
+    abrirClienteNuevo()
+    llenarAltaDeCliente()
+    guardarCliente()
+
+    await waitFor(() => expect(falso.datos.clientes).toHaveLength(2))
+  })
+})
+
+describe("POS: venta a crédito con un cliente recién creado", () => {
+  /*
+    El caso que el defecto rompía de verdad. Con la promesa seleccionada,
+    clientId salía undefined, viajaba como null y la restricción
+    credito_exige_cliente rechazaba la venta ya en la base.
+  */
+  it("emite la factura con el identificador real del cliente", async () => {
+    // Arrange
+    const { falso } = await renderPOS()
+
+    fireEvent.click(screen.getByRole("button", { name: /crédito/i }))
+
+    abrirClienteNuevo()
+    llenarAltaDeCliente({ nombre: "Constructora Nueva" })
+    guardarCliente()
+
+    await waitFor(() => expect(falso.datos.clientes).toHaveLength(2))
+
+    const creado = falso.datos.clientes.find(
+      (c) => c.nombre === "Constructora Nueva"
+    )
+
+    agregar("Martillo de uña")
+
+    // Act
+    fireEvent.click(screen.getByRole("button", { name: /generar factura/i }))
+
+    // Assert
+    await waitFor(() => expect(falso.datos.ventas).toHaveLength(1))
+
+    const venta = falso.datos.ventas[0]
+
+    expect(venta.forma_pago).toBe("credito")
+    expect(venta.cliente_id).toBe(creado.id)
+    expect(venta.cliente_id).toBeTruthy()
   })
 })
 

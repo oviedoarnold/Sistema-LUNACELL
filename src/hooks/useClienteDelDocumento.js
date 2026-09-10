@@ -34,6 +34,12 @@ export function useClienteDelDocumento({
   const [modalAbierto, setModalAbierto] = useState(false)
   const [formulario, setFormulario] = useState(FORMULARIO_DE_CLIENTE_VACIO)
 
+  /*
+    Marca el alta en curso. Sin esto el botón admite un segundo clic
+    mientras la base todavía responde, y el cliente se da de alta dos veces.
+  */
+  const [guardando, setGuardando] = useState(false)
+
   const seleccionar = (cliente) => {
     setSeleccionado(cliente)
     setBusqueda(cliente.name)
@@ -71,7 +77,24 @@ export function useClienteDelDocumento({
 
   const cerrarAlta = () => setModalAbierto(false)
 
-  const guardarNuevo = () => {
+  /*
+    addClient consulta la base y devuelve el cliente ya creado, con el
+    identificador que le asignó PostgreSQL. Hay que esperarlo.
+
+    Antes no se esperaba, y lo que quedaba seleccionado era la promesa: un
+    objeto que pasa cualquier comprobación que solo mire si hay algo, pero
+    cuyo .id es undefined. Al facturar al crédito el identificador viajaba
+    como null y la venta la rechazaba la restricción credito_exige_cliente
+    ya en la base, con el cajero habiendo capturado todo. El try/catch
+    tampoco servía: un rechazo asíncrono no se atrapa alrededor de una
+    llamada sin await.
+
+    El modal se cierra y el éxito se anuncia solo después de que la base
+    confirmó. Si falla, lo capturado sigue ahí para reintentar.
+  */
+  const guardarNuevo = async () => {
+    if (guardando) return
+
     const name = formulario.name.trim()
     const phone = formulario.phone.trim()
     const address = formulario.address.trim()
@@ -86,8 +109,10 @@ export function useClienteDelDocumento({
       return
     }
 
+    setGuardando(true)
+
     try {
-      const nuevo = addClient({
+      const nuevo = await addClient({
         ...formulario,
         name,
         phone,
@@ -109,6 +134,8 @@ export function useClienteDelDocumento({
         title: "No se pudo guardar el cliente",
         text: error.message,
       })
+    } finally {
+      setGuardando(false)
     }
   }
 
@@ -121,6 +148,7 @@ export function useClienteDelDocumento({
     formulario,
     setFormulario,
     modalAbierto,
+    guardando,
 
     seleccionar,
     escribirBusqueda,

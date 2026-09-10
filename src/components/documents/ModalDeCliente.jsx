@@ -25,6 +25,7 @@ function ModalDeCliente({
   onCambiar,
   onGuardar,
   onCerrar,
+  guardando = false,
 }) {
   if (!abierto) {
     return null
@@ -71,8 +72,13 @@ function ModalDeCliente({
         </div>
 
         <div className="modal-foot">
-          <button type="button" className="btn btn-primary" onClick={onGuardar}>
-            Guardar cliente
+          <button
+            type="button"
+            className="btn btn-primary"
+            onClick={onGuardar}
+            disabled={guardando}
+          >
+            {guardando ? "Guardando…" : "Guardar cliente"}
           </button>
 
           <button
