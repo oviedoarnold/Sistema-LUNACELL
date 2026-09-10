@@ -1,4 +1,5 @@
-import { calculateCartSubtotal } from "./cart"
+import { calculateCartSubtotal, hasEnoughStock } from "./cart"
+import { existenciaEnCatalogo } from "./existencias"
 import { crearId } from "./ids"
 
 export const VIGENTE = "vigente"
@@ -127,6 +128,15 @@ export function buildSaleDraftFromQuote(quote) {
   }
 }
 
+/*
+  Qué renglones de la cotización no se podrían servir hoy. Es informativo:
+  una cotización es una oferta y no reserva inventario, así que el usuario
+  puede pasar al punto de venta de todos modos.
+
+  La existencia se pregunta al catálogo en vez de leerla del producto
+  porque la ubicación desde la que se surte se decide al convertir la
+  cotización en venta, no al armarla.
+*/
 export function findUnavailableItems(cartLines, products) {
   return (cartLines || []).reduce((unavailable, line) => {
     const product = (products || []).find(
@@ -137,14 +147,16 @@ export function findUnavailableItems(cartLines, products) {
       return [...unavailable, { name: line.name, reason: "no-existe" }]
     }
 
-    if (Number(product.stock || 0) < line.quantity) {
+    const disponible = existenciaEnCatalogo(product)
+
+    if (!hasEnoughStock(line.quantity, disponible)) {
       return [
         ...unavailable,
         {
           name: line.name,
           reason: "stock-insuficiente",
           requested: line.quantity,
-          available: Number(product.stock || 0),
+          available: disponible,
         },
       ]
     }

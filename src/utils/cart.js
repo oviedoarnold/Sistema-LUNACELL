@@ -15,11 +15,26 @@ export function getQuantityInCart(cart, productId) {
   return line ? Number(line.quantity) || 0 : 0
 }
 
-export function getStockAvailableToAdd(product, cart) {
-  const stock = Number(product?.stock || 0)
-  const alreadyInCart = getQuantityInCart(cart, product?.id)
+/*
+  Las reglas de existencias trabajan con números, no con productos.
 
-  return Math.max(0, stock - alreadyInCart)
+  Antes recibían el producto entero y leían `product.stock` por dentro, y
+  eso ataba la regla a que la existencia fuera un solo número global
+  colgado del catálogo. Ahora la existencia llega como dato: de dónde sale
+  lo decide quien llama, que es lo que permitirá consultarla por ubicación
+  sin volver a tocar este archivo.
+*/
+export function getAvailableToAdd(availableStock, quantityInCart) {
+  return Math.max(0, Number(availableStock || 0) - Number(quantityInCart || 0))
+}
+
+/*
+  Alcanza para servir esta cantidad. Es la misma pregunta que se hacen el
+  paso de cantidad del carrito, la validación previa a facturar y el aviso
+  de faltantes al convertir una cotización.
+*/
+export function hasEnoughStock(requestedQuantity, availableStock) {
+  return Number(requestedQuantity || 0) <= Number(availableStock || 0)
 }
 
 export function normalizeRequestedQuantity(value) {
@@ -28,8 +43,12 @@ export function normalizeRequestedQuantity(value) {
   return Math.max(1, Number.isFinite(parsed) ? parsed : 1)
 }
 
-export function validateQuantityAgainstStock(product, cart, requestedQuantity) {
-  const availableToAdd = getStockAvailableToAdd(product, cart)
+export function validateRequestedQuantity({
+  requestedQuantity,
+  availableStock,
+  quantityInCart = 0,
+}) {
+  const availableToAdd = getAvailableToAdd(availableStock, quantityInCart)
 
   if (availableToAdd <= 0) {
     return { isAllowed: false, reason: SIN_EXISTENCIAS, availableToAdd }

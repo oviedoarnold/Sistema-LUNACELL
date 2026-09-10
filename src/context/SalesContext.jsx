@@ -20,6 +20,9 @@ import {
   applyPayments,
 } from "../utils/salesUtils"
 
+import { hasEnoughStock } from "../utils/cart"
+import { existenciaEnCatalogo } from "../utils/existencias"
+
 const ISV_POR_OMISION = 15
 
 function SalesProvider({ children }) {
@@ -115,9 +118,11 @@ function SalesProvider({ children }) {
           throw new Error("Uno de los productos ya no existe en el inventario.")
         }
 
-        if (cantidad > Number(producto.stock || 0)) {
+        const existencia = existenciaEnCatalogo(producto)
+
+        if (!hasEnoughStock(cantidad, existencia)) {
           throw new Error(
-            `Stock insuficiente de ${producto.name}. Solo hay ${producto.stock} unidades disponibles.`
+            `Stock insuficiente de ${producto.name}. Solo hay ${existencia} unidades disponibles.`
           )
         }
       })

@@ -22,7 +22,10 @@ import {
 import {
   calculateCartTotals,
   filterProductsBySearchText,
+  hasEnoughStock,
 } from "../utils/cart"
+
+import { existenciaEnCatalogo } from "../utils/existencias"
 
 const ISV_POR_OMISION = 15
 
@@ -192,15 +195,22 @@ function POS() {
         return false
       }
 
+      const existencia =
+        existenciaEnCatalogo(
+          product
+        )
+
       if (
-        item.quantity >
-        Number(product.stock || 0)
+        !hasEnoughStock(
+          item.quantity,
+          existencia
+        )
       ) {
         Swal.fire({
           icon: "warning",
           title:
             "Stock insuficiente",
-          text: `${item.name} solo tiene ${product.stock} unidades disponibles.`,
+          text: `${item.name} solo tiene ${existencia} unidades disponibles.`,
         })
 
         return false

@@ -5,9 +5,10 @@ import {
   EXCEDE_EXISTENCIAS,
   findCartLine,
   getQuantityInCart,
-  getStockAvailableToAdd,
+  getAvailableToAdd,
+  hasEnoughStock,
   normalizeRequestedQuantity,
-  validateQuantityAgainstStock,
+  validateRequestedQuantity,
   pluralizeUnits,
   buildStockWarningMessage,
   createCartLineFromProduct,
@@ -70,23 +71,49 @@ describe("getQuantityInCart", () => {
   })
 })
 
-describe("getStockAvailableToAdd", () => {
+/*
+  La existencia llega como número. Estas pruebas no construyen un producto
+  a propósito: si alguna volviera a necesitar uno, sería la señal de que la
+  regla se ató otra vez al catálogo.
+*/
+describe("getAvailableToAdd", () => {
   it("descuenta lo que ya está en el carrito", () => {
-    const carrito = carritoCon(linea(martillo, 4))
-    expect(getStockAvailableToAdd(martillo, carrito)).toBe(6)
+    expect(getAvailableToAdd(10, 4)).toBe(6)
   })
 
-  it("devuelve el stock completo con el carrito vacío", () => {
-    expect(getStockAvailableToAdd(martillo, [])).toBe(10)
+  it("devuelve la existencia completa con el carrito vacío", () => {
+    expect(getAvailableToAdd(10, 0)).toBe(10)
   })
 
-  it("nunca devuelve negativo aunque el carrito exceda el stock", () => {
-    const carrito = carritoCon(linea(martillo, 99))
-    expect(getStockAvailableToAdd(martillo, carrito)).toBe(0)
+  it("nunca devuelve negativo aunque el carrito exceda la existencia", () => {
+    expect(getAvailableToAdd(10, 99)).toBe(0)
   })
 
-  it("trata un producto sin stock como cero", () => {
-    expect(getStockAvailableToAdd({ id: "x" }, [])).toBe(0)
+  it("trata una existencia ausente como cero", () => {
+    expect(getAvailableToAdd(undefined, 0)).toBe(0)
+    expect(getAvailableToAdd(null, 3)).toBe(0)
+  })
+
+  it("acepta la cantidad en carrito ausente como cero", () => {
+    expect(getAvailableToAdd(10, undefined)).toBe(10)
+  })
+})
+
+describe("hasEnoughStock", () => {
+  it("alcanza cuando se pide menos de lo que hay", () => {
+    expect(hasEnoughStock(3, 10)).toBe(true)
+  })
+
+  it("alcanza cuando se pide exactamente lo que hay", () => {
+    expect(hasEnoughStock(10, 10)).toBe(true)
+  })
+
+  it("no alcanza cuando se pide más de lo que hay", () => {
+    expect(hasEnoughStock(11, 10)).toBe(false)
+  })
+
+  it("no alcanza contra una existencia ausente", () => {
+    expect(hasEnoughStock(1, undefined)).toBe(false)
   })
 })
 
@@ -110,33 +137,78 @@ describe("normalizeRequestedQuantity", () => {
   })
 })
 
-describe("validateQuantityAgainstStock", () => {
-  it("permite una cantidad dentro del stock", () => {
-    const resultado = validateQuantityAgainstStock(martillo, [], 5)
+describe("validateRequestedQuantity", () => {
+  it("permite una cantidad dentro de la existencia", () => {
+    const resultado = validateRequestedQuantity({
+      requestedQuantity: 5,
+      availableStock: 10,
+    })
 
     expect(resultado.isAllowed).toBe(true)
     expect(resultado.availableToAdd).toBe(10)
   })
 
-  it("permite tomar exactamente todo el stock", () => {
-    expect(validateQuantityAgainstStock(cemento, [], 4).isAllowed).toBe(true)
+  it("permite tomar exactamente toda la existencia", () => {
+    const resultado = validateRequestedQuantity({
+      requestedQuantity: 4,
+      availableStock: 4,
+    })
+
+    expect(resultado.isAllowed).toBe(true)
   })
 
   it("rechaza cuando no queda nada disponible", () => {
-    const carrito = carritoCon(linea(cemento, 4))
-    const resultado = validateQuantityAgainstStock(cemento, carrito, 1)
+    const resultado = validateRequestedQuantity({
+      requestedQuantity: 1,
+      availableStock: 4,
+      quantityInCart: 4,
+    })
 
     expect(resultado.isAllowed).toBe(false)
     expect(resultado.reason).toBe(SIN_EXISTENCIAS)
   })
 
   it("rechaza cuando se pide más de lo que queda", () => {
-    const carrito = carritoCon(linea(cemento, 3))
-    const resultado = validateQuantityAgainstStock(cemento, carrito, 2)
+    const resultado = validateRequestedQuantity({
+      requestedQuantity: 2,
+      availableStock: 4,
+      quantityInCart: 3,
+    })
 
     expect(resultado.isAllowed).toBe(false)
     expect(resultado.reason).toBe(EXCEDE_EXISTENCIAS)
     expect(resultado.availableToAdd).toBe(1)
+  })
+
+  /*
+    La existencia es un dato de entrada: la misma cantidad se permite o se
+    rechaza según lo que se le suministre, sin que nada del producto
+    intervenga. Es lo que permitirá pasarle la existencia de una ubicación
+    en lugar de la del catálogo.
+  */
+  it("decide según la existencia que se le entrega, no según el producto", () => {
+    const conDiez = validateRequestedQuantity({
+      requestedQuantity: 6,
+      availableStock: 10,
+    })
+
+    const conTres = validateRequestedQuantity({
+      requestedQuantity: 6,
+      availableStock: 3,
+    })
+
+    expect(conDiez.isAllowed).toBe(true)
+    expect(conTres.isAllowed).toBe(false)
+    expect(conTres.availableToAdd).toBe(3)
+  })
+
+  it("da por vacío el carrito si no se indica cuánto lleva", () => {
+    const resultado = validateRequestedQuantity({
+      requestedQuantity: 10,
+      availableStock: 10,
+    })
+
+    expect(resultado.isAllowed).toBe(true)
   })
 })
 
