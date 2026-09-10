@@ -116,6 +116,7 @@ function Quotes() {
     formulario: clientForm,
     setFormulario: setClientForm,
     modalAbierto: clientModalOpen,
+    guardando: guardandoCliente,
     seleccionar: handleSelectClient,
     escribirBusqueda: handleClientChange,
     soltar: clearSelectedClient,
@@ -1225,6 +1226,7 @@ function Quotes() {
         onCambiar={setClientForm}
         onGuardar={saveNewClient}
         onCerrar={cerrarModalDeCliente}
+        guardando={guardandoCliente}
       />
 
       {/* VISTA / PDF / IMPRESIÓN */}

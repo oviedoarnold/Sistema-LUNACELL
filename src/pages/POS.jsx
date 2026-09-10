@@ -87,6 +87,7 @@ function POS() {
     formulario: clientForm,
     setFormulario: setClientForm,
     modalAbierto: clientModalOpen,
+    guardando: guardandoCliente,
     seleccionar: handleSelectClient,
     escribirBusqueda: handleClientSearchChange,
     soltar: handleClearClient,
@@ -1002,6 +1003,7 @@ function POS() {
         onCambiar={setClientForm}
         onGuardar={saveNewClient}
         onCerrar={cerrarModalDeCliente}
+        guardando={guardandoCliente}
       />
 
       <DocumentPreviewModal
