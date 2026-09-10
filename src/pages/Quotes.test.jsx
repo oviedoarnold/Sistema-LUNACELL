@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest"
-import { screen, fireEvent, within } from "@testing-library/react"
+import { screen, fireEvent, waitFor, within } from "@testing-library/react"
 import { MemoryRouter } from "react-router-dom"
 
 import { AuthProvider } from "../context/AuthContext"
@@ -83,6 +83,26 @@ const filaDe = (numero) =>
 const abrirClienteNuevo = () => abrirAltaDeCliente(/nombre del cliente/i)
 
 const quitar = quitarDelCarrito
+
+const llenarAltaDeCliente = ({
+  nombre = "Taller Nuevo",
+  rtn = "0801199912345",
+  telefono = "9999-1111",
+  direccion = "San Pedro Sula",
+} = {}) => {
+  const modal = modalDeCliente()
+  const escribir = (etiqueta, valor) =>
+    fireEvent.change(modal.getByLabelText(etiqueta), { target: { value: valor } })
+
+  escribir(/^nombre$/i, nombre)
+  escribir(/^rtn/i, rtn)
+  escribir(/^teléfono$/i, telefono)
+  escribir(/^dirección$/i, direccion)
+}
+
+const guardarCliente = () =>
+  fireEvent.click(screen.getByRole("button", { name: /guardar cliente/i }))
+
 
 describe("Quotes: catálogo", () => {
   it("lista los productos para cotizar", async () => {
@@ -218,9 +238,37 @@ describe("Quotes: alta de cliente", () => {
     const { falso } = await renderQuotes()
 
     abrirClienteNuevo()
-    fireEvent.click(screen.getByRole("button", { name: /guardar cliente/i }))
+    guardarCliente()
 
     expect(falso.datos.clientes ?? []).toHaveLength(0)
+  })
+
+  /*
+    Igual que en el punto de venta: hay que esperar a la base antes de
+    seleccionar, o lo seleccionado es una promesa.
+  */
+  it("deja seleccionado el cliente que devolvió la base", async () => {
+    await renderQuotes()
+
+    abrirClienteNuevo()
+    llenarAltaDeCliente()
+    guardarCliente()
+
+    await waitFor(() =>
+      expect(
+        screen.getByPlaceholderText(/nombre del cliente/i)
+      ).toHaveValue("Taller Nuevo")
+    )
+  })
+
+  it("guarda el cliente una sola vez", async () => {
+    const { falso } = await renderQuotes()
+
+    abrirClienteNuevo()
+    llenarAltaDeCliente()
+    guardarCliente()
+
+    await waitFor(() => expect(falso.datos.clientes).toHaveLength(1))
   })
 })
 
