@@ -223,12 +223,13 @@ function Quotes() {
       taxRate,
 
       items: cart.map(
+        // Una línea de carrito lleva `id`, nunca `productId`.
         (item) => ({
           productId:
-            item.productId,
+            item.id,
 
           id:
-            item.productId,
+            item.id,
 
           code:
             item.code || "",
