@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from "vitest"
 import { screen, fireEvent, waitFor, within } from "@testing-library/react"
 import { MemoryRouter } from "react-router-dom"
+import Swal from "sweetalert2"
 
 import { AuthProvider } from "../context/AuthContext"
 import ProductProvider from "../context/ProductContext"
@@ -33,13 +34,17 @@ const CLIENTES = [
   { id: "c1", name: "Ferremax", rtn: "0801199912345", phone: "9999-0000", address: "SPS", email: "" },
 ]
 
-function renderPOS() {
+function renderPOS({ saleDraft = null } = {}) {
+  const entrada = saleDraft
+    ? [{ pathname: "/pos", state: { saleDraft } }]
+    : ["/pos"]
+
   return renderizarPantalla(
     <AuthProvider>
       <ProductProvider>
         <ClientsProvider>
           <SalesProvider>
-            <MemoryRouter initialEntries={["/pos"]}>
+            <MemoryRouter initialEntries={entrada}>
               <POS />
             </MemoryRouter>
           </SalesProvider>
@@ -49,6 +54,30 @@ function renderPOS() {
     { productos: PRODUCTOS, clientes: CLIENTES, esperar: ["ventas"] }
   )
 }
+
+/*
+  Un borrador llega desde una cotización ya armada y entra al carrito sin
+  pasar por el catálogo, así que sus cantidades pueden no corresponderse
+  con lo que hay hoy. Es la única forma real de llegar a la validación
+  previa a facturar con el carrito ya excedido.
+*/
+const borradorDeCotizacion = (cantidad) => ({
+  quoteId: "q1",
+  quoteNumber: "COT-00001",
+  clientId: null,
+  clientName: "",
+  rtn: "",
+  cart: [
+    {
+      id: "p2",
+      code: "C-001",
+      name: "Cemento gris",
+      category: "Construcción",
+      price: 250,
+      quantity: cantidad,
+    },
+  ],
+})
 
 const agregar = (nombre) => {
   const fila = screen
@@ -345,5 +374,57 @@ describe("POS: cliente", () => {
   it("ofrece capturar el RTN del comprador", async () => {
     await renderPOS()
     expect(screen.getByText(/RTN del comprador/i)).toBeInTheDocument()
+  })
+})
+
+/*
+  La última comprobación de existencias antes de emitir. Es distinta de la
+  del carrito: aquí las cantidades ya están puestas y lo que se revisa es
+  si siguen siendo servibles contra el catálogo actual.
+*/
+describe("POS: validación previa a facturar", () => {
+  const verVistaPrevia = () =>
+    fireEvent.click(screen.getByRole("button", { name: /vista previa/i }))
+
+  const avisoDeExistencias = () =>
+    Swal.fire.mock.calls.find(
+      ([opciones]) => opciones?.title === "Stock insuficiente"
+    )
+
+  it("no deja continuar si el carrito pide más de lo que hay", async () => {
+    // Arrange: la cotización pedía 5 y del cemento solo quedan 2
+    await renderPOS({ saleDraft: borradorDeCotizacion(5) })
+    Swal.fire.mockClear()
+
+    // Act
+    verVistaPrevia()
+
+    // Assert
+    await waitFor(() => expect(avisoDeExistencias()).toBeTruthy())
+    expect(
+      screen.queryByText(/vista previa de factura/i)
+    ).not.toBeInTheDocument()
+  })
+
+  it("dice cuántas unidades quedan de verdad", async () => {
+    await renderPOS({ saleDraft: borradorDeCotizacion(5) })
+    Swal.fire.mockClear()
+
+    verVistaPrevia()
+
+    await waitFor(() => expect(avisoDeExistencias()).toBeTruthy())
+    expect(avisoDeExistencias()[0].text).toContain("solo tiene 2 unidades")
+  })
+
+  it("deja continuar cuando la existencia alcanza", async () => {
+    await renderPOS({ saleDraft: borradorDeCotizacion(2) })
+    Swal.fire.mockClear()
+
+    verVistaPrevia()
+
+    await waitFor(() =>
+      expect(screen.getByText(/vista previa de factura/i)).toBeInTheDocument()
+    )
+    expect(avisoDeExistencias()).toBeUndefined()
   })
 })
