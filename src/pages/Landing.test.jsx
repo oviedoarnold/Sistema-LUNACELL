@@ -19,6 +19,21 @@ const renderLanding = () =>
   )
 
 describe("Landing · identidad", () => {
+  /*
+    El logo oficial sustituyo al emoji provisional. Se comprueba por su
+    texto alternativo, que es lo que oye quien no ve la imagen.
+  */
+  it("muestra el logo oficial en la cabecera y en el pie", () => {
+    renderLanding()
+
+    const logos = screen.getAllByAltText("LunaCell & Asociados")
+
+    expect(logos.length).toBe(2)
+    logos.forEach((logo) =>
+      expect(logo.getAttribute("src")).toContain("/brand/")
+    )
+  })
+
   it("se presenta como LUNACELL & ASOCS.", () => {
     renderLanding()
 

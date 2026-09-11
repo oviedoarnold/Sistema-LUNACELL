@@ -13,6 +13,11 @@ a{color:inherit;} ::selection{background:var(--orange-light);}
 :focus-visible{outline:3px solid var(--focus-ring);outline-offset:2px;}
 .hidden{display:none!important;}
 /* ── LOGIN ── */
+/* El logo se dimensiona por alto y nunca se estira: el ancho lo decide su
+   propia proporcion. */
+.logo-lunacell{display:block;max-width:100%;height:auto;object-fit:contain;}
+.login-card .logo-login{height:98px;width:auto;margin:0 auto 14px;}
+@media(max-width:400px){.login-card .logo-login{height:80px;}}
 #login-screen{position:fixed;inset:0;z-index:300;background:var(--charcoal);background-image:radial-gradient(circle,rgba(255,255,255,.05) 1.6px,transparent 1.7px);background-size:18px 18px;display:flex;align-items:center;justify-content:center;padding:20px;}
 .login-card{background:var(--paper);border-radius:var(--radius-lg);box-shadow:var(--shadow-lg);width:100%;max-width:380px;padding:34px 28px 28px;text-align:center;animation:modalIn .25s cubic-bezier(.2,.8,.3,1);} 
 .login-card h2{font-size:23px;margin-bottom:4px;} .login-card p.sub{color:var(--steel);font-size:14px;margin:0 0 22px;}

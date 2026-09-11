@@ -1,5 +1,7 @@
 import { Link } from "react-router-dom"
 
+import LogoLunacell from "./LogoLunacell"
+
 /*
   Marco compartido por las páginas públicas: la portada y el recorrido.
 
@@ -26,7 +28,7 @@ export function CabeceraPublica({ fija = false, children = null }) {
     <nav className={fija ? "lp-nav is-stuck" : "lp-nav"}>
       <div className="wrap">
         <Link to="/" className="lp-brand">
-          <span className="mark">📱</span>
+          <LogoLunacell variante="simbolo" className="lp-mark" />
           <span>
             <b>{EMPRESA}</b>
             <span>{BAJADA}</span>
@@ -49,7 +51,7 @@ export function PiePublico() {
     <footer className="lp-footer">
       <div className="wrap">
         <div className="lp-brand">
-          <span className="mark">📱</span>
+          <LogoLunacell variante="simbolo" className="lp-mark" />
           <span>
             <b>{EMPRESA}</b>
           </span>
