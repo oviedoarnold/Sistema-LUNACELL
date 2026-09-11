@@ -248,85 +248,87 @@ describe("el ajuste manual registra únicamente la diferencia", () => {
 describe("cuando falla una parte de la venta", () => {
   const errorDeBase = { message: "sin permiso", code: "42501" }
 
-  describe("falla el detalle de la factura", () => {
-    const montarConFalla = () =>
-      montar({ fallarEn: { detalle_venta: errorDeBase } })
+  /*
+    Los dos pasos que pueden fallar despues de insertar la cabecera —el
+    detalle y la descarga— se deshacen igual: propagan el fallo, borran la
+    cabecera y dejan la existencia como estaba. Ese contrato compartido se
+    describe una sola vez, parametrizado por que se rompe y con que mensaje.
 
-    it("propaga el fallo en lugar de devolver una factura", async () => {
-      montarConFalla()
+    `casosPropios` recibe el montaje para lo que cada paso tiene de suyo,
+    que es lo unico que los distingue.
+  */
+  const describeVentaQueSeDeshace = (
+    nombre,
+    { fallarEn, mensaje },
+    casosPropios = () => {}
+  ) =>
+    describe(nombre, () => {
+      const montarConFalla = () => montar({ fallarEn })
 
-      await expect(crearVenta(ventaDe(3), contexto)).rejects.toThrow(
-        "No se pudo guardar el detalle de la venta."
-      )
+      it("propaga el fallo en lugar de devolver una factura", async () => {
+        montarConFalla()
+
+        await expect(crearVenta(ventaDe(3), contexto)).rejects.toThrow(mensaje)
+      })
+
+      it("borra la cabecera que ya había insertado", async () => {
+        const falso = montarConFalla()
+
+        await expect(crearVenta(ventaDe(3), contexto)).rejects.toThrow()
+
+        expect(falso.datos.ventas).toHaveLength(0)
+      })
+
+      it("deja la existencia como estaba", async () => {
+        montarConFalla()
+
+        await expect(crearVenta(ventaDe(3), contexto)).rejects.toThrow()
+
+        expect(await existenciaDelCargador()).toBe(10)
+      })
+
+      casosPropios(montarConFalla)
     })
 
-    it("borra la cabecera que ya había insertado", async () => {
-      const falso = montarConFalla()
+  describeVentaQueSeDeshace(
+    "falla el detalle de la factura",
+    {
+      fallarEn: { detalle_venta: errorDeBase },
+      mensaje: "No se pudo guardar el detalle de la venta.",
+    },
+    (montarConFalla) => {
+      it("no descarga el inventario", async () => {
+        const falso = montarConFalla()
 
-      await expect(crearVenta(ventaDe(3), contexto)).rejects.toThrow()
+        await expect(crearVenta(ventaDe(3), contexto)).rejects.toThrow()
 
-      expect(falso.datos.ventas).toHaveLength(0)
-    })
+        expect(salidas(falso)).toHaveLength(0)
+      })
+    }
+  )
 
-    it("no descarga el inventario", async () => {
-      const falso = montarConFalla()
+  describeVentaQueSeDeshace(
+    "falla la descarga de inventario",
+    {
+      fallarEn: { movimientos_inventario: { insert: errorDeBase } },
+      mensaje: "No se pudo descargar el inventario de la venta.",
+    },
+    (montarConFalla) => {
+      /*
+        El detalle sí alcanzó a guardarse y la compensación no lo borra: se
+        apoya en el borrado en cascada de PostgreSQL, que el doble no imita.
+        Queda anotado porque es exactamente la clase de suposición que una
+        transacción de verdad vuelve innecesaria.
+      */
+      it("no borra por su cuenta los renglones ya guardados", async () => {
+        const falso = montarConFalla()
 
-      await expect(crearVenta(ventaDe(3), contexto)).rejects.toThrow()
+        await expect(crearVenta(ventaDe(3), contexto)).rejects.toThrow()
 
-      expect(salidas(falso)).toHaveLength(0)
-    })
-
-    it("deja la existencia como estaba", async () => {
-      montarConFalla()
-
-      await expect(crearVenta(ventaDe(3), contexto)).rejects.toThrow()
-
-      expect(await existenciaDelCargador()).toBe(10)
-    })
-  })
-
-  describe("falla la descarga de inventario", () => {
-    const montarConFalla = () =>
-      montar({ fallarEn: { movimientos_inventario: { insert: errorDeBase } } })
-
-    it("propaga el fallo", async () => {
-      montarConFalla()
-
-      await expect(crearVenta(ventaDe(3), contexto)).rejects.toThrow(
-        "No se pudo descargar el inventario de la venta."
-      )
-    })
-
-    it("borra la cabecera que ya había insertado", async () => {
-      const falso = montarConFalla()
-
-      await expect(crearVenta(ventaDe(3), contexto)).rejects.toThrow()
-
-      expect(falso.datos.ventas).toHaveLength(0)
-    })
-
-    /*
-      El detalle sí alcanzó a guardarse y la compensación no lo borra: se
-      apoya en el borrado en cascada de PostgreSQL, que el doble no imita.
-      Queda anotado porque es exactamente la clase de suposición que una
-      transacción de verdad vuelve innecesaria.
-    */
-    it("no borra por su cuenta los renglones ya guardados", async () => {
-      const falso = montarConFalla()
-
-      await expect(crearVenta(ventaDe(3), contexto)).rejects.toThrow()
-
-      expect(falso.datos.detalle_venta).toHaveLength(1)
-    })
-
-    it("deja la existencia como estaba", async () => {
-      montarConFalla()
-
-      await expect(crearVenta(ventaDe(3), contexto)).rejects.toThrow()
-
-      expect(await existenciaDelCargador()).toBe(10)
-    })
-  })
+        expect(falso.datos.detalle_venta).toHaveLength(1)
+      })
+    }
+  )
 
   /*
     El correlativo se pide antes de insertar. Si la venta se deshace, ese
