@@ -846,7 +846,7 @@ function Quotes() {
                   (item) => (
                     <div
                       key={
-                        item.productId
+                        item.id
                       }
                       className="cart-row"
                     >
