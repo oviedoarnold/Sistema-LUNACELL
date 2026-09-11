@@ -1,0 +1,315 @@
+/*
+  Panel principal.
+
+  Solo lo que necesita esta pantalla. Los colores salen de los tokens; no
+  se define ninguno aquí.
+
+  .stat-card conserva su nombre porque es el gancho con el que el resto
+  del sistema —y las pruebas— localizan cada cifra.
+*/
+
+.panel-entradilla {
+  margin: 0 0 var(--space-5);
+  font-size: 14px;
+  color: var(--text-muted);
+}
+
+.panel-entradilla span {
+  color: var(--text-secondary);
+}
+
+.panel-cargando {
+  margin: 0 0 var(--space-4);
+  font-size: 14px;
+  color: var(--text-muted);
+}
+
+/* ── INDICADORES ─────────────────────────────────────────── */
+
+/*
+  Las reglas de .stat-card van acotadas a .panel: el historial de facturas
+  comparte esa clase y esta fase no lo rediseña.
+*/
+
+.panel-kpis {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: var(--space-4);
+  margin-bottom: var(--space-5);
+}
+
+.panel-kpis-mini {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: var(--space-3);
+  margin-bottom: var(--space-4);
+}
+
+.panel .stat-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
+  padding: var(--space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.panel .stat-card-cabecera {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.panel .stat-card .label {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.panel .stat-card-icono {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border-radius: var(--radius-sm);
+  flex: none;
+  background: var(--surface-secondary);
+  color: var(--text-muted);
+}
+
+.panel .stat-card-icono svg {
+  width: 14px;
+  height: 14px;
+}
+
+.panel .stat-card .value {
+  margin: var(--space-1) 0 0;
+  font-family: var(--font-display);
+  font-size: 27px;
+  font-weight: 600;
+  line-height: 1.1;
+  color: var(--text-primary);
+}
+
+.panel .stat-card .sub-val {
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--text-muted);
+}
+
+/* El acento de cada tarjeta vive en su icono, no en el fondo. */
+.panel .stat-card.orange .stat-card-icono { background: var(--primary-soft); color: var(--primary-text); }
+.panel .stat-card.blue   .stat-card-icono { background: var(--info-soft);    color: var(--info); }
+.panel .stat-card.warn   .stat-card-icono { background: var(--warning-soft); color: var(--warning); }
+.panel .stat-card.ok     .stat-card-icono { background: var(--success-soft); color: var(--success); }
+.panel .stat-card.danger .stat-card-icono { background: var(--danger-soft);  color: var(--danger); }
+
+.panel .stat-card.danger .value { color: var(--danger); }
+.panel .stat-card.warn .value   { color: var(--warning); }
+
+.panel-variacion {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin: var(--space-1) 0 0;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.panel-variacion svg {
+  width: 10px;
+  height: 10px;
+}
+
+.panel-variacion.sube { color: var(--success); }
+.panel-variacion.baja { color: var(--danger); }
+.panel-variacion.igual { color: var(--text-muted); font-weight: 500; }
+
+/* ── SECCIONES ───────────────────────────────────────────── */
+
+.panel-fila {
+  display: grid;
+  grid-template-columns: 1.6fr 1fr;
+  gap: var(--space-4);
+  margin-bottom: var(--space-4);
+  align-items: start;
+}
+
+.panel-seccion {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
+  padding: var(--space-4) var(--space-5) var(--space-5);
+}
+
+.panel-seccion-titulo {
+  margin: 0 0 var(--space-4);
+  font-family: var(--font-display);
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+/* ── GRÁFICO DE BARRAS ───────────────────────────────────── */
+
+.panel-barras {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--space-3);
+  height: 190px;
+}
+
+.panel-barra-col {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-2);
+  height: 100%;
+  min-width: 0;
+}
+
+.panel-barra-valor {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.panel-barra {
+  width: 100%;
+  max-width: 46px;
+  border-radius: var(--radius-sm) var(--radius-sm) 0 0;
+  background: var(--primary);
+  min-height: 3px;
+}
+
+.panel-barra-dia {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+/* ── TABLAS DEL PANEL ────────────────────────────────────── */
+
+/* Se desplaza dentro de su caja: el ancho de una tabla no debe empujar
+   la aplicación entera. */
+.panel-tabla-wrap {
+  overflow-x: auto;
+}
+
+.panel-tabla {
+  width: 100%;
+  min-width: 0;
+  border-collapse: collapse;
+}
+
+.panel-tabla thead th {
+  text-align: left;
+  padding: 0 0 var(--space-2);
+  border-bottom: 1px solid var(--border);
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  background: transparent;
+}
+
+.panel-tabla tbody td {
+  padding: 11px 0;
+  border-bottom: 1px solid var(--border);
+  font-size: 14px;
+  color: var(--text-primary);
+}
+
+.panel-tabla tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.panel-tabla .num {
+  text-align: right;
+  font-family: var(--font-mono);
+}
+
+/* ── LISTA DE VENTAS RECIENTES ───────────────────────────── */
+
+.panel-lista {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.panel-lista-fila {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: 11px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.panel-lista-fila:last-child {
+  border-bottom: none;
+}
+
+.panel-lista-nombre {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  font-size: 14px;
+  color: var(--text-primary);
+}
+
+.panel-lista-nombre small {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.panel-lista-valor {
+  font-family: var(--font-mono);
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+  white-space: nowrap;
+}
+
+/* ── TABLETA Y MÓVIL ─────────────────────────────────────── */
+
+@media (max-width: 1100px) {
+  .panel-fila {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 900px) {
+  .panel-kpis {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 560px) {
+  .panel-kpis,
+  .panel-kpis-mini {
+    grid-template-columns: 1fr;
+  }
+
+  .panel-barras {
+    height: 150px;
+    gap: var(--space-2);
+  }
+
+  .panel-barra-valor {
+    font-size: 9px;
+  }
+}

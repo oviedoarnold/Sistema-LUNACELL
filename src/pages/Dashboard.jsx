@@ -1,65 +1,361 @@
-﻿import { useContext, useMemo } from "react"
-import { ProductContext } from "../context/contexts"
-import { SalesContext } from "../context/contexts"
-import { esVentaDelDia, esVentaDelMes, getSaleBalance } from "../utils/salesUtils"
-import { formatMoney as money } from "../utils/format"
-import { ClientsContext } from "../context/contexts"
+import { useContext, useMemo } from "react"
+import {
+  FaArrowDown,
+  FaArrowUp,
+  FaBoxOpen,
+  FaCalendarAlt,
+  FaCreditCard,
+  FaExclamationTriangle,
+  FaReceipt,
+} from "react-icons/fa"
 
+import {
+  ClientsContext,
+  ProductContext,
+  SalesContext,
+} from "../context/contexts"
 
+import { formatMoney as money, todayForDisplay } from "../utils/format"
+import StatCard from "./dashboard/StatCard"
+
+import {
+  hayVentasEn,
+  productosAgotados,
+  productosBajoMinimo,
+  productosMasVendidos,
+  productosPorAtender,
+  saldoPorCobrar,
+  variacionFrenteAAyer,
+  ventasDelDia,
+  ventasDelMes,
+  ventasPorDia,
+  ventasRecientes,
+} from "./dashboard/metricas"
+
+/*
+  Panel de LUNACELL.
+
+  Todo lo que se ve sale de lo que los contextos ya tienen cargado: las
+  ventas de la empresa en sesión, su catálogo y sus clientes. No hay
+  consultas nuevas, ni vistas, ni cifras de ejemplo. Cuando una sección no
+  tiene datos, enseña su estado vacío en lugar de dibujar algo.
+
+  El título de la página lo pone la barra superior, así que aquí no se
+  repite: solo queda una entradilla con la fecha.
+*/
 function Dashboard() {
-  const { products = [] } = useContext(ProductContext)
-  const { sales = [] } = useContext(SalesContext)
+  const { products = [], cargando: cargandoProductos } =
+    useContext(ProductContext)
+
+  const { sales = [], cargando: cargandoVentas } = useContext(SalesContext)
   const { clients = [] } = useContext(ClientsContext)
 
-  const stats = useMemo(() => {
-    const sumarTotales = (ventas) => ventas.reduce((a, s) => a + Number(s.total || 0), 0)
-    const todaySales = sumarTotales(sales.filter((s) => esVentaDelDia(s)))
-    const monthSales = sumarTotales(sales.filter((s) => esVentaDelMes(s)))
-    const low = products.filter((p) => Number(p.stock) > 0 && Number(p.stock) <= Number(p.minStock ?? 5)).length
-    const out = products.filter((p) => Number(p.stock) <= 0).length
-    // Descuenta los abonos: lo pendiente es el saldo, no el total facturado.
-    const receivable = sales.reduce((a, s) => a + getSaleBalance(s), 0)
-    return { todaySales, monthSales, low, out, receivable }
-  }, [products, sales])
+  /*
+    Un solo recorrido por conjunto de datos. Se recalcula cuando cambian
+    las ventas o el catálogo, no en cada pintado.
+  */
+  const deVentas = useMemo(
+    () => ({
+      hoy: ventasDelDia(sales),
+      mes: ventasDelMes(sales),
+      porCobrar: saldoPorCobrar(sales),
+      variacion: variacionFrenteAAyer(sales),
+      porDia: ventasPorDia(sales),
+      masVendidos: productosMasVendidos(sales),
+      recientes: ventasRecientes(sales),
+    }),
+    [sales]
+  )
 
-  const topProducts = useMemo(() => {
-    const map = new Map()
-    sales.forEach((s) => (s.items || s.products || []).forEach((i) => {
-      const name = i.name || i.productName || "Producto"
-      const qty = Number(i.qty ?? i.quantity ?? 1)
-      map.set(name, (map.get(name) || 0) + qty)
-    }))
-    return [...map.entries()].sort((a, b) => b[1] - a[1]).slice(0, 5)
-  }, [sales])
+  const deInventario = useMemo(
+    () => ({
+      bajoMinimo: productosBajoMinimo(products).length,
+      agotados: productosAgotados(products).length,
+      porAtender: productosPorAtender(products),
+    }),
+    [products]
+  )
 
-  const recentSales = [...sales].sort((a, b) => Number(b.timestamp || 0) - Number(a.timestamp || 0)).slice(0, 5)
+  const cargando = cargandoVentas || cargandoProductos
+  const conVentas = hayVentasEn(deVentas.porDia)
+  const maximoDelPeriodo = Math.max(1, ...deVentas.porDia.map((d) => d.total))
+  const requierenAtencion = deInventario.bajoMinimo + deInventario.agotados
 
-  return <div className="view active">
-    <div className="view-header"><div><h2>Dashboard</h2><p className="sub">{new Date().toLocaleDateString("es-HN", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}</p></div></div>
-    <div className="dash-grid dash-grid-wide">
-      <div className="stat-card orange"><div className="icon">🧾</div><div className="label">Ventas hoy</div><div className="value">{money(stats.todaySales)}</div><div className="sub-val">Total del día</div></div>
-      <div className="stat-card blue"><div className="icon">🛒</div><div className="label">Ventas del mes</div><div className="value">{money(stats.monthSales)}</div><div className="sub-val">Mes actual</div></div>
-      <div className="stat-card warn"><div className="icon">⚠</div><div className="label">Stock bajo</div><div className="value">{stats.low}</div><div className="sub-val">productos</div></div>
-      <div className="stat-card danger"><div className="icon">⚠</div><div className="label">Agotados</div><div className="value">{stats.out}</div><div className="sub-val">productos</div></div>
-      <div className="stat-card warn"><div className="icon">💳</div><div className="label">Por cobrar</div><div className="value">{money(stats.receivable)}</div><div className="sub-val">ventas a crédito</div></div>
-      <div className="stat-card ok"><div className="icon">✓</div><div className="label">Productos</div><div className="value">{products.length}</div><div className="sub-val">{clients.length} clientes</div></div>
+  return (
+    <div className="panel">
+      <p className="panel-entradilla">
+        Resumen general · <span>{todayForDisplay()}</span>
+      </p>
+
+      {cargando && (
+        <p className="panel-cargando" role="status">
+          Cargando información…
+        </p>
+      )}
+
+      {requierenAtencion > 0 && (
+        <div className="alert-banner" role="status">
+          <FaExclamationTriangle aria-hidden="true" />
+
+          <div>
+            <strong>
+              {requierenAtencion}{" "}
+              {requierenAtencion === 1 ? "producto" : "productos"} requieren
+              atención
+            </strong>
+            Revisa las existencias antes de que falten en una venta.
+          </div>
+        </div>
+      )}
+
+      <section className="panel-kpis" aria-label="Indicadores principales">
+        <StatCard
+          etiqueta="Ventas hoy"
+          valor={money(deVentas.hoy.total)}
+          Icono={FaReceipt}
+          tono="orange"
+          detalle={
+            deVentas.hoy.cantidad === 1
+              ? "1 venta registrada"
+              : `${deVentas.hoy.cantidad} ventas registradas`
+          }
+        >
+          {/*
+            Una flecha sobre un 0,0 % se lee como subida y no lo es. Por
+            debajo de una decima la diferencia se cuenta como igual.
+          */}
+          {deVentas.variacion !== null &&
+            (Math.abs(deVentas.variacion) < 0.05 ? (
+              <p className="panel-variacion igual">Igual que ayer</p>
+            ) : (
+              <p
+                className={
+                  deVentas.variacion > 0
+                    ? "panel-variacion sube"
+                    : "panel-variacion baja"
+                }
+              >
+                {deVentas.variacion > 0 ? (
+                  <FaArrowUp aria-hidden="true" />
+                ) : (
+                  <FaArrowDown aria-hidden="true" />
+                )}
+                {`${Math.abs(deVentas.variacion).toFixed(1)} % frente a ayer`}
+              </p>
+            ))}
+        </StatCard>
+
+        <StatCard
+          etiqueta="Ventas del mes"
+          valor={money(deVentas.mes.total)}
+          Icono={FaCalendarAlt}
+          tono="blue"
+          detalle={
+            deVentas.mes.cantidad === 1
+              ? "1 factura emitida"
+              : `${deVentas.mes.cantidad} facturas emitidas`
+          }
+        />
+
+        <StatCard
+          etiqueta="Por cobrar"
+          valor={money(deVentas.porCobrar)}
+          Icono={FaCreditCard}
+          tono="warn"
+          detalle="Saldo de ventas a crédito"
+        />
+
+        <StatCard
+          etiqueta="Productos"
+          valor={products.length}
+          Icono={FaBoxOpen}
+          tono="ok"
+          detalle={
+            clients.length === 1 ? "1 cliente" : `${clients.length} clientes`
+          }
+        />
+      </section>
+
+      <div className="panel-fila">
+        <section className="panel-seccion" aria-labelledby="panel-ventas-7d">
+          <h2 className="panel-seccion-titulo" id="panel-ventas-7d">
+            Ventas de los últimos 7 días
+          </h2>
+
+          {conVentas ? (
+            /*
+              El gráfico es una ayuda visual, no la única forma de leer el
+              dato: cada barra lleva su importe escrito encima.
+            */
+            <div className="panel-barras">
+              {deVentas.porDia.map((dia) => (
+                <div className="panel-barra-col" key={dia.fecha.toISOString()}>
+                  <span className="panel-barra-valor">
+                    {dia.total > 0 ? money(dia.total) : "—"}
+                  </span>
+
+                  <div
+                    className="panel-barra"
+                    style={{
+                      height: `${Math.max(
+                        3,
+                        (dia.total / maximoDelPeriodo) * 100
+                      )}%`,
+                    }}
+                  />
+
+                  <span className="panel-barra-dia">{dia.etiqueta}</span>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="empty-state">
+              <strong>Sin ventas todavía</strong>
+              No hay ventas registradas en este período.
+            </div>
+          )}
+        </section>
+
+        <section className="panel-seccion" aria-labelledby="panel-inventario">
+          <h2 className="panel-seccion-titulo" id="panel-inventario">
+            Inventario
+          </h2>
+
+          <div className="panel-kpis-mini">
+            <StatCard
+              etiqueta="Stock bajo"
+              valor={deInventario.bajoMinimo}
+              tono="warn"
+              detalle="Por debajo del mínimo"
+            />
+
+            <StatCard
+              etiqueta="Agotados"
+              valor={deInventario.agotados}
+              tono="danger"
+              detalle="Sin existencias"
+            />
+          </div>
+
+          {deInventario.porAtender.length > 0 ? (
+            <div className="panel-tabla-wrap">
+              <table className="panel-tabla">
+                <thead>
+                  <tr>
+                    <th scope="col">Producto</th>
+                    <th scope="col" className="num">
+                      Stock
+                    </th>
+                    <th scope="col" className="num">
+                      Mínimo
+                    </th>
+                  </tr>
+                </thead>
+
+                <tbody>
+                  {deInventario.porAtender.map((producto) => (
+                    <tr key={producto.id}>
+                      <td>{producto.name}</td>
+                      <td className="num">
+                        <span
+                          className={
+                            Number(producto.stock) <= 0
+                              ? "badge badge-out"
+                              : "badge badge-low"
+                          }
+                        >
+                          {Number(producto.stock) <= 0
+                            ? "Agotado"
+                            : `${producto.stock} u.`}
+                        </span>
+                      </td>
+                      <td className="num">{producto.minStock ?? 5}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <div className="empty-state">
+              <strong>Todo en orden</strong>
+              Ningún producto está por debajo de su mínimo.
+            </div>
+          )}
+        </section>
+      </div>
+
+      <div className="panel-fila">
+        <section className="panel-seccion" aria-labelledby="panel-mas-vendidos">
+          <h2 className="panel-seccion-titulo" id="panel-mas-vendidos">
+            Top productos vendidos
+          </h2>
+
+          {deVentas.masVendidos.length > 0 ? (
+            <div className="panel-tabla-wrap">
+              <table className="panel-tabla">
+                <thead>
+                  <tr>
+                    <th scope="col">Producto</th>
+                    <th scope="col" className="num">
+                      Unidades
+                    </th>
+                    <th scope="col" className="num">
+                      Total
+                    </th>
+                  </tr>
+                </thead>
+
+                <tbody>
+                  {deVentas.masVendidos.map((producto) => (
+                    <tr key={producto.nombre}>
+                      <td>{producto.nombre}</td>
+                      <td className="num">{producto.unidades}</td>
+                      <td className="num">{money(producto.total)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <div className="empty-state">
+              <strong>Sin ventas todavía</strong>
+              Aquí aparecerá lo que más se venda.
+            </div>
+          )}
+        </section>
+
+        <section className="panel-seccion" aria-labelledby="panel-recientes">
+          <h2 className="panel-seccion-titulo" id="panel-recientes">
+            Ventas recientes
+          </h2>
+
+          {deVentas.recientes.length > 0 ? (
+            <ul className="panel-lista">
+              {deVentas.recientes.map((venta) => (
+                <li className="panel-lista-fila" key={venta.id}>
+                  <span className="panel-lista-nombre">
+                    {venta.customer ||
+                      venta.clientName ||
+                      "Consumidor Final"}
+                    <small>{venta.invoiceNumber || venta.date}</small>
+                  </span>
+
+                  <span className="panel-lista-valor">
+                    {money(venta.total)}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <div className="empty-state">
+              <strong>Sin ventas todavía</strong>
+              Las últimas facturas aparecerán aquí.
+            </div>
+          )}
+        </section>
+      </div>
     </div>
-
-    <div className="dash-row">
-      <div className="chart-wrap"><div className="chart-title">Ventas por mes</div><div className="bar-chart">{Array.from({ length: 6 }, (_, idx) => {
-        const d = new Date(); d.setMonth(d.getMonth() - (5 - idx));
-        const total = sales.filter((s) => { const sd = new Date(s.timestamp || s.date); return !Number.isNaN(sd.getTime()) && sd.getMonth() === d.getMonth() && sd.getFullYear() === d.getFullYear() }).reduce((a, s) => a + Number(s.total || 0), 0)
-        const max = Math.max(1, ...sales.map((s) => Number(s.total || 0)))
-        return <div className="bar-col" key={idx}><div className="bar-val">{total ? money(total) : "—"}</div><div className="bar" style={{ height: `${Math.max(4, Math.min(100, (total / max) * 100))}%` }}></div><div className="bar-label">{d.toLocaleDateString("es-HN", { month: "short" })}</div></div>
-      })}</div></div>
-      <div className="chart-wrap"><div className="chart-title">Top productos vendidos</div><div className="dash-mini-list">{topProducts.length ? topProducts.map(([name, qty]) => <div className="dash-mini-row" key={name}><span className="name">{name}</span><span className="val">{qty} u.</span></div>) : <div className="empty-state">Sin ventas todavía</div>}</div></div>
-    </div>
-
-    <div className="dash-bottom">
-      <div className="chart-wrap"><div className="chart-title">Últimas ventas</div><div className="dash-mini-list">{recentSales.length ? recentSales.map((s) => <div className="dash-mini-row" key={s.id}><span className="name">{s.customer || s.clientName || "Consumidor Final"}</span><span className="val">{money(s.total)}</span></div>) : <div className="empty-state">Sin ventas todavía</div>}</div></div>
-      <div className="chart-wrap"><div className="chart-title">Clientes</div><div className="dash-mini-list">{clients.slice(0, 5).map((c) => <div className="dash-mini-row" key={c.id}><span className="name">{c.name}</span><span className="val">{c.phone || "—"}</span></div>)}{!clients.length && <div className="empty-state">Sin clientes registrados</div>}</div></div>
-    </div>
-  </div>
+  )
 }
 
 export default Dashboard
