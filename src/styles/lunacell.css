@@ -5,6 +5,7 @@
    garantizado sin depender de quién cargue qué. */
 @import "./tokens.css";
 @import "./shell.css";
+@import "./panel.css";
 *{box-sizing:border-box;} html{scroll-behavior:smooth;}
 body{margin:0;font-family:var(--font-body);background:var(--cream);color:var(--charcoal);font-size:17px;line-height:1.5;-webkit-font-smoothing:antialiased;}
 h1,h2,h3{font-family:var(--font-display);font-weight:600;letter-spacing:.2px;margin:0;}
@@ -62,21 +63,7 @@ a{color:inherit;} ::selection{background:var(--orange-light);}
 .stat-card.purple .icon{background:var(--purple-light);color:var(--purple);} 
 .stat-card.orange .icon{background:var(--orange-light);color:var(--orange-dark);} 
 .stat-card.orange .value{color:var(--orange-dark);} 
-.dash-row{display:grid;grid-template-columns:1.6fr 1fr;gap:16px;margin-bottom:16px;} 
-.chart-wrap{background:var(--paper);border:1px solid var(--line);border-radius:var(--radius-lg);padding:18px 20px;} 
-.chart-title{font-family:var(--font-display);font-size:16px;margin-bottom:14px;} 
-.bar-chart{display:flex;align-items:flex-end;gap:10px;height:120px;} 
-.bar-col{display:flex;flex-direction:column;align-items:center;gap:4px;flex:1;} 
-.bar-col .bar{width:100%;background:var(--orange);border-radius:5px 5px 0 0;min-height:4px;transition:height .4s ease;} 
-.bar-col .bar.secondary{background:var(--blue-light);border:1px solid var(--blue);} 
-.bar-col .bar-label{font-size:10px;color:var(--steel);font-family:var(--font-mono);text-align:center;} 
-.bar-col .bar-val{font-size:10px;font-family:var(--font-mono);font-weight:600;color:var(--charcoal);text-align:center;} 
-.dash-mini-list{display:flex;flex-direction:column;gap:0;} 
-.dash-mini-row{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 0;border-bottom:1px solid var(--line);font-size:14px;} 
-.dash-mini-row:last-child{border-bottom:none;} 
-.dash-mini-row .name{flex:1;font-weight:600;} 
-.dash-mini-row .val{font-family:var(--font-mono);font-size:13px;color:var(--orange-dark);} 
-.dash-bottom{display:grid;grid-template-columns:1fr 1fr;gap:16px;} 
+/* El grafico y las listas del panel viven ahora en panel.css. */
 /* ── BUTTONS ── */
 .btn{display:inline-flex;align-items:center;gap:7px;justify-content:center;padding:11px 18px;border-radius:10px;border:1.5px solid transparent;font-weight:600;font-size:15px;transition:transform .08s,background .12s,border-color .12s;} 
 .btn svg{width:17px;height:17px;flex:none;} 
