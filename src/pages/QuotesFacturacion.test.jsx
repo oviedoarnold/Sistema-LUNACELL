@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest"
-import { screen, fireEvent, waitFor, within } from "@testing-library/react"
+import { screen, fireEvent, waitFor } from "@testing-library/react"
 import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom"
 import Swal from "sweetalert2"
 
@@ -8,6 +8,7 @@ import ProductProvider from "../context/ProductContext"
 import ClientsProvider from "../context/ClientsContext"
 import QuotesProvider from "../context/QuotesContext"
 import { renderizarPantalla } from "../test/pantallas"
+import { agregarProducto as agregarAlCarrito } from "../test/carrito"
 import { traerCotizaciones, conFormaDeApp } from "../lib/api/cotizaciones"
 import Quotes from "./Quotes"
 
@@ -82,12 +83,6 @@ function renderQuotes() {
     </AuthProvider>,
     { productos: PRODUCTOS, cotizaciones: [], esperar: ["cotizaciones"] }
   )
-}
-
-const agregarAlCarrito = (nombre) => {
-  const fila = screen.getAllByText(nombre)[0].closest("div").parentElement
-
-  fireEvent.click(within(fila).getAllByRole("button", { name: /agregar/i })[0])
 }
 
 const guardarCotizacion = () =>

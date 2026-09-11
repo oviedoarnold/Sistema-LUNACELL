@@ -10,7 +10,10 @@ import { EMPRESA_PRUEBA, renderizarPantalla } from "../test/pantallas"
 import {
   CAMPOS_DEL_CLIENTE,
   abrirClienteNuevo as abrirAltaDeCliente,
+  agregarProducto as agregar,
   filasDelCarrito,
+  guardarCliente,
+  llenarAltaDeCliente,
   modalDeCliente,
   paso,
   quitarDelCarrito,
@@ -71,37 +74,12 @@ function renderQuotes(cotizaciones = []) {
 
 const totales = () => screen.getByText("Total").closest("div").parentElement
 
-const agregar = (nombre) => {
-  const fila = screen.getAllByText(nombre)[0].closest("div").parentElement
-
-  fireEvent.click(within(fila).getAllByRole("button", { name: /agregar/i })[0])
-}
-
 const filaDe = (numero) =>
   screen.getByText(numero, { exact: false }).closest(".sale-card")
 
 const abrirClienteNuevo = () => abrirAltaDeCliente(/nombre del cliente/i)
 
 const quitar = quitarDelCarrito
-
-const llenarAltaDeCliente = ({
-  nombre = "Taller Nuevo",
-  rtn = "0801199912345",
-  telefono = "9999-1111",
-  direccion = "San Pedro Sula",
-} = {}) => {
-  const modal = modalDeCliente()
-  const escribir = (etiqueta, valor) =>
-    fireEvent.change(modal.getByLabelText(etiqueta), { target: { value: valor } })
-
-  escribir(/^nombre$/i, nombre)
-  escribir(/^rtn/i, rtn)
-  escribir(/^teléfono$/i, telefono)
-  escribir(/^dirección$/i, direccion)
-}
-
-const guardarCliente = () =>
-  fireEvent.click(screen.getByRole("button", { name: /guardar cliente/i }))
 
 
 describe("Quotes: catálogo", () => {

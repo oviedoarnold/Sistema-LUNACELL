@@ -42,6 +42,45 @@ export const abrirClienteNuevo = (buscadorDeCliente) => {
 }
 
 /*
+  Pulsa "Agregar" en la fila del catálogo. El nombre del producto aparece
+  también en el carrito, así que se toma la primera aparición —el catálogo
+  se dibuja antes— y se busca el botón dentro de esa fila.
+*/
+export const agregarProducto = (nombre) => {
+  const fila = screen.getAllByText(nombre)[0].closest("div").parentElement
+
+  fireEvent.click(within(fila).getAllByRole("button", { name: /agregar/i })[0])
+}
+
+const DATOS_DEL_CLIENTE = {
+  nombre: "Taller Nuevo",
+  rtn: "0801199912345",
+  telefono: "9999-1111",
+  direccion: "San Pedro Sula",
+}
+
+/*
+  Rellena el formulario de alta. Los valores por omisión sirven para las
+  pruebas a las que solo les importa que el cliente quede creado; las que
+  comprueban un dato concreto pasan el suyo.
+*/
+export const llenarAltaDeCliente = (datos = {}) => {
+  const { nombre, rtn, telefono, direccion } = { ...DATOS_DEL_CLIENTE, ...datos }
+  const modal = modalDeCliente()
+
+  const escribir = (etiqueta, valor) =>
+    fireEvent.change(modal.getByLabelText(etiqueta), { target: { value: valor } })
+
+  escribir(/^nombre$/i, nombre)
+  escribir(/^rtn/i, rtn)
+  escribir(/^teléfono$/i, telefono)
+  escribir(/^dirección$/i, direccion)
+}
+
+export const guardarCliente = () =>
+  fireEvent.click(screen.getByRole("button", { name: /guardar cliente/i }))
+
+/*
   Los cinco campos que pide el alta, con el texto de su etiqueta.
 */
 export const CAMPOS_DEL_CLIENTE = [
