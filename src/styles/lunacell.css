@@ -128,9 +128,9 @@ main{max-width:1240px;margin:0 auto;padding:24px 24px 80px;}
 /* ── TABLE ── */
 .table-wrap{overflow-x:auto;border-radius:var(--radius-lg);border:1px solid var(--line);background:#fff;box-shadow:var(--shadow-sm);} 
 table{width:100%;border-collapse:collapse;min-width:600px;} 
-thead th{text-align:left;font-family:var(--font-mono);font-size:12px;letter-spacing:.5px;text-transform:uppercase;color:var(--steel);background:var(--cream);padding:12px 15px;border-bottom:1px solid var(--line);} 
+thead th{text-align:left;font-family:var(--font-mono);font-size:12px;letter-spacing:.5px;text-transform:uppercase;color:var(--steel);background:var(--table-header);padding:12px 15px;border-bottom:1px solid var(--line);} 
 tbody td{padding:13px 15px;border-bottom:1px solid var(--line);font-size:15px;vertical-align:middle;} 
-tbody tr:last-child td{border-bottom:none;} tbody tr:hover{background:#FFFBF6;} 
+tbody tr:last-child td{border-bottom:none;} tbody tr:hover{background:var(--table-hover);} 
 td.num,th.num{text-align:right;font-family:var(--font-mono);} 
 .product-name{font-weight:600;} .product-cat{display:block;font-size:12px;color:var(--steel);margin-top:1px;} 
 .row-actions{display:flex;gap:7px;justify-content:flex-end;} 
@@ -306,7 +306,7 @@ td.num,th.num{text-align:right;font-family:var(--font-mono);}
 #modal-invoice .modal-body,#modal-quote .modal-body{
   max-height:calc(100vh - 145px);
   overflow:auto;
-  background:#f3eee4;
+  background:var(--surface-secondary);
 }
 #modal-invoice .receipt-wrap,#modal-quote .receipt-wrap{
   padding:10px 0;
@@ -476,7 +476,7 @@ td.num,th.num{text-align:right;font-family:var(--font-mono);}
 .document-preview-body {
   max-height: calc(100vh - 145px);
   overflow: auto;
-  background: #f3eee4;
+  background: var(--surface-secondary);
 }
 
 .document-preview-body .receipt-wrap {

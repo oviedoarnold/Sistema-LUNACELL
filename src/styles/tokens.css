@@ -14,12 +14,17 @@
   Toda la aplicación cambia de identidad sin tocar el marcado, y volver
   atrás es revertir un archivo.
 
-  Los alias se irán retirando en las fases siguientes, sección por sección.
+  La dirección visual es la de un ERP moderno: carbón en la navegación,
+  gris muy claro casi blanco en el área de trabajo, blanco en las tarjetas
+  y el dorado reservado al acento. La primera propuesta tiraba a beige y
+  el cliente la rechazó; de ahí que los neutros de aquí sean fríos y que
+  no quede ningún crema en el sistema.
 
-  Sobre el dorado: #D6A13A sobre blanco da 2.33:1, muy por debajo de lo
-  legible. Por eso hay dos dorados más además del de marca —uno para fondos
-  en reposo y otro para cuando el dorado tiene que ser texto o borde sobre
-  claro— y el texto que va encima del dorado es tinta, nunca blanco.
+  Sobre el dorado: es metálico y sobrio, no amarillo. #C89C32 sobre blanco
+  da 2.54:1, muy por debajo de lo legible, así que hay tres dorados más
+  —uno claro para el acento sobre carbón, uno para el hover de fondo y uno
+  oscuro para cuando el dorado tiene que ser texto o borde sobre claro— y
+  el texto que va encima del dorado es tinta, nunca blanco.
 */
 
 /*
@@ -39,22 +44,30 @@
     /* ── PRIMITIVOS ─────────────────────────────────────────────
        Solo los tonos que el sistema necesita hoy. */
 
-    --lc-gold-050: #FBF1DD;  /* fondos suaves de acento          */
-    --lc-gold-300: #F0C766;  /* acento sobre fondo oscuro        */
-    --lc-gold-500: #D6A13A;  /* marca: fondo de la acción        */
-    --lc-gold-700: #A87B24;  /* fondo de la acción al pasar      */
-    --lc-gold-800: #8A6419;  /* dorado legible como texto        */
+    /* Dorado metálico de la marca. */
+    --lc-gold-050: #FAF3E3;  /* fondo suave de acento             */
+    --lc-gold-400: #D6B45A;  /* acento sobre carbón               */
+    --lc-gold-500: #C89C32;  /* marca: fondo de la acción         */
+    --lc-gold-600: #A97C18;  /* fondo de la acción al pasar       */
+    --lc-gold-700: #8A6414;  /* dorado legible como texto         */
 
-    --lc-ink-900: #111214;
-    --lc-ink-700: #25282C;
-    --lc-ink-500: #3C4046;
+    /* Carbón de la navegación. */
+    --lc-black-900: #171A1D;
+    --lc-black-800: #202327;
 
-    --lc-sand-50:  #FAF8F3;
-    --lc-sand-100: #F4F1EA;
-    --lc-sand-200: #E6E2D8;
-    --lc-sand-300: #D2CCBE;
+    /* Neutros fríos. Nada de crema: el área de trabajo es gris muy
+       claro, casi blanco. */
+    --lc-gray-900: #181A1D;
+    --lc-gray-700: #4C5158;
+    --lc-gray-600: #6B7079;
+    --lc-gray-500: #737982;
+    --lc-gray-400: #9BA1AA;
+    --lc-gray-300: #DDE0E4;
+    --lc-gray-200: #E7E9EC;
+    --lc-gray-100: #F2F3F4;
+    --lc-gray-050: #F7F7F5;
 
-    --lc-gray-500: #6B6F76;
+    --lc-white: #FFFFFF;
 
     /* ── SEMÁNTICOS ─────────────────────────────────────────────
        Lo que cada color significa. Las fases siguientes consumen
@@ -63,21 +76,21 @@
     /* Acción y marca. El dorado es identidad, no estado: no
        significa ni éxito ni advertencia. */
     --primary:       var(--lc-gold-500);
-    --primary-hover: var(--lc-gold-700);
+    --primary-hover: var(--lc-gold-600);
     --primary-soft:  var(--lc-gold-050);
-    --primary-text:  var(--lc-gold-800);  /* dorado sobre claro   */
-    --on-primary:    var(--lc-ink-900);   /* texto sobre dorado   */
+    --primary-text:  var(--lc-gold-700);  /* dorado sobre claro   */
+    --on-primary:    var(--lc-gray-900);  /* texto sobre dorado   */
 
-    --background:        var(--lc-sand-50);
-    --surface:           #FFFFFF;
-    --surface-secondary: var(--lc-sand-100);
+    --background:        var(--lc-gray-050);
+    --surface:           var(--lc-white);
+    --surface-secondary: var(--lc-gray-100);
 
-    --text-primary:   var(--lc-ink-900);
-    --text-secondary: var(--lc-ink-500);
-    --text-muted:     var(--lc-gray-500);
+    --text-primary:   var(--lc-gray-900);
+    --text-secondary: var(--lc-gray-700);
+    --text-muted:     var(--lc-gray-600);
 
-    --border:        var(--lc-sand-200);
-    --border-strong: var(--lc-sand-300);
+    --border:        var(--lc-gray-200);
+    --border-strong: var(--lc-gray-300);
 
     /* Estados. Conservan los colores que ya tenía el sistema:
        son semánticamente correctos y cambiarlos sería otra
@@ -93,25 +106,30 @@
 
     /* Navegación lateral. Todavía no hay sidebar; estos tokens
        existen para que la fase B no tenga que inventar la paleta
-       oscura por su cuenta. */
-    --sidebar-bg:        var(--lc-ink-900);
-    --sidebar-text:      #9AA0A8;
-    --sidebar-active:    var(--lc-gold-300);
-    --sidebar-active-bg: rgba(214, 161, 58, 0.12);
+       oscura por su cuenta. El gris del texto es más claro que el
+       --text-muted del área clara porque sobre carbón hace falta
+       más luz para llegar al mismo contraste. */
+    --sidebar-bg:        var(--lc-black-900);
+    --sidebar-surface:   var(--lc-black-800);
+    --sidebar-text:      var(--lc-gray-400);
+    --sidebar-active:    var(--lc-gold-400);
+    --sidebar-active-bg: rgba(200, 156, 50, 0.14);
 
-    --table-header: var(--lc-sand-100);
-    --table-hover:  #FBF8F1;
+    --table-header: var(--lc-gray-100);
+    --table-hover:  var(--lc-gray-050);
 
     /* El anillo de foco usa el dorado oscuro: el de marca sobre el
-       fondo claro da 2.19:1 y no se vería. */
-    --focus-ring: var(--lc-gold-800);
+       fondo claro da 2.37:1 y no se vería. */
+    --focus-ring: var(--lc-gold-700);
 
-    --shadow-sm: 0 2px 8px rgba(17, 18, 20, 0.06);
-    --shadow-md: 0 6px 20px rgba(17, 18, 20, 0.10);
-    --shadow-lg: 0 16px 40px rgba(17, 18, 20, 0.20);
+    /* Discretas a propósito: las tarjetas se apoyan en el borde y
+       en una elevación mínima, no en la sombra. */
+    --shadow-sm: 0 1px 2px rgba(24, 26, 29, 0.06);
+    --shadow-md: 0 2px 8px rgba(24, 26, 29, 0.08);
+    --shadow-lg: 0 8px 24px rgba(24, 26, 29, 0.12);
 
-    /* Mismos valores que ya usaba el sistema: esta rama cambia el
-       color, no la forma. */
+    /* Mismos valores que ya usaba el sistema: esta iteración cambia
+       el color, no la forma. */
     --radius-sm: 8px;
     --radius-md: 12px;
     --radius-lg: 18px;
@@ -138,7 +156,10 @@
        de verdad transforma la aplicación. --orange-dark se usa
        como texto en 14 reglas y como fondo en 1, así que apunta al
        dorado legible; el único fondo que lo usaba —el hover del
-       botón primario— pasa a --primary-hover en lunacell.css. */
+       botón primario— pasa a --primary-hover en lunacell.css.
+
+       --cream ya no es crema: apunta al gris muy claro del área de
+       trabajo, que es lo que quita de la aplicación el tono beige. */
 
     --orange:       var(--primary);
     --orange-dark:  var(--primary-text);
