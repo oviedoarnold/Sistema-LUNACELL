@@ -1,0 +1,367 @@
+/*
+  Armazón del panel: barra lateral, barra superior y área de trabajo.
+
+  Vive aparte de lunacell.css porque es una pieza nueva y completa, y
+  porque así la fase que rediseñe el contenido de las páginas no tiene que
+  abrirse paso entre el CSS del armazón.
+
+  Todos los colores salen de los tokens de tokens.css. Aquí no se define
+  ninguno.
+*/
+
+/* ── ARMAZÓN ─────────────────────────────────────────────── */
+
+.app-shell {
+  display: flex;
+  align-items: stretch;
+  min-height: 100vh;
+  background: var(--background);
+}
+
+.app-workspace {
+  flex: 1 1 auto;
+  min-width: 0;            /* sin esto una tabla ancha estira el shell */
+  display: flex;
+  flex-direction: column;
+}
+
+.app-content {
+  flex: 1 1 auto;
+  padding: var(--space-5) var(--space-6) var(--space-8);
+}
+
+/* ── BARRA LATERAL ───────────────────────────────────────── */
+
+.sidebar {
+  width: 248px;
+  flex: none;
+  background: var(--sidebar-bg);
+  color: var(--sidebar-text);
+  display: flex;
+  flex-direction: column;
+  position: sticky;
+  top: 0;
+  height: 100vh;
+}
+
+.sidebar-marca {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-4) var(--space-4) var(--space-5);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+/* Se nombra el contenedor para ganar a .logo-lunacell, que fija
+   height:auto y se carga despues de este archivo. */
+.sidebar-marca .sidebar-simbolo {
+  height: 34px;
+  width: auto;
+  flex: none;
+}
+
+.sidebar-marca-texto {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.15;
+  min-width: 0;
+}
+
+.sidebar-marca-texto b {
+  font-family: var(--font-display);
+  font-size: 17px;
+  letter-spacing: 0.5px;
+  color: #FFFFFF;
+}
+
+.sidebar-marca-texto span {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.6px;
+  color: var(--sidebar-active);
+}
+
+/* El botón de cerrar solo existe mientras el cajón está desplegado. */
+.sidebar-cerrar {
+  display: none;
+  margin-left: auto;
+  width: 32px;
+  height: 32px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--sidebar-text);
+  align-items: center;
+  justify-content: center;
+  flex: none;
+}
+
+.sidebar-cerrar:hover {
+  background: rgba(255, 255, 255, 0.12);
+  color: #FFFFFF;
+}
+
+.sidebar-nav {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  padding: var(--space-4) var(--space-3);
+}
+
+.sidebar-grupo + .sidebar-grupo {
+  margin-top: var(--space-5);
+}
+
+.sidebar-grupo-titulo {
+  margin: 0 0 var(--space-2);
+  padding: 0 var(--space-3);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.34);
+}
+
+.sidebar-enlace {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: 10px var(--space-3);
+  border-radius: var(--radius-sm);
+  color: var(--sidebar-text);
+  text-decoration: none;
+  font-size: 14.5px;
+  font-weight: 500;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.sidebar-enlace svg {
+  width: 16px;
+  height: 16px;
+  flex: none;
+  opacity: 0.85;
+}
+
+.sidebar-enlace:hover {
+  background: rgba(255, 255, 255, 0.05);
+  color: #FFFFFF;
+}
+
+/*
+  El módulo activo se marca de cuatro formas —barra dorada, fondo, color e
+  icono encendido— para que no dependa solo del color.
+*/
+.sidebar-enlace.is-activo {
+  background: var(--sidebar-active-bg);
+  color: var(--sidebar-active);
+  font-weight: 600;
+}
+
+.sidebar-enlace.is-activo svg {
+  opacity: 1;
+}
+
+.sidebar-enlace.is-activo::before {
+  content: "";
+  position: absolute;
+  left: -12px;
+  top: 6px;
+  bottom: 6px;
+  width: 3px;
+  border-radius: 0 3px 3px 0;
+  background: var(--sidebar-active);
+}
+
+/* ── PIE DE LA BARRA LATERAL ─────────────────────────────── */
+
+.sidebar-pie {
+  flex: none;
+  padding: var(--space-3) var(--space-3) var(--space-4);
+  border-top: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+.sidebar-usuario {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: 0 var(--space-2) var(--space-3);
+  min-width: 0;
+}
+
+.sidebar-avatar {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  flex: none;
+  background: var(--primary);
+  color: var(--on-primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 12.5px;
+}
+
+.sidebar-usuario-datos {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.25;
+  min-width: 0;
+}
+
+.sidebar-usuario-datos b {
+  font-size: 13.5px;
+  color: #FFFFFF;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sidebar-usuario-datos span {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  color: var(--sidebar-text);
+}
+
+.sidebar-salir {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: 9px var(--space-3);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--sidebar-text);
+  font-size: 13.5px;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.sidebar-salir svg {
+  width: 14px;
+  height: 14px;
+  flex: none;
+}
+
+.sidebar-salir:hover {
+  background: rgba(192, 57, 43, 0.16);
+  border-color: rgba(192, 57, 43, 0.4);
+  color: #FFFFFF;
+}
+
+/* ── BARRA SUPERIOR ──────────────────────────────────────── */
+
+.topbar-panel {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  height: 60px;
+  flex: none;
+  padding: 0 var(--space-6);
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+}
+
+.topbar-titulo {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 19px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+/* El botón de menú solo aparece cuando la barra lateral es un cajón. */
+.topbar-menu {
+  display: none;
+  width: 38px;
+  height: 38px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--text-secondary);
+  align-items: center;
+  justify-content: center;
+  flex: none;
+}
+
+.topbar-menu:hover {
+  border-color: var(--border-strong);
+  color: var(--text-primary);
+}
+
+.topbar-menu svg {
+  width: 16px;
+  height: 16px;
+}
+
+/* La capa que tapa el contenido con el cajón abierto. */
+.app-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  z-index: 45;
+  background: rgba(17, 18, 20, 0.5);
+}
+
+/* ── TABLETA Y MÓVIL ─────────────────────────────────────── */
+
+@media (max-width: 1023px) {
+  .sidebar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    z-index: 50;
+    transform: translateX(-100%);
+    transition: transform 0.2s ease;
+    box-shadow: var(--shadow-lg);
+  }
+
+  .sidebar.is-abierto {
+    transform: translateX(0);
+  }
+
+  .sidebar-cerrar {
+    display: flex;
+  }
+
+  .topbar-menu {
+    display: flex;
+  }
+
+  .menu-abierto .app-overlay {
+    display: block;
+  }
+
+  .app-content {
+    padding: var(--space-4) var(--space-4) var(--space-7);
+  }
+
+  .topbar-panel {
+    padding: 0 var(--space-4);
+  }
+}
+
+@media (max-width: 639px) {
+  .sidebar {
+    width: min(86vw, 280px);
+  }
+
+  .topbar-titulo {
+    font-size: 17px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sidebar,
+  .sidebar-enlace,
+  .sidebar-salir,
+  .topbar-menu {
+    transition: none;
+  }
+}
