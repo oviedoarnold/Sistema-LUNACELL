@@ -1,0 +1,178 @@
+/*
+  Identidad visual de LUNACELL & ASOCS.
+
+  Tres capas, de abajo hacia arriba:
+
+    PRIMITIVOS      los colores de la marca, sin opinión sobre su uso
+    SEMÁNTICOS      qué significa cada uno dentro del producto
+    COMPATIBILIDAD  puente hacia los nombres que usa el CSS actual
+
+  La tercera capa es la que permite que esta rama sea pequeña. El sistema
+  heredó su paleta de una ferretería: el color de acción era un naranja
+  (#E8590C) repartido por 47 reglas bajo el nombre --orange. En vez de
+  reescribir esas reglas, --orange pasa a apuntar al dorado de LUNACELL.
+  Toda la aplicación cambia de identidad sin tocar el marcado, y volver
+  atrás es revertir un archivo.
+
+  Los alias se irán retirando en las fases siguientes, sección por sección.
+
+  Sobre el dorado: #D6A13A sobre blanco da 2.33:1, muy por debajo de lo
+  legible. Por eso hay dos dorados más además del de marca —uno para fondos
+  en reposo y otro para cuando el dorado tiene que ser texto o borde sobre
+  claro— y el texto que va encima del dorado es tinta, nunca blanco.
+*/
+
+/*
+  Sobre @layer: la idea era abrir aquí las capas del sistema, pero Tailwind
+  —que se carga después, desde index.css— declara sus propios tokens dentro
+  de @layer theme, y entre dos capas gana la que se declara más tarde.
+  Metiendo estos tokens en una capa, Tailwind pasaba a sobrescribir
+  --radius-md, --radius-lg y --font-mono, que este sistema usa en 42
+  reglas. Fuera de capa no ocurre: el CSS sin capa siempre gana.
+
+  Así que el :root se queda sin capa, igual que estaba. La migración a
+  capas depende de resolver antes la convivencia con Tailwind, y ésa es
+  una decisión aparte.
+*/
+
+:root {
+    /* ── PRIMITIVOS ─────────────────────────────────────────────
+       Solo los tonos que el sistema necesita hoy. */
+
+    --lc-gold-050: #FBF1DD;  /* fondos suaves de acento          */
+    --lc-gold-300: #F0C766;  /* acento sobre fondo oscuro        */
+    --lc-gold-500: #D6A13A;  /* marca: fondo de la acción        */
+    --lc-gold-700: #A87B24;  /* fondo de la acción al pasar      */
+    --lc-gold-800: #8A6419;  /* dorado legible como texto        */
+
+    --lc-ink-900: #111214;
+    --lc-ink-700: #25282C;
+    --lc-ink-500: #3C4046;
+
+    --lc-sand-50:  #FAF8F3;
+    --lc-sand-100: #F4F1EA;
+    --lc-sand-200: #E6E2D8;
+    --lc-sand-300: #D2CCBE;
+
+    --lc-gray-500: #6B6F76;
+
+    /* ── SEMÁNTICOS ─────────────────────────────────────────────
+       Lo que cada color significa. Las fases siguientes consumen
+       estos nombres, no los primitivos. */
+
+    /* Acción y marca. El dorado es identidad, no estado: no
+       significa ni éxito ni advertencia. */
+    --primary:       var(--lc-gold-500);
+    --primary-hover: var(--lc-gold-700);
+    --primary-soft:  var(--lc-gold-050);
+    --primary-text:  var(--lc-gold-800);  /* dorado sobre claro   */
+    --on-primary:    var(--lc-ink-900);   /* texto sobre dorado   */
+
+    --background:        var(--lc-sand-50);
+    --surface:           #FFFFFF;
+    --surface-secondary: var(--lc-sand-100);
+
+    --text-primary:   var(--lc-ink-900);
+    --text-secondary: var(--lc-ink-500);
+    --text-muted:     var(--lc-gray-500);
+
+    --border:        var(--lc-sand-200);
+    --border-strong: var(--lc-sand-300);
+
+    /* Estados. Conservan los colores que ya tenía el sistema:
+       son semánticamente correctos y cambiarlos sería otra
+       discusión, no la de la identidad de marca. */
+    --success:      #1E7A45;
+    --success-soft: #E3F5EC;
+    --warning:      #B07A05;
+    --warning-soft: #FBF0D9;
+    --danger:       #C0392B;
+    --danger-soft:  #FBE3E0;
+    --info:         #3457A6;
+    --info-soft:    #E8EEFB;
+
+    /* Navegación lateral. Todavía no hay sidebar; estos tokens
+       existen para que la fase B no tenga que inventar la paleta
+       oscura por su cuenta. */
+    --sidebar-bg:        var(--lc-ink-900);
+    --sidebar-text:      #9AA0A8;
+    --sidebar-active:    var(--lc-gold-300);
+    --sidebar-active-bg: rgba(214, 161, 58, 0.12);
+
+    --table-header: var(--lc-sand-100);
+    --table-hover:  #FBF8F1;
+
+    /* El anillo de foco usa el dorado oscuro: el de marca sobre el
+       fondo claro da 2.19:1 y no se vería. */
+    --focus-ring: var(--lc-gold-800);
+
+    --shadow-sm: 0 2px 8px rgba(17, 18, 20, 0.06);
+    --shadow-md: 0 6px 20px rgba(17, 18, 20, 0.10);
+    --shadow-lg: 0 16px 40px rgba(17, 18, 20, 0.20);
+
+    /* Mismos valores que ya usaba el sistema: esta rama cambia el
+       color, no la forma. */
+    --radius-sm: 8px;
+    --radius-md: 12px;
+    --radius-lg: 18px;
+
+    --space-1: 4px;
+    --space-2: 8px;
+    --space-3: 12px;
+    --space-4: 16px;
+    --space-5: 24px;
+    --space-6: 32px;
+    --space-7: 48px;
+    --space-8: 64px;
+
+    --font-display: 'Oswald', 'Arial Narrow', sans-serif;
+    --font-body:    'Source Sans 3', 'Segoe UI', sans-serif;
+    --font-mono:    'IBM Plex Mono', 'Consolas', monospace;
+
+    /* ── COMPATIBILIDAD ─────────────────────────────────────────
+       Los nombres que usan hoy las 607 reglas de lunacell.css y
+       las 130 de landing.css. Cada uno apunta a su equivalente
+       semántico; ninguna regla necesita cambiar.
+
+       --orange era el naranja de la ferretería y es el alias que
+       de verdad transforma la aplicación. --orange-dark se usa
+       como texto en 14 reglas y como fondo en 1, así que apunta al
+       dorado legible; el único fondo que lo usaba —el hover del
+       botón primario— pasa a --primary-hover en lunacell.css. */
+
+    --orange:       var(--primary);
+    --orange-dark:  var(--primary-text);
+    --orange-light: var(--primary-soft);
+
+    --charcoal: var(--text-primary);
+    --steel:    var(--text-muted);
+    --cream:    var(--background);
+    --paper:    var(--surface);
+
+    --line:        var(--border);
+    --line-strong: var(--border-strong);
+
+    --teal:       var(--success);
+    --teal-light: var(--success-soft);
+    --green:       #1E7A45;
+    --green-light: var(--success-soft);
+
+    --amber:       var(--warning);
+    --amber-light: var(--warning-soft);
+
+    --red:       var(--danger);
+    --red-light: var(--danger-soft);
+
+    --blue:       var(--info);
+    --blue-light: var(--info-soft);
+
+    /* El violeta no tiene lectura semántica: distingue una tarjeta
+       del panel y un icono del historial. Se conserva tal cual
+       hasta que la fase del Dashboard decida si sigue haciendo
+       falta. */
+    --purple:       #6B3FA0;
+    --purple-light: #EDE8F8;
+
+    --shadow: var(--shadow-md);
+    --radius: var(--radius-md);
+}
