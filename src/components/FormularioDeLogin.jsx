@@ -7,6 +7,8 @@
   cargar el JavaScript. Quien mire el código fuente de la página encuentra
   un formulario de verdad, y quien tenga una conexión lenta ve algo antes.
 */
+import LogoLunacell from "./LogoLunacell"
+
 function FormularioDeLogin({
   email = "",
   password = "",
@@ -21,7 +23,7 @@ function FormularioDeLogin({
   return (
     <div id="login-screen">
       <div className="login-card">
-        <div style={{ fontSize: 36, marginBottom: 10 }}>📱</div>
+        <LogoLunacell className="logo-login" />
         <h2>Iniciar sesión</h2>
         <p className="sub">Accede al sistema LUNACELL</p>
         <div className={`login-error ${error ? "show" : ""}`}>{error}</div>
