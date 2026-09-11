@@ -11,6 +11,7 @@ import {
   CAMPOS_DEL_CLIENTE,
   abrirClienteNuevo as abrirAltaDeCliente,
   agregarProducto as agregar,
+  filaDelCarrito,
   filasDelCarrito,
   guardarCliente,
   llenarAltaDeCliente,
@@ -299,5 +300,81 @@ describe("Quotes: historial", () => {
 
     expect(screen.getByText("Taller Díaz")).toBeInTheDocument()
     expect(screen.queryByText("Ferremax")).not.toBeInTheDocument()
+  })
+})
+
+/*
+  Las filas del carrito tienen que llevar una clave estable.
+
+  React usaba el índice porque la clave llegaba indefinida, y con el índice
+  las filas dejan de tener identidad propia: al quitar la primera de dos,
+  React no borra su nodo, sino que lo reescribe con el contenido de la
+  segunda y destruye el de la segunda. El resultado se ve igual, pero los
+  nodos son otros.
+
+  Eso es lo que se comprueba aquí, porque es lo único observable: el
+  contenido renderizado sale bien en ambos casos. Se guarda el nodo de una
+  fila, se quita la otra, y el nodo guardado tiene que seguir siendo el que
+  está en pantalla.
+*/
+describe("Quotes: identidad de las filas del carrito", () => {
+  const armarCarritoConDos = async () => {
+    await renderQuotes()
+
+    agregar("Martillo de uña")
+    agregar("Cemento gris")
+  }
+
+  it("muestra una fila por producto distinto", async () => {
+    await armarCarritoConDos()
+
+    expect(filasDelCarrito()).toHaveLength(2)
+    expect(filaDelCarrito("Martillo de uña")).toBeTruthy()
+    expect(filaDelCarrito("Cemento gris")).toBeTruthy()
+  })
+
+  /*
+    El caso que destapa la clave inestable.
+  */
+  it("quitar una fila no se lleva por delante el nodo de la otra", async () => {
+    // Arrange
+    await armarCarritoConDos()
+
+    const nodoDelCemento = filaDelCarrito("Cemento gris")
+
+    // Act
+    quitar("Martillo de uña")
+
+    // Assert: el mismo nodo, no uno reescrito
+    expect(nodoDelCemento).toBeInTheDocument()
+  })
+
+  it("al quitar una fila la otra conserva sus datos", async () => {
+    await armarCarritoConDos()
+
+    quitar("Martillo de uña")
+
+    expect(filasDelCarrito()).toHaveLength(1)
+    expect(filaDelCarrito("Cemento gris")).toHaveTextContent("Cemento gris")
+    expect(filaDelCarrito("Cemento gris")).toHaveTextContent("L 250.00")
+  })
+
+  it("subir la cantidad de una fila no toca la otra", async () => {
+    await armarCarritoConDos()
+
+    paso("Martillo de uña", "+")
+
+    expect(filaDelCarrito("Martillo de uña")).toHaveTextContent("L 360.00")
+    expect(filaDelCarrito("Cemento gris")).toHaveTextContent("L 250.00")
+  })
+
+  it("bajar la cantidad de una fila no toca la otra", async () => {
+    await armarCarritoConDos()
+
+    paso("Cemento gris", "+")
+    paso("Cemento gris", "−")
+
+    expect(filaDelCarrito("Cemento gris")).toHaveTextContent("L 250.00")
+    expect(filaDelCarrito("Martillo de uña")).toHaveTextContent("L 180.00")
   })
 })
