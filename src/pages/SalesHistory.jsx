@@ -21,6 +21,13 @@ import { ProductContext } from "../context/contexts"
 import InvoiceTemplate from "../components/InvoiceTemplate"
 import DocumentPreviewModal from "../components/documents/DocumentPreviewModal"
 
+import EmptyState from "../components/crud/EmptyState"
+import PageHeader from "../components/crud/PageHeader"
+import SearchInput from "../components/crud/SearchInput"
+import StatusBadge from "../components/crud/StatusBadge"
+
+import { FaFileInvoiceDollar, FaSearch } from "react-icons/fa"
+
 import { formatMoney } from "../utils/format"
 
 
@@ -366,64 +373,32 @@ function SalesHistory() {
     }
   }
 
-  const getStatusBadge = (
-    sale
-  ) => {
-    if (
-      sale.status ===
-      "pagada"
-    ) {
+  const getStatusBadge = (sale) => {
+    if (sale.status === "pagada") {
       return (
-        <span className="badge badge-paid">
-          <span className="badge-dot" />
-          {isCreditSale(sale)
-            ? "Cancelada"
-            : "Pagada"}
-        </span>
+        <StatusBadge variante="paid">
+          {isCreditSale(sale) ? "Cancelada" : "Pagada"}
+        </StatusBadge>
       )
     }
 
-    if (
-      isOverdue(sale)
-    ) {
-      return (
-        <span className="badge badge-overdue">
-          <span className="badge-dot" />
-          Vencida
-        </span>
-      )
+    if (isOverdue(sale)) {
+      return <StatusBadge variante="overdue">Vencida</StatusBadge>
     }
 
-    return (
-      <span className="badge badge-credit">
-        <span className="badge-dot" />
-        Pendiente
-      </span>
-    )
+    return <StatusBadge variante="credit">Pendiente</StatusBadge>
   }
 
   return (
-    <div className="view active">
+    <div className="view active crud">
 
       {/* ENCABEZADO */}
-      <div className="view-header">
-        <div>
-          <h2>
-            Historial de facturas
-          </h2>
-
-          <p className="sub">
-            Consulta las ventas
-            registradas en el
-            sistema
-          </p>
-        </div>
-      </div>
+      <PageHeader descripcion="Consulta las ventas registradas en el sistema." />
 
       {/* RESUMEN */}
       <div className="dash-grid">
 
-        <div className="stat-card blue">
+        <div className="stat-card">
           <div className="label">
             Facturas
           </div>
@@ -437,7 +412,7 @@ function SalesHistory() {
           </div>
         </div>
 
-        <div className="stat-card teal">
+        <div className="stat-card ok">
           <div className="label">
             Ventas contado
           </div>
@@ -451,7 +426,7 @@ function SalesHistory() {
           </div>
         </div>
 
-        <div className="stat-card purple">
+        <div className="stat-card blue">
           <div className="label">
             Ventas crédito
           </div>
@@ -465,7 +440,7 @@ function SalesHistory() {
           </div>
         </div>
 
-        <div className="stat-card amber">
+        <div className="stat-card warn">
           <div className="label">
             Pendientes
           </div>
@@ -482,141 +457,53 @@ function SalesHistory() {
       </div>
 
       {/* TOTAL VENDIDO */}
-      <div
-        className="card card-pad"
-        style={{
-          marginBottom: 16,
-        }}
-      >
-        <div
-          style={{
-            display:
-              "flex",
-            alignItems:
-              "center",
-            justifyContent:
-              "space-between",
-            gap: 16,
-          }}
-        >
-          <div>
-            <span
-              style={{
-                display:
-                  "block",
-                fontSize: 12,
-                color:
-                  "var(--steel)",
-              }}
-            >
-              Total facturado
-            </span>
+      <div className="historial-totales">
+        <div className="historial-total">
+          <span className="historial-total-label">
+            Total facturado
+          </span>
 
-            <strong
-              style={{
-                fontSize: 24,
-              }}
-            >
-              {formatMoney(
-                totalSales,
-                currency
-              )}
-            </strong>
-          </div>
+          <strong className="historial-total-valor">
+            {formatMoney(totalSales, currency)}
+          </strong>
+        </div>
 
-          <div
-            style={{
-              textAlign:
-                "right",
-            }}
+        {/*
+          El saldo se pinta en ámbar solo cuando de verdad queda algo por
+          cobrar; en cero no hay nada que advertir.
+        */}
+        <div className="historial-total alineado-derecha">
+          <span className="historial-total-label">
+            Saldo por cobrar
+          </span>
+
+          <strong
+            className={
+              totalReceivable > 0
+                ? "historial-total-valor pendiente"
+                : "historial-total-valor saldado"
+            }
           >
-            <span
-              style={{
-                display:
-                  "block",
-                fontSize: 12,
-                color:
-                  "var(--steel)",
-              }}
-            >
-              Saldo por cobrar
-            </span>
-
-            <strong
-              style={{
-                fontSize: 24,
-                color:
-                  totalReceivable >
-                  0
-                    ? "var(--amber)"
-                    : "var(--teal)",
-              }}
-            >
-              {formatMoney(
-                totalReceivable,
-                currency
-              )}
-            </strong>
-          </div>
+            {formatMoney(totalReceivable, currency)}
+          </strong>
         </div>
       </div>
 
       {/* FILTROS */}
       <div className="toolbar">
 
-        <div className="search-box">
-
-          <svg
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          >
-            <circle
-              cx="11"
-              cy="11"
-              r="8"
-            />
-
-            <line
-              x1="21"
-              y1="21"
-              x2="16.65"
-              y2="16.65"
-            />
-          </svg>
-
-          <input
-            type="text"
-            placeholder="Buscar por cliente o número de factura..."
-            value={search}
-            onChange={(
-              event
-            ) =>
-              setSearch(
-                event
-                  .target
-                  .value
-              )
-            }
-          />
-
-        </div>
+        <SearchInput
+          value={search}
+          onChange={(event) => setSearch(event.target.value)}
+          placeholder="Buscar por cliente o número de factura..."
+          etiqueta="Buscar por cliente o número de factura"
+        />
 
         <select
           className="filter-select"
+          aria-label="Filtrar por tipo de pago"
           value={filter}
-          onChange={(
-            event
-          ) =>
-            setFilter(
-              event
-                .target
-                .value
-            )
-          }
+          onChange={(event) => setFilter(event.target.value)}
         >
           <option value="todas">
             Todas
@@ -635,18 +522,11 @@ function SalesHistory() {
 
       {/* LISTA */}
       {sales.length === 0 ? (
-        <div className="empty-state">
-
-          <strong>
-            No hay facturas
-            registradas
-          </strong>
-
-          Las ventas que generes
-          desde Facturar aparecerán
-          aquí.
-
-        </div>
+        <EmptyState
+          Icono={FaFileInvoiceDollar}
+          titulo="No hay facturas registradas"
+          descripcion="Las ventas que generes desde Facturar aparecerán aquí."
+        />
       ) : (
         <div
           className="card"
@@ -704,22 +584,13 @@ function SalesHistory() {
 
                       <div className="badges">
 
-                        {paymentType ===
-                        "credito" ? (
-                          <span className="badge badge-credit">
-                            <span className="badge-dot" />
-                            Crédito
-                          </span>
+                        {paymentType === "credito" ? (
+                          <StatusBadge variante="credit">Crédito</StatusBadge>
                         ) : (
-                          <span className="badge badge-paid">
-                            <span className="badge-dot" />
-                            Contado
-                          </span>
+                          <StatusBadge variante="paid">Contado</StatusBadge>
                         )}
 
-                        {getStatusBadge(
-                          sale
-                        )}
+                        {getStatusBadge(sale)}
 
                       </div>
 
@@ -837,15 +708,11 @@ function SalesHistory() {
 
           {filteredSales.length ===
             0 && (
-            <div className="empty-state">
-              <strong>
-                No se encontraron
-                facturas
-              </strong>
-
-              Cambia la búsqueda
-              o el filtro.
-            </div>
+            <EmptyState
+              Icono={FaSearch}
+              titulo="No se encontraron facturas"
+              descripcion="Cambia la búsqueda o el filtro."
+            />
           )}
 
         </div>
