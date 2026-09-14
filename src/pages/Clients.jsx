@@ -1,6 +1,10 @@
-﻿import { useContext, useMemo, useState } from "react"
+import { useContext, useMemo, useState } from "react"
+import { FaPen, FaPlus, FaSearch, FaTrash, FaUsers } from "react-icons/fa"
 import Swal from "sweetalert2"
 import { ClientsContext } from "../context/contexts"
+import EmptyState from "../components/crud/EmptyState"
+import PageHeader from "../components/crud/PageHeader"
+import SearchInput from "../components/crud/SearchInput"
 
 const emptyForm = { id: null, name: "", rtn: "", phone: "", address: "", email: "" }
 
@@ -53,31 +57,63 @@ function Clients() {
   }
 
   return (
-    <div className="view active">
-      <div className="view-header">
-        <div><h2>Clientes</h2><p className="sub">Gestiona tus clientes y su información de contacto</p></div>
-        <button className="btn btn-primary btn-lg" onClick={openNew}>+ Nuevo cliente</button>
-      </div>
-      {cargando && <div className="empty-state">Cargando clientes…</div>}
+    <div className="view active crud">
+      <PageHeader descripcion="Gestiona tus clientes y su información de contacto.">
+        <button className="btn btn-primary" onClick={openNew}><FaPlus aria-hidden="true" />Nuevo cliente</button>
+      </PageHeader>
+
+      {cargando && <p className="crud-cargando" role="status">Cargando clientes…</p>}
 
       <div className="toolbar">
-        <div className="search-box"><span style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)" }}>⌕</span><input placeholder="Buscar cliente..." value={search} onChange={(e) => setSearch(e.target.value)} /></div>
+        <SearchInput
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Buscar cliente..."
+          etiqueta="Buscar por nombre, RTN, teléfono o correo"
+        />
       </div>
 
       <div className="table-wrap">
         <table>
-          <thead><tr><th>Cliente</th><th>RTN</th><th>Teléfono</th><th>Correo</th><th></th></tr></thead>
+          <thead>
+            <tr>
+              <th scope="col">Cliente</th>
+              <th scope="col">RTN</th>
+              <th scope="col">Teléfono</th>
+              <th scope="col">Correo</th>
+              <th></th>
+            </tr>
+          </thead>
+
           <tbody>
             {filteredClients.map((c) => (
               <tr key={c.id}>
                 <td><span className="product-name">{c.name}</span><span className="product-cat">{c.address || "—"}</span></td>
-                <td>{c.rtn || "—"}</td><td>{c.phone || "—"}</td><td>{c.email || "—"}</td>
-                <td><div className="row-actions"><button className="btn btn-secondary btn-sm" onClick={() => openEdit(c)}>Editar</button><button className="btn btn-danger btn-sm" onClick={() => remove(c.id)}>Eliminar</button></div></td>
+                <td><span className="celda-codigo">{c.rtn || "—"}</span></td>
+                <td><span className="celda-codigo">{c.phone || "—"}</span></td>
+                <td className="celda-secundaria">{c.email || "—"}</td>
+                <td><div className="row-actions">
+                  <button className="btn btn-secondary btn-sm" onClick={() => openEdit(c)}><FaPen aria-hidden="true" />Editar</button>
+                  <button className="btn btn-danger btn-sm" onClick={() => remove(c.id)}><FaTrash aria-hidden="true" />Eliminar</button>
+                </div></td>
               </tr>
             ))}
           </tbody>
         </table>
-        {filteredClients.length === 0 && <div className="empty-state"><strong>{clients.length ? "No se encontraron resultados" : "No hay clientes todavía"}</strong></div>}
+
+        {filteredClients.length === 0 && (clients.length ? (
+          <EmptyState
+            Icono={FaSearch}
+            titulo="No se encontraron resultados"
+            descripcion="Prueba con otro nombre, RTN, teléfono o correo."
+          />
+        ) : (
+          <EmptyState
+            Icono={FaUsers}
+            titulo="No hay clientes todavía"
+            descripcion="Usa «Nuevo cliente» para registrar el primero."
+          />
+        ))}
       </div>
 
       {modalOpen && <div className="modal-overlay open" onMouseDown={(e) => e.target === e.currentTarget && setModalOpen(false)}>

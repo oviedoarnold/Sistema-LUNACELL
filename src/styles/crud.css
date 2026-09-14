@@ -1,0 +1,348 @@
+/*
+  Pantallas administrativas: inventario, clientes, proveedores,
+  ubicaciones e historial.
+
+  Todo lo de aquí cuelga de .crud, la clase que llevan solo esas cinco
+  pantallas. POS, cotizaciones y configuración comparten varias de las
+  mismas clases sueltas (.toolbar, .badge, .table-wrap) y no entran en
+  esta fase: acotar evita cambiarlas sin querer.
+
+  Los colores salen de los tokens. Aquí no se define ninguno.
+*/
+
+/* ── ENCABEZADO ──────────────────────────────────────────── */
+
+/*
+  Sin título: lo pone la barra superior. Queda la descripción a la
+  izquierda y la acción principal a la derecha.
+*/
+.crud-encabezado {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  flex-wrap: wrap;
+  margin-bottom: var(--space-5);
+}
+
+.crud-descripcion {
+  margin: 0;
+  font-size: 14px;
+  color: var(--text-muted);
+  max-width: 65ch;
+}
+
+.crud-acciones {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+.crud-cargando {
+  margin: 0 0 var(--space-4);
+  font-size: 14px;
+  color: var(--text-muted);
+}
+
+/* ── BARRA DE HERRAMIENTAS ───────────────────────────────── */
+
+/*
+  Búsqueda a la izquierda, filtros a su lado. En pantallas estrechas
+  bajan en lugar de encogerse hasta ser incómodos.
+*/
+.crud .toolbar {
+  gap: var(--space-3);
+  justify-content: flex-start;
+  margin-bottom: var(--space-4);
+}
+
+.crud .search-box {
+  flex: 1 1 240px;
+  max-width: 360px;
+}
+
+.crud .search-box input {
+  padding: 9px 12px 9px 36px;
+  font-size: 14px;
+  border-radius: var(--radius-sm);
+  border-color: var(--border-strong);
+}
+
+.crud .search-box input:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 1px;
+}
+
+.crud .search-box svg {
+  width: 14px;
+  height: 14px;
+  color: var(--text-muted);
+}
+
+.crud .filter-select {
+  padding: 9px 12px;
+  font-size: 14px;
+  border-radius: var(--radius-sm);
+  border-color: var(--border-strong);
+}
+
+/* ── TABLA ───────────────────────────────────────────────── */
+
+/*
+  Densidad de sistema administrativo: filas compactas y legibles. La
+  tabla se desplaza dentro de su caja; la página nunca lo hace.
+*/
+.crud .table-wrap {
+  border-radius: var(--radius-md);
+}
+
+.crud thead th {
+  padding: 10px 14px;
+  font-size: 10.5px;
+  letter-spacing: 0.6px;
+}
+
+.crud tbody td {
+  padding: 9px 14px;
+  font-size: 14px;
+}
+
+.crud tbody tr:hover {
+  background: var(--table-hover);
+}
+
+.crud .product-name {
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.crud .product-cat {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+/* El código de un producto se lee mejor en monoespaciado. */
+.crud .celda-codigo {
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  color: var(--text-secondary);
+}
+
+.crud .celda-secundaria {
+  color: var(--text-muted);
+}
+
+/*
+  Ocho columnas no caben en un móvil. La tabla se desplaza dentro de su
+  caja con una anchura mínima que deja respirar a cada columna; sin ella
+  los importes se parten en dos líneas y dejan de leerse de un vistazo.
+*/
+.crud table {
+  min-width: 720px;
+}
+
+.crud td.num,
+.crud th.num,
+.crud .celda-codigo {
+  white-space: nowrap;
+}
+
+/* La miniatura no se estira ni se aplasta con el resto de la fila. */
+.crud .celda-miniatura {
+  width: 56px;
+  min-width: 56px;
+}
+
+/* ── ACCIONES DE FILA ────────────────────────────────────── */
+
+.crud .row-actions {
+  gap: var(--space-2);
+}
+
+.crud .row-actions .btn {
+  padding: 6px 10px;
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+.crud .row-actions .btn svg {
+  width: 12px;
+  height: 12px;
+}
+
+.crud .btn:focus-visible,
+.crud .icon-btn:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+/* ── DISTINTIVOS ─────────────────────────────────────────── */
+
+.crud .badge {
+  font-size: 11.5px;
+  padding: 3px 9px;
+}
+
+.crud .badge svg {
+  width: 10px;
+  height: 10px;
+}
+
+/*
+  Variante neutra, para clasificaciones que no son un estado bueno ni
+  malo —el tipo de una ubicación, por ejemplo—. Gris sobre gris claro:
+  7.20:1, muy por encima del mínimo.
+*/
+.badge-neutral {
+  background: var(--surface-secondary);
+  color: var(--text-secondary);
+}
+
+/*
+  Aclaración al pie de una tabla: por qué se ve algo que podría extrañar.
+*/
+.crud-nota {
+  margin: var(--space-3) 0 0;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+/* ── ESTADO VACÍO ────────────────────────────────────────── */
+
+.crud .empty-state {
+  padding: var(--space-7) var(--space-5);
+}
+
+.empty-state-texto {
+  display: block;
+  margin-top: 2px;
+  font-size: 13.5px;
+  color: var(--text-muted);
+}
+
+.empty-state-accion {
+  margin-top: var(--space-4);
+}
+
+/* ── TABLETA Y MÓVIL ─────────────────────────────────────── */
+
+@media (max-width: 720px) {
+  .crud-encabezado {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  /*
+    A este ancho la acción principal ocupa el ancho disponible: es el
+    botón que más se usa y conviene que no quede diminuto.
+  */
+  .crud-acciones,
+  .crud-acciones .btn {
+    width: 100%;
+  }
+
+  .crud .search-box {
+    max-width: none;
+  }
+
+  .crud .filter-select {
+    flex: 1 1 auto;
+  }
+}
+
+/* ── HISTORIAL DE FACTURAS ───────────────────────────────── */
+
+/*
+  El historial ya tenía tarjetas de resumen con la clase .stat-card y
+  varias pruebas la usan para encontrar cada cifra. Se conserva el nombre
+  y se adapta lo de dentro al mismo lenguaje que el panel: superficie
+  blanca, borde suave y la cifra en tipografía de titulares.
+*/
+.crud .dash-grid {
+  grid-template-columns: repeat(4, 1fr);
+  gap: var(--space-4);
+  margin-bottom: var(--space-4);
+}
+
+.crud .stat-card {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
+  padding: var(--space-4);
+  gap: var(--space-1);
+}
+
+.crud .stat-card .label {
+  font-size: 11px;
+  letter-spacing: 0.6px;
+  color: var(--text-muted);
+}
+
+.crud .stat-card .value {
+  font-size: 26px;
+}
+
+.crud .stat-card .sub-val {
+  font-size: 12.5px;
+  color: var(--text-muted);
+}
+
+/* Los dos totales de cabecera, en una sola tarjeta. */
+.historial-totales {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  flex-wrap: wrap;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
+  padding: var(--space-4) var(--space-5);
+  margin-bottom: var(--space-4);
+}
+
+.historial-total-label {
+  display: block;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.historial-total-valor {
+  font-family: var(--font-display);
+  font-size: 24px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.historial-total-valor.pendiente { color: var(--warning); }
+.historial-total-valor.saldado   { color: var(--success); }
+
+.historial-total.alineado-derecha {
+  text-align: right;
+}
+
+@media (max-width: 1100px) {
+  .crud .dash-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 560px) {
+  .crud .dash-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .historial-totales {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .historial-total.alineado-derecha {
+    text-align: left;
+  }
+}
