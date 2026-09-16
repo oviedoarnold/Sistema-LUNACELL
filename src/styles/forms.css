@@ -1,0 +1,155 @@
+/*
+  Campos de formulario.
+
+  Estas reglas afinan el .field que ya existía en lunacell.css: mismo
+  nombre de clase, mismo marcado, lo que cambia es el acabado. Se tocan
+  sin acotar a propósito —un campo debe verse igual en el inventario que
+  en la configuración—, pero solo se redefine lo necesario: espaciado,
+  foco, deshabilitado y error.
+
+  Los colores salen de los tokens. Aquí no se define ninguno.
+*/
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.field.full {
+  grid-column: 1 / -1;
+}
+
+.field label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.field input,
+.field select,
+.field textarea {
+  padding: 9px 11px;
+  font-size: 14px;
+  border-radius: var(--radius-sm);
+  border: 1.5px solid var(--border-strong);
+  background: var(--surface);
+  color: var(--text-primary);
+  transition: border-color 0.12s, box-shadow 0.12s;
+}
+
+.field textarea {
+  resize: vertical;
+  min-height: 72px;
+}
+
+.field input:hover:not(:disabled),
+.field select:hover:not(:disabled),
+.field textarea:hover:not(:disabled) {
+  border-color: var(--text-muted);
+}
+
+/*
+  El foco no puede depender solo del borde: cambiar un gris por un
+  dorado es una diferencia demasiado floja para verse de un vistazo.
+  Va acompañado de un anillo.
+*/
+.field input:focus-visible,
+.field select:focus-visible,
+.field textarea:focus-visible {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px var(--primary-soft);
+}
+
+.field input:disabled,
+.field select:disabled,
+.field textarea:disabled {
+  background: var(--surface-secondary);
+  color: var(--text-muted);
+  border-color: var(--border);
+  cursor: not-allowed;
+}
+
+.field input.error,
+.field select.error,
+.field textarea.error {
+  border-color: var(--danger);
+}
+
+.field input.error:focus-visible,
+.field select.error:focus-visible,
+.field textarea.error:focus-visible {
+  box-shadow: 0 0 0 3px var(--danger-soft);
+}
+
+.field .hint {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+/*
+  El mensaje de error se oculta por omisión y se enseña con .show: así lo
+  usaban ya varias pantallas y conviene no cambiarles el contrato.
+*/
+.field .error-msg {
+  display: none;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--danger);
+}
+
+.field .error-msg.show {
+  display: block;
+}
+
+/* ── AVISO DE FORMULARIO ─────────────────────────────────── */
+
+/*
+  Antes los errores de un formulario se pintaban con .login-error, la
+  clase de la pantalla de acceso. Este es el mismo aviso con nombre
+  propio, para que cambiar uno no toque el otro.
+*/
+.form-aviso {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  margin-top: var(--space-4);
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  background: var(--danger-soft);
+  color: var(--danger);
+  border: 1px solid var(--danger);
+  font-size: 13.5px;
+  font-weight: 600;
+}
+
+.form-aviso svg {
+  width: 14px;
+  height: 14px;
+  flex: none;
+  margin-top: 2px;
+}
+
+/* ── REJILLA ─────────────────────────────────────────────── */
+
+.form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: var(--space-4);
+}
+
+.form-grid.cols-3 {
+  grid-template-columns: repeat(3, 1fr);
+}
+
+/*
+  El apilado en una columna ya lo hace una regla de lunacell.css a 880px,
+  que además es más generosa. Aquí solo se añade el caso de tres columnas,
+  que aquella no contempla.
+*/
+@media (max-width: 880px) {
+  .form-grid.cols-3 {
+    grid-template-columns: 1fr;
+  }
+}

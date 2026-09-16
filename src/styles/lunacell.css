@@ -7,6 +7,9 @@
 @import "./shell.css";
 @import "./panel.css";
 @import "./crud.css";
+@import "./forms.css";
+@import "./modals.css";
+@import "./config.css";
 *{box-sizing:border-box;} html{scroll-behavior:smooth;}
 body{margin:0;font-family:var(--font-body);background:var(--cream);color:var(--charcoal);font-size:17px;line-height:1.5;-webkit-font-smoothing:antialiased;}
 h1,h2,h3{font-family:var(--font-display);font-weight:600;letter-spacing:.2px;margin:0;}
@@ -116,30 +119,13 @@ td.num,th.num{text-align:right;font-family:var(--font-mono);}
 .role-tag{display:inline-block;padding:2px 8px;border-radius:20px;font-size:11px;font-weight:700;font-family:var(--font-mono);text-transform:uppercase;letter-spacing:.4px;} 
 .role-tag.admin{background:var(--orange-light);color:var(--orange-dark);} 
 .role-tag.vendedor{background:var(--blue-light);color:var(--blue);} 
-/* ── FORMS ── */
-.form-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:14px;} 
-.form-grid.cols-3{grid-template-columns:repeat(3,1fr);} 
-.field{display:flex;flex-direction:column;gap:5px;} 
-.field.full{grid-column:1/-1;} 
-.field label{font-size:13.5px;font-weight:600;color:var(--steel);} 
-.field input,.field select,.field textarea{padding:11px 12px;border-radius:9px;border:1.5px solid var(--line-strong);background:#fff;color:var(--charcoal);} 
-.field input:focus,.field select:focus,.field textarea:focus{border-color:var(--orange);} 
-.field input.error,.field select.error{border-color:var(--red);} 
-.field .hint{font-size:12px;color:var(--steel);} 
-.field .error-msg{font-size:12px;color:var(--red);display:none;} 
-.field .error-msg.show{display:block;} 
-.field-prefix{position:relative;} 
-.field-prefix span{position:absolute;left:12px;top:50%;transform:translateY(-50%);color:var(--steel);font-family:var(--font-mono);} 
-.field-prefix input{padding-left:36px;} 
-/* ── MODAL ── */
-.modal-overlay{position:fixed;inset:0;background:rgba(35,39,42,.55);display:none;align-items:flex-start;justify-content:center;padding:36px 16px;overflow-y:auto;z-index:100;} 
-.modal-overlay.open{display:flex;animation:overlayIn .18s ease;} 
-.modal{background:#fff;border-radius:var(--radius-lg);box-shadow:var(--shadow-lg);width:100%;max-width:540px;animation:modalIn .22s cubic-bezier(.2,.8,.3,1);} 
-.modal.modal-wide{max-width:680px;} .modal.modal-lg{max-width:780px;} 
-.modal-head{display:flex;align-items:center;justify-content:space-between;padding:18px 22px;border-bottom:1px solid var(--line);} 
-.modal-head h3{font-size:18px;} 
-.modal-body{padding:22px;max-height:70vh;overflow-y:auto;} 
-.modal-foot{display:flex;justify-content:flex-end;gap:9px;padding:16px 22px;border-top:1px solid var(--line);flex-wrap:wrap;} 
+/* Los campos viven ahora en forms.css y las ventanas en modals.css.
+   Se movieron enteros: un @import se carga antes que este archivo, así
+   que dejar aquí una copia de esas reglas las haría ganar por orden y
+   anularía la hoja nueva sin que se notara. */
+.field-prefix{position:relative;}
+.field-prefix span{position:absolute;left:12px;top:50%;transform:translateY(-50%);color:var(--steel);font-family:var(--font-mono);}
+.field-prefix input{padding-left:36px;}
 /* ── BILL / FACTURAR ── */
 .bill-grid{display:grid;grid-template-columns:1.3fr 1fr;gap:18px;align-items:start;} 
 .picker-list{max-height:480px;overflow-y:auto;display:flex;flex-direction:column;gap:9px;padding-right:3px;} 
