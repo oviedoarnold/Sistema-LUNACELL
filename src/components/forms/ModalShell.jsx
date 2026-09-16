@@ -72,8 +72,16 @@ function ModalShell({
   }, [onCerrar])
 
   return (
+    /*
+      La capa es un fondo, no un control: role="presentation" lo dice.
+      Pulsarla es un atajo de ratón, no la única forma de salir —la X y
+      Escape lo cubren—, así que no necesita ser alcanzable por teclado
+      ni anunciarse. El rol no lo heredan sus hijos: el diálogo de dentro
+      conserva el suyo.
+    */
     <div
       className="modal-overlay open"
+      role="presentation"
       onMouseDown={(evento) => {
         if (cerrarAlPulsarFuera && evento.target === evento.currentTarget) {
           onCerrar()
