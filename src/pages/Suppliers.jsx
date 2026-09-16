@@ -6,6 +6,8 @@ import { ProductContext } from "../context/contexts"
 import EmptyState from "../components/crud/EmptyState"
 import PageHeader from "../components/crud/PageHeader"
 import SearchInput from "../components/crud/SearchInput"
+import FormField from "../components/forms/FormField"
+import ModalShell from "../components/forms/ModalShell"
 
 const emptyForm = { id: null, name: "", contact: "", phone: "", email: "", notes: "" }
 
@@ -123,13 +125,46 @@ function Suppliers() {
         ))}
       </div>
 
-      {modalOpen && <div className="modal-overlay open"><div className="modal"><div className="modal-head"><h3>{form.id ? "Editar proveedor" : "Nuevo proveedor"}</h3><button className="icon-btn" aria-label="Cerrar" onClick={() => setModalOpen(false)}>✕</button></div><div className="modal-body"><div className="form-grid">
-        <div className="field full"><label htmlFor="suppliers-proveedor">Proveedor</label><input id="suppliers-proveedor" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></div>
-        <div className="field"><label htmlFor="suppliers-contacto">Contacto</label><input id="suppliers-contacto" value={form.contact} onChange={(e) => setForm({ ...form, contact: e.target.value })} /></div>
-        <div className="field"><label htmlFor="suppliers-telefono">Teléfono</label><input id="suppliers-telefono" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} /></div>
-        <div className="field full"><label htmlFor="suppliers-correo">Correo</label><input id="suppliers-correo" type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} /></div>
-        <div className="field full"><label htmlFor="suppliers-suministra-notas">Suministra / Notas</label><textarea id="suppliers-suministra-notas" rows="3" value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} /></div>
-      </div></div><div className="modal-foot"><button className="btn btn-primary" onClick={save} disabled={guardando}>Guardar proveedor</button><button className="btn btn-secondary" onClick={() => setModalOpen(false)}>Cancelar</button></div></div></div>}
+      {modalOpen && (
+        <ModalShell
+          titulo={form.id ? "Editar proveedor" : "Nuevo proveedor"}
+          onCerrar={() => setModalOpen(false)}
+          acciones={
+            <>
+              <button type="button" className="btn btn-secondary" onClick={() => setModalOpen(false)}>Cancelar</button>
+              <button type="button" className="btn btn-primary" onClick={save} disabled={guardando}>
+                {guardando ? "Guardando…" : "Guardar proveedor"}
+              </button>
+            </>
+          }
+        >
+          <div className="form-grid">
+            <FormField etiqueta="Proveedor" ancho="full">
+              <input id="suppliers-proveedor" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
+            </FormField>
+
+            <FormField etiqueta="Contacto">
+              <input id="suppliers-contacto" value={form.contact} onChange={(e) => setForm({ ...form, contact: e.target.value })} />
+            </FormField>
+
+            <FormField etiqueta="Teléfono">
+              <input id="suppliers-telefono" type="tel" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} />
+            </FormField>
+
+            <FormField etiqueta="Correo" ancho="full">
+              <input id="suppliers-correo" type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
+            </FormField>
+
+            <FormField
+              etiqueta="Suministra / Notas"
+              ancho="full"
+              ayuda="Qué productos entrega o cualquier detalle que convenga recordar."
+            >
+              <textarea id="suppliers-suministra-notas" rows="3" value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} />
+            </FormField>
+          </div>
+        </ModalShell>
+      )}
     </div>
   )
 }
