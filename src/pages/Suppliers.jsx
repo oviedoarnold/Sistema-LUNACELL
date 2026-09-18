@@ -6,6 +6,7 @@ import { ProductContext } from "../context/contexts"
 import EmptyState from "../components/crud/EmptyState"
 import PageHeader from "../components/crud/PageHeader"
 import SearchInput from "../components/crud/SearchInput"
+import { coincideBusqueda } from "../utils/texto"
 import FormField from "../components/forms/FormField"
 import ModalShell from "../components/forms/ModalShell"
 
@@ -30,8 +31,7 @@ function Suppliers() {
   const [guardando, setGuardando] = useState(false)
 
   const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase()
-    return suppliers.filter((s) => `${s.name} ${s.contact || ""}`.toLowerCase().includes(q))
+    return suppliers.filter((s) => coincideBusqueda(`${s.name} ${s.contact || ""}`, search))
   }, [suppliers, search])
 
   const openNew = () => { setForm(emptyForm); setModalOpen(true) }

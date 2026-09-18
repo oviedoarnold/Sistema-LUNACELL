@@ -1,3 +1,5 @@
+import { coincideBusqueda } from "./texto"
+
 /*
   Reglas de las ubicaciones que no dependen de React ni de la base.
 
@@ -43,14 +45,13 @@ export function getLocationTypeLabel(type) {
 }
 
 export function filterLocationsBySearchText(locations, searchText) {
-  const query = String(searchText || "").trim().toLowerCase()
-
   return (locations || []).filter((location) =>
-    [location.name, getLocationTypeLabel(location.type)]
-      .filter(Boolean)
-      .join(" ")
-      .toLowerCase()
-      .includes(query)
+    coincideBusqueda(
+      [location.name, getLocationTypeLabel(location.type)]
+        .filter(Boolean)
+        .join(" "),
+      searchText
+    )
   )
 }
 
