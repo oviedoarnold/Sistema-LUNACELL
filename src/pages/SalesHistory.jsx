@@ -25,6 +25,8 @@ import EmptyState from "../components/crud/EmptyState"
 import PageHeader from "../components/crud/PageHeader"
 import SearchInput from "../components/crud/SearchInput"
 import StatusBadge from "../components/crud/StatusBadge"
+import FormField from "../components/forms/FormField"
+import ModalShell from "../components/forms/ModalShell"
 
 import { FaFileInvoiceDollar, FaSearch } from "react-icons/fa"
 
@@ -719,354 +721,129 @@ function SalesHistory() {
       )}
 
       {/* ABONOS */}
-      <div
-        className={`modal-overlay ${
-          payingSale ? "open" : ""
-        }`}
-        onClick={
-          closePaymentModal
-        }
-      >
-        {payingSale && (
-          <div
-            className="modal"
-            onClick={(event) =>
-              event.stopPropagation()
-            }
-          >
-            <div className="modal-head">
-              <h3>
-                Abonar a{" "}
-                {
-                  payingSale.invoiceNumber
-                }
-              </h3>
-
+      {payingSale && (
+        <ModalShell
+          titulo={`Abonar a ${payingSale.invoiceNumber}`}
+          onCerrar={closePaymentModal}
+          cerrarAlPulsarFuera
+          acciones={
+            <>
               <button
                 type="button"
-                className="btn btn-ghost btn-sm"
-                onClick={
-                  closePaymentModal
-                }
+                className="btn btn-secondary"
+                onClick={closePaymentModal}
               >
-                Cerrar
+                Cancelar
               </button>
+
+              {/*
+                El botón vive en el pie de la ventana y el formulario en el
+                cuerpo: form="..." los enlaza sin sacar el submit de su sitio.
+              */}
+              <button
+                type="submit"
+                form="form-abono"
+                className="btn btn-primary"
+                disabled={abonando}
+              >
+                {abonando ? "Registrando…" : "Registrar abono"}
+              </button>
+            </>
+          }
+        >
+          <form id="form-abono" onSubmit={submitPayment}>
+            <div className="modal-resumen">
+              <div>
+                <span className="modal-resumen-label">Total</span>
+                <strong className="modal-resumen-valor">
+                  {formatMoney(payingSale.total, currency)}
+                </strong>
+              </div>
+
+              <div>
+                <span className="modal-resumen-label">Abonado</span>
+                <strong className="modal-resumen-valor abonado">
+                  {formatMoney(getSalePaid(payingSale), currency)}
+                </strong>
+              </div>
+
+              <div>
+                <span className="modal-resumen-label">Saldo</span>
+                <strong className="modal-resumen-valor saldo">
+                  {formatMoney(payingBalance, currency)}
+                </strong>
+              </div>
             </div>
 
-            <form
-              onSubmit={
-                submitPayment
-              }
+            <FormField
+              etiqueta="Monto del abono"
+              ayuda={`Máximo ${formatMoney(payingBalance, currency)}`}
+              error={paymentError || null}
             >
-              <div className="modal-body">
+              <input
+                type="number"
+                step="0.01"
+                min="0.01"
+                max={payingBalance}
+                autoFocus
+                placeholder="0.00"
+                value={paymentAmount}
+                onChange={(event) => {
+                  setPaymentAmount(event.target.value)
+                  setPaymentError("")
+                }}
+              />
+            </FormField>
 
-                <div
-                  className="card card-pad"
-                  style={{
-                    display:
-                      "grid",
-                    gridTemplateColumns:
-                      "repeat(3, 1fr)",
-                    gap: 12,
-                    marginBottom: 18,
-                  }}
-                >
-                  <div>
-                    <span
-                      style={{
-                        display:
-                          "block",
-                        fontSize: 11.5,
-                        color:
-                          "var(--steel)",
-                      }}
-                    >
-                      Total
-                    </span>
+            <button
+              type="button"
+              className="btn btn-secondary btn-sm abono-atajo"
+              onClick={() => {
+                setPaymentAmount(String(payingBalance))
+                setPaymentError("")
+              }}
+            >
+              Pagar el saldo completo
+            </button>
 
-                    <strong>
-                      {formatMoney(
-                        payingSale.total,
-                        currency
-                      )}
-                    </strong>
-                  </div>
+            <FormField etiqueta="Nota (opcional)">
+              <input
+                type="text"
+                placeholder="Efectivo, transferencia, recibo #..."
+                value={paymentNote}
+                onChange={(event) => setPaymentNote(event.target.value)}
+              />
+            </FormField>
 
-                  <div>
-                    <span
-                      style={{
-                        display:
-                          "block",
-                        fontSize: 11.5,
-                        color:
-                          "var(--steel)",
-                      }}
-                    >
-                      Abonado
-                    </span>
+            {getSalePayments(payingSale).length > 0 && (
+              <div className="abonos-registrados">
+                <h4 className="abonos-titulo">Abonos registrados</h4>
 
-                    <strong
-                      style={{
-                        color:
-                          "var(--teal)",
-                      }}
-                    >
-                      {formatMoney(
-                        getSalePaid(
-                          payingSale
-                        ),
-                        currency
-                      )}
-                    </strong>
-                  </div>
+                {getSalePayments(payingSale).map((payment) => (
+                  <div className="abono-fila" key={payment.id}>
+                    <div>
+                      <b>{formatMoney(payment.amount, currency)}</b>
 
-                  <div>
-                    <span
-                      style={{
-                        display:
-                          "block",
-                        fontSize: 11.5,
-                        color:
-                          "var(--steel)",
-                      }}
-                    >
-                      Saldo
-                    </span>
-
-                    <strong
-                      style={{
-                        color:
-                          "var(--amber)",
-                      }}
-                    >
-                      {formatMoney(
-                        payingBalance,
-                        currency
-                      )}
-                    </strong>
-                  </div>
-                </div>
-
-                <div className="field">
-                  <label htmlFor="saleshistory-monto-del-abono">
-                    Monto del abono
-                  </label>
-
-                  <input id="saleshistory-monto-del-abono"
-                    type="number"
-                    step="0.01"
-                    min="0.01"
-                    max={
-                      payingBalance
-                    }
-                    autoFocus
-                    placeholder="0.00"
-                    value={
-                      paymentAmount
-                    }
-                    onChange={(
-                      event
-                    ) => {
-                      setPaymentAmount(
-                        event
-                          .target
-                          .value
-                      )
-
-                      setPaymentError(
-                        ""
-                      )
-                    }}
-                  />
-
-                  <span className="hint">
-                    Máximo{" "}
-                    {formatMoney(
-                      payingBalance,
-                      currency
-                    )}
-                  </span>
-                </div>
-
-                <button
-                  type="button"
-                  className="btn btn-secondary btn-sm"
-                  style={{
-                    marginTop: 8,
-                  }}
-                  onClick={() => {
-                    setPaymentAmount(
-                      String(
-                        payingBalance
-                      )
-                    )
-
-                    setPaymentError(
-                      ""
-                    )
-                  }}
-                >
-                  Pagar el saldo completo
-                </button>
-
-                <div
-                  className="field"
-                  style={{
-                    marginTop: 16,
-                  }}
-                >
-                  <label htmlFor="saleshistory-nota-opcional">
-                    Nota (opcional)
-                  </label>
-
-                  <input id="saleshistory-nota-opcional"
-                    type="text"
-                    placeholder="Efectivo, transferencia, recibo #..."
-                    value={
-                      paymentNote
-                    }
-                    onChange={(
-                      event
-                    ) =>
-                      setPaymentNote(
-                        event
-                          .target
-                          .value
-                      )
-                    }
-                  />
-                </div>
-
-                {paymentError && (
-                  <div
-                    className="login-error show"
-                    style={{
-                      marginTop: 14,
-                    }}
-                  >
-                    {paymentError}
-                  </div>
-                )}
-
-                {getSalePayments(
-                  payingSale
-                ).length > 0 && (
-                  <div
-                    style={{
-                      marginTop: 22,
-                    }}
-                  >
-                    <div
-                      style={{
-                        fontSize: 12,
-                        fontFamily:
-                          "var(--font-mono)",
-                        textTransform:
-                          "uppercase",
-                        letterSpacing:
-                          ".5px",
-                        color:
-                          "var(--steel)",
-                        marginBottom: 9,
-                      }}
-                    >
-                      Abonos registrados
+                      <span className="abono-detalle">
+                        {payment.date}
+                        {payment.note ? ` · ${payment.note}` : ""}
+                      </span>
                     </div>
 
-                    {getSalePayments(
-                      payingSale
-                    ).map(
-                      (payment) => (
-                        <div
-                          key={
-                            payment.id
-                          }
-                          style={{
-                            display:
-                              "flex",
-                            alignItems:
-                              "center",
-                            justifyContent:
-                              "space-between",
-                            gap: 10,
-                            padding:
-                              "9px 0",
-                            borderTop:
-                              "1px solid var(--line)",
-                          }}
-                        >
-                          <div>
-                            <b>
-                              {formatMoney(
-                                payment.amount,
-                                currency
-                              )}
-                            </b>
-
-                            <span
-                              style={{
-                                display:
-                                  "block",
-                                fontSize: 12,
-                                color:
-                                  "var(--steel)",
-                              }}
-                            >
-                              {
-                                payment.date
-                              }
-
-                              {payment.note
-                                ? ` · ${payment.note}`
-                                : ""}
-                            </span>
-                          </div>
-
-                          <button
-                            type="button"
-                            className="btn btn-danger btn-sm"
-                            onClick={() =>
-                              removePayment(
-                                payingSale,
-                                payment
-                              )
-                            }
-                          >
-                            Eliminar
-                          </button>
-                        </div>
-                      )
-                    )}
+                    <button
+                      type="button"
+                      className="btn btn-danger btn-sm"
+                      onClick={() => removePayment(payingSale, payment)}
+                    >
+                      Eliminar
+                    </button>
                   </div>
-                )}
-
+                ))}
               </div>
-
-              <div className="modal-foot">
-                <button
-                  type="button"
-                  className="btn btn-secondary"
-                  onClick={
-                    closePaymentModal
-                  }
-                >
-                  Cancelar
-                </button>
-
-                <button
-                  type="submit"
-                  className="btn btn-primary"
-                  disabled={abonando}
-                >
-                  {abonando
-                    ? "Registrando…"
-                    : "Registrar abono"}
-                </button>
-              </div>
-            </form>
-          </div>
-        )}
-      </div>
+            )}
+          </form>
+        </ModalShell>
+      )}
 
       {/* FACTURA */}
       <DocumentPreviewModal

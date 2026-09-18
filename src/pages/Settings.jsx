@@ -9,6 +9,11 @@ import { ProductContext } from "../context/contexts"
 import { SalesContext } from "../context/contexts"
 import { useAuth } from "../hooks/useAuth"
 
+import { FaPlus } from "react-icons/fa"
+
+import PageHeader from "../components/crud/PageHeader"
+import ModalShell from "../components/forms/ModalShell"
+
 import {
   FISCAL_VACIO,
   getFiscalStatus,
@@ -655,50 +660,28 @@ function Settings() {
   }
 
   return (
-    <div className="view active">
+    <div className="view active config">
 
       {/* =====================================
           ENCABEZADO
       ====================================== */}
 
-      <div className="view-header">
-        <div>
-          <h2>
-            Configuración
-          </h2>
-
-          <p className="sub">
-            Datos de tu
-            empresa y
-            administración de
-            usuarios
-          </p>
-        </div>
-      </div>
+      <PageHeader descripcion="Datos de tu empresa y administración de usuarios." />
 
       {/* =====================================
           DATOS DE LA FERRETERÍA
       ====================================== */}
 
-      <div className="card card-pad">
+      <section className="config-card" aria-labelledby="config-empresa">
 
         <div className="config-section">
 
-          <h3>
-            Datos de la
-            empresa
-          </h3>
+          <h2 className="config-titulo" id="config-empresa">
+            Datos de la empresa
+          </h2>
 
-          <p
-            className="sub"
-            style={{
-              marginBottom: 18,
-            }}
-          >
-            Esta información
-            aparece en las
-            facturas y
-            cotizaciones.
+          <p className="config-descripcion">
+            Esta información aparece en las facturas y cotizaciones.
           </p>
 
           <form
@@ -805,58 +788,25 @@ function Settings() {
             </div>
 
             {/* DATOS FISCALES */}
-            <div
-              style={{
-                marginTop: 26,
-                paddingTop: 18,
-                borderTop:
-                  "1px solid var(--line)",
-              }}
-            >
-              <h3
-                style={{
-                  fontSize: 18,
-                  marginBottom: 4,
-                }}
-              >
+            <div className="config-subseccion">
+              <h3 className="config-subtitulo">
                 Datos fiscales
               </h3>
 
-              <p
-                style={{
-                  color:
-                    "var(--steel)",
-                  fontSize: 14,
-                  margin: "0 0 14px",
-                }}
-              >
-                Con estos datos las facturas
-                usan la numeración autorizada
-                por el SAR. Sin ellos se emiten
-                con numeración interna.
+              <p className="config-descripcion">
+                Con estos datos las facturas usan la numeración autorizada
+                por el SAR. Sin ellos se emiten con numeración interna.
               </p>
 
+              {/*
+                El aviso cambia de color según lo apremiante que sea, pero
+                el nivel se dice también con palabras: el color no es la
+                única señal. Antes se pintaba con la clase de la pantalla
+                de acceso y colores escritos a mano.
+              */}
               <div
-                className={`login-error show`}
-                style={{
-                  background:
-                    fiscalStatus.level ===
-                    "bloqueo"
-                      ? "var(--red-light)"
-                      : fiscalStatus.level ===
-                          "aviso"
-                        ? "var(--amber-light)"
-                        : "var(--teal-light)",
-                  color:
-                    fiscalStatus.level ===
-                    "bloqueo"
-                      ? "var(--red)"
-                      : fiscalStatus.level ===
-                          "aviso"
-                        ? "var(--amber)"
-                        : "var(--teal)",
-                  marginBottom: 16,
-                }}
+                className={`config-aviso ${fiscalStatus.level}`}
+                role="status"
               >
                 {fiscalStatus.message}
               </div>
@@ -997,32 +947,18 @@ function Settings() {
 
               </div>
 
-              <p
-                style={{
-                  color:
-                    "var(--steel)",
-                  fontSize: 13,
-                  marginTop: 12,
-                  paddingTop: 10,
-                  borderTop:
-                    "1px dashed var(--line-strong)",
-                }}
-              >
-                La normativa del SAR cambia con
-                el tiempo. Confirma con tu
-                contador que estos datos y su
-                formato son los vigentes antes
-                de facturar formalmente.
+              <p className="config-nota">
+                La normativa del SAR cambia con el tiempo. Confirma con tu
+                contador que estos datos y su formato son los vigentes
+                antes de facturar formalmente.
               </p>
             </div>
 
-            <div
-              className="toolbar"
-              style={{
-                marginTop: 16,
-                gap: 10,
-              }}
-            >
+            {/*
+              Guardar primero y deshacer después: el orden en que se leen.
+              Deshacer es secundario porque devuelve lo guardado, no borra.
+            */}
+            <div className="config-acciones">
               <button
                 type="submit"
                 className="btn btn-primary"
@@ -1044,32 +980,26 @@ function Settings() {
 
         </div>
 
-        <hr className="divider" />
+      </section>
 
-        {/* =====================================
-            USUARIOS
-        ====================================== */}
+      {/* =====================================
+          USUARIOS
+      ====================================== */}
+
+      <section className="config-card" aria-labelledby="config-usuarios">
 
         <div className="config-section">
 
-          <div
-            className="view-header"
-            style={{
-              marginBottom: 12,
-            }}
-          >
+          <div className="config-cabecera">
 
             <div>
-              <h3>
+              <h2 className="config-titulo" id="config-usuarios">
                 Usuarios
-              </h3>
+              </h2>
 
-              <p className="sub">
-                Administra quién
-                puede entrar al
-                sistema y qué
-                módulos puede
-                utilizar.
+              <p className="config-descripcion">
+                Administra quién puede entrar al sistema y qué módulos
+                puede utilizar.
               </p>
             </div>
 
@@ -1080,7 +1010,7 @@ function Settings() {
                 openNewUser
               }
             >
-              + Nuevo usuario
+              <FaPlus aria-hidden="true" />Nuevo usuario
             </button>
 
           </div>
@@ -1314,58 +1244,48 @@ function Settings() {
 
         </div>
 
-      </div>
+      </section>
 
       {/* =====================================
           MODAL USUARIO
       ====================================== */}
 
       {userModalOpen && (
-        <div className="modal-overlay open">
-
-          <div className="modal modal-lg">
-
-            <div className="modal-head">
-
-              <div>
-                <h3>
-                  {isEditingUser
-                    ? "Editar usuario"
-                    : "Nuevo usuario"}
-                </h3>
-
-                <p
-                  className="sub"
-                  style={{
-                    marginTop: 3,
-                  }}
-                >
-                  Configura las
-                  credenciales y
-                  permisos de
-                  acceso.
-                </p>
-              </div>
-
+        <ModalShell
+          titulo={isEditingUser ? "Editar usuario" : "Nuevo usuario"}
+          onCerrar={closeUserModal}
+          ancho="modal-lg"
+          acciones={
+            <>
               <button
                 type="button"
-                className="icon-btn"
-                onClick={
-                  closeUserModal
-                }
+                className="btn btn-secondary"
+                onClick={closeUserModal}
               >
-                ✕
+                Cancelar
               </button>
 
-            </div>
+              {/*
+                El envío vive en el pie y el formulario en el cuerpo:
+                form="..." los enlaza sin mover el submit de sitio.
+              */}
+              <button
+                type="submit"
+                form="form-usuario"
+                className="btn btn-primary"
+              >
+                {isEditingUser ? "Guardar cambios" : "Crear usuario"}
+              </button>
+            </>
+          }
+        >
+          <form id="form-usuario" onSubmit={saveUser}>
 
-            <form
-              onSubmit={
-                saveUser
-              }
-            >
+            <p className="config-descripcion">
+              Configura las credenciales y permisos de acceso.
+            </p>
 
-              <div className="modal-body">
+              <div>
 
                 <div className="form-grid">
 
@@ -1480,26 +1400,10 @@ function Settings() {
                 </div>
 
                 {/* ACTIVO */}
-                <div
-                  style={{
-                    marginTop: 18,
-                  }}
-                >
-                  <label
-                    style={{
-                      display:
-                        "flex",
-
-                      alignItems:
-                        "center",
-
-                      gap: 8,
-
-                      cursor:
-                        "pointer",
-                    }}
-                  >
+                <div className="config-casilla">
+                  <label htmlFor="settings-usuario-activo">
                     <input
+                      id="settings-usuario-activo"
                       type="checkbox"
                       name="active"
                       checked={
@@ -1508,6 +1412,7 @@ function Settings() {
                       onChange={
                         handleUserChange
                       }
+                      aria-describedby="settings-usuario-activo-ayuda"
                     />
 
                     <strong>
@@ -1516,15 +1421,10 @@ function Settings() {
                   </label>
 
                   <p
-                    className="sub"
-                    style={{
-                      marginTop: 4,
-                    }}
+                    className="config-descripcion"
+                    id="settings-usuario-activo-ayuda"
                   >
-                    Un usuario
-                    inactivo no
-                    puede iniciar
-                    sesión.
+                    Un usuario inactivo no puede iniciar sesión.
                   </p>
                 </div>
 
@@ -1533,153 +1433,59 @@ function Settings() {
                 {/* PERMISOS */}
                 <div>
 
-                  <h3
-                    style={{
-                      marginBottom: 4,
-                    }}
-                  >
-                    Permisos de
-                    acceso
-                  </h3>
+                  <h4 className="config-subtitulo">
+                    Permisos de acceso
+                  </h4>
 
-                  {userForm.role ===
-                  "admin" ? (
-                    <div
-                      className="card"
-                      style={{
-                        padding: 14,
+                  {userForm.role === "admin" ? (
+                    <div className="permiso-admin">
+                      <strong>Administrador</strong>
 
-                        marginTop: 12,
-
-                        background:
-                          "var(--cream)",
-                      }}
-                    >
-                      <strong>
-                        Administrador
-                      </strong>
-
-                      <p
-                        className="sub"
-                        style={{
-                          marginTop:
-                            4,
-                        }}
-                      >
-                        Los
-                        administradores
-                        tienen acceso
-                        completo a todos
-                        los módulos y a
-                        Configuración.
+                      <p className="config-descripcion">
+                        Los administradores tienen acceso completo a todos
+                        los módulos y a Configuración.
                       </p>
                     </div>
                   ) : (
                     <>
-                      <p className="sub">
-                        Selecciona los
-                        módulos que este
-                        usuario podrá
-                        utilizar.
+                      <p className="config-descripcion">
+                        Selecciona los módulos que este usuario podrá utilizar.
                       </p>
 
-                      <div
-                        style={{
-                          display:
-                            "grid",
+                      <div className="permisos-rejilla">
 
-                          gridTemplateColumns:
-                            "repeat(auto-fit, minmax(220px, 1fr))",
+                        {permissionOptions.map((permission) => {
+                          const checked = userForm.permissions.includes(
+                            permission.id
+                          )
 
-                          gap: 10,
-
-                          marginTop: 14,
-                        }}
-                      >
-
-                        {permissionOptions.map(
-                          (
-                            permission
-                          ) => {
-                            const checked =
-                              userForm.permissions.includes(
-                                permission.id
-                              )
-
-                            return (
-                              <label
-                                key={
-                                  permission.id
+                          return (
+                            <label
+                              key={permission.id}
+                              htmlFor={`permiso-${permission.id}`}
+                              className={
+                                checked
+                                  ? "permiso-opcion elegido"
+                                  : "permiso-opcion"
+                              }
+                            >
+                              <input
+                                id={`permiso-${permission.id}`}
+                                type="checkbox"
+                                checked={checked}
+                                onChange={() =>
+                                  togglePermission(permission.id)
                                 }
-                                htmlFor={`permiso-${permission.id}`}
-                                className="card"
-                                style={{
-                                  padding:
-                                    12,
+                              />
 
-                                  cursor:
-                                    "pointer",
+                              <span>
+                                <strong>{permission.label}</strong>
 
-                                  display:
-                                    "flex",
-
-                                  gap: 10,
-
-                                  alignItems:
-                                    "flex-start",
-
-                                  borderColor:
-                                    checked
-                                      ? "var(--orange)"
-                                      : "var(--line)",
-                                }}
-                              >
-
-                                <input
-                                  id={`permiso-${permission.id}`}
-                                  type="checkbox"
-                                  checked={
-                                    checked
-                                  }
-                                  onChange={() =>
-                                    togglePermission(
-                                      permission.id
-                                    )
-                                  }
-                                />
-
-                                <span>
-                                  <strong
-                                    style={{
-                                      display:
-                                        "block",
-                                    }}
-                                  >
-                                    {
-                                      permission.label
-                                    }
-                                  </strong>
-
-                                  <span
-                                    className="sub"
-                                    style={{
-                                      display:
-                                        "block",
-
-                                      marginTop:
-                                        2,
-                                    }}
-                                  >
-                                    {
-                                      permission.description
-                                    }
-                                  </span>
-                                </span>
-
-                              </label>
-                            )
-                          }
-                        )}
+                                <small>{permission.description}</small>
+                              </span>
+                            </label>
+                          )
+                        })}
 
                       </div>
                     </>
@@ -1689,34 +1495,8 @@ function Settings() {
 
               </div>
 
-              <div className="modal-foot">
-
-                <button
-                  type="submit"
-                  className="btn btn-primary"
-                >
-                  {isEditingUser
-                    ? "Guardar cambios"
-                    : "Crear usuario"}
-                </button>
-
-                <button
-                  type="button"
-                  className="btn btn-secondary"
-                  onClick={
-                    closeUserModal
-                  }
-                >
-                  Cancelar
-                </button>
-
-              </div>
-
-            </form>
-
-          </div>
-
-        </div>
+          </form>
+        </ModalShell>
       )}
 
     </div>

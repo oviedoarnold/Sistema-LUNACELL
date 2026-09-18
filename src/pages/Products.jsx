@@ -17,6 +17,8 @@ import EmptyState from "../components/crud/EmptyState"
 import PageHeader from "../components/crud/PageHeader"
 import SearchInput from "../components/crud/SearchInput"
 import StatusBadge from "../components/crud/StatusBadge"
+import FormField from "../components/forms/FormField"
+import ModalShell from "../components/forms/ModalShell"
 
 const emptyForm = { id: null, code: "", name: "", category: "", price: "", costPrice: "", stock: "", minStock: 5, supplierId: "", imageUrl: "" }
 
@@ -164,25 +166,75 @@ function Products() {
       ))}
     </div>
 
-    {modalOpen && <div className="modal-overlay open"><div className="modal"><div className="modal-head"><h3>{form.id ? "Editar producto" : "Nuevo producto"}</h3><button className="icon-btn" aria-label="Cerrar" onClick={cerrarModal}>✕</button></div><div className="modal-body"><div className="form-grid">
-      <div className="field"><label htmlFor="products-codigo">Código</label><input id="products-codigo" value={form.code} onChange={(e) => setForm({ ...form, code: e.target.value })} placeholder="Ej. CEM-001" /></div>
-      <div className="field"><label htmlFor="products-nombre">Nombre</label><input id="products-nombre" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></div>
-      <div className="field full"><label htmlFor="products-categoria">Categoría</label><input id="products-categoria" value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })} /></div>
-      <div className="field"><label htmlFor="products-precio-de-venta">Precio de venta</label><input id="products-precio-de-venta" type="number" min="0" step="0.01" value={form.price} onChange={(e) => setForm({ ...form, price: e.target.value })} /></div>
-      <div className="field"><label htmlFor="products-costo">Costo</label><input id="products-costo" type="number" min="0" step="0.01" value={form.costPrice} onChange={(e) => setForm({ ...form, costPrice: e.target.value })} /></div>
-      <div className="field"><label htmlFor="products-stock">Stock</label><input id="products-stock" type="number" min="0" value={form.stock} onChange={(e) => setForm({ ...form, stock: e.target.value })} /></div>
-      <div className="field"><label htmlFor="products-stock-minimo">Stock mínimo</label><input id="products-stock-minimo" type="number" min="0" value={form.minStock} onChange={(e) => setForm({ ...form, minStock: e.target.value })} /></div>
-      <div className="field full"><label htmlFor="products-proveedor">Proveedor</label><select id="products-proveedor" value={form.supplierId} onChange={(e) => setForm({ ...form, supplierId: e.target.value })}><option value="">— Sin proveedor —</option>{suppliers.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}</select></div>
-      <div className="field full"><label htmlFor="products-imagen">Imagen del producto</label>
-        <SelectorDeImagen
-          urlGuardada={form.imageUrl}
-          archivo={imagenElegida}
-          nombre={form.name}
-          onElegir={setImagenElegida}
-          onQuitar={() => { setImagenElegida(null); setForm((actual) => ({ ...actual, imageUrl: "" })) }}
-        />
-      </div>
-    </div></div><div className="modal-foot"><button className="btn btn-primary" onClick={save} disabled={guardando}>{guardando ? "Guardando…" : "Guardar producto"}</button><button className="btn btn-secondary" onClick={cerrarModal}>Cancelar</button></div></div></div>}
+    {modalOpen && (
+      <ModalShell
+        titulo={form.id ? "Editar producto" : "Nuevo producto"}
+        onCerrar={cerrarModal}
+        ancho="modal-wide"
+        acciones={
+          <>
+            <button type="button" className="btn btn-secondary" onClick={cerrarModal}>Cancelar</button>
+            <button type="button" className="btn btn-primary" onClick={save} disabled={guardando}>
+              {guardando ? "Guardando…" : "Guardar producto"}
+            </button>
+          </>
+        }
+      >
+        <div className="form-grid">
+          <FormField etiqueta="Código">
+            <input id="products-codigo" value={form.code} onChange={(e) => setForm({ ...form, code: e.target.value })} placeholder="Ej. CEM-001" />
+          </FormField>
+
+          <FormField etiqueta="Nombre">
+            <input id="products-nombre" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
+          </FormField>
+
+          <FormField etiqueta="Categoría" ancho="full">
+            <input id="products-categoria" value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })} />
+          </FormField>
+
+          <FormField etiqueta="Precio de venta">
+            <input id="products-precio-de-venta" type="number" min="0" step="0.01" value={form.price} onChange={(e) => setForm({ ...form, price: e.target.value })} />
+          </FormField>
+
+          <FormField etiqueta="Costo">
+            <input id="products-costo" type="number" min="0" step="0.01" value={form.costPrice} onChange={(e) => setForm({ ...form, costPrice: e.target.value })} />
+          </FormField>
+
+          <FormField etiqueta="Stock">
+            <input id="products-stock" type="number" min="0" value={form.stock} onChange={(e) => setForm({ ...form, stock: e.target.value })} />
+          </FormField>
+
+          <FormField etiqueta="Stock mínimo" ayuda="Por debajo de esta cantidad el producto se marca como escaso.">
+            <input id="products-stock-minimo" type="number" min="0" value={form.minStock} onChange={(e) => setForm({ ...form, minStock: e.target.value })} />
+          </FormField>
+
+          <FormField etiqueta="Proveedor" ancho="full">
+            <select id="products-proveedor" value={form.supplierId} onChange={(e) => setForm({ ...form, supplierId: e.target.value })}>
+              <option value="">— Sin proveedor —</option>
+              {suppliers.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+            </select>
+          </FormField>
+
+          {/*
+            El selector de imagen trae su propio control de archivo con el
+            id que esperan las pruebas, así que aquí solo se le pone
+            etiqueta y se deja el flujo de subida como estaba.
+          */}
+          <div className="field full">
+            <label htmlFor="products-imagen">Imagen del producto</label>
+
+            <SelectorDeImagen
+              urlGuardada={form.imageUrl}
+              archivo={imagenElegida}
+              nombre={form.name}
+              onElegir={setImagenElegida}
+              onQuitar={() => { setImagenElegida(null); setForm((actual) => ({ ...actual, imageUrl: "" })) }}
+            />
+          </div>
+        </div>
+      </ModalShell>
+    )}
   </div>
 }
 

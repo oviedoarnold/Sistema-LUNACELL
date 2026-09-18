@@ -1,0 +1,214 @@
+/*
+  Ventanas modales.
+
+  Afina el esqueleto que ya existía en lunacell.css para que una ventana
+  se vea del mismo producto que el panel y las pantallas administrativas:
+  misma superficie, mismos bordes, mismo radio.
+
+  Los colores salen de los tokens. Aquí no se define ninguno.
+*/
+
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  display: none;
+  align-items: flex-start;
+  justify-content: center;
+  overflow-y: auto;
+  z-index: 100;
+  background: rgba(23, 26, 29, 0.55);
+  padding: var(--space-6) var(--space-4);
+}
+
+.modal-overlay.open {
+  display: flex;
+  animation: overlayIn 0.18s ease;
+}
+
+.modal {
+  width: 100%;
+  max-width: 540px;
+  animation: modalIn 0.22s cubic-bezier(0.2, 0.8, 0.3, 1);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+}
+
+.modal.modal-wide { max-width: 680px; }
+.modal.modal-lg   { max-width: 780px; }
+
+/* La caja recibe el foco al abrirse; ese foco no necesita anillo. */
+.modal:focus {
+  outline: none;
+}
+
+.modal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-4) var(--space-5);
+  border-bottom: 1px solid var(--border);
+}
+
+.modal-head h3 {
+  font-size: 17px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.modal-head .icon-btn {
+  width: 30px;
+  height: 30px;
+  border-radius: var(--radius-sm);
+  flex: none;
+}
+
+.modal-head .icon-btn svg {
+  width: 13px;
+  height: 13px;
+}
+
+.modal-body {
+  padding: var(--space-5);
+  max-height: 68vh;
+  overflow-y: auto;
+}
+
+.modal-foot {
+  display: flex;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  padding: var(--space-4) var(--space-5);
+  border-top: 1px solid var(--border);
+  gap: var(--space-2);
+}
+
+/*
+  El pie ordena por importancia de derecha a izquierda: la acción
+  principal queda a la derecha, donde termina la lectura del formulario.
+*/
+.modal-foot .btn {
+  font-size: 14px;
+  padding: 9px 16px;
+}
+
+.modal-overlay .btn:focus-visible,
+.modal-overlay .icon-btn:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+/* ── RESUMEN DENTRO DE UNA VENTANA ───────────────────────── */
+
+/*
+  Cifras de contexto que el formulario necesita tener delante —el total,
+  lo abonado y el saldo de una factura, por ejemplo—.
+*/
+.modal-resumen {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--space-3);
+  background: var(--surface-secondary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: var(--space-4);
+  margin-bottom: var(--space-5);
+}
+
+.modal-resumen-label {
+  display: block;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.modal-resumen-valor {
+  font-family: var(--font-display);
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.modal-resumen-valor.abonado { color: var(--success); }
+.modal-resumen-valor.saldo   { color: var(--warning); }
+
+/* ── MÓVIL ───────────────────────────────────────────────── */
+
+@media (max-width: 560px) {
+  .modal-overlay {
+    padding: var(--space-3);
+    align-items: flex-start;
+  }
+
+  .modal-body {
+    padding: var(--space-4);
+    max-height: 72vh;
+  }
+
+  .modal-head,
+  .modal-foot {
+    padding: var(--space-3) var(--space-4);
+  }
+
+  /*
+    En un teléfono los botones del pie se apilan y el principal queda
+    arriba: es el que se busca.
+  */
+  .modal-foot {
+    flex-direction: column-reverse;
+  }
+
+  .modal-foot .btn {
+    width: 100%;
+  }
+
+  .modal-resumen {
+    grid-template-columns: 1fr;
+    gap: var(--space-2);
+  }
+}
+
+/* ── ABONOS DEL HISTORIAL ────────────────────────────────── */
+
+.abono-atajo {
+  margin: calc(-1 * var(--space-2)) 0 var(--space-4);
+}
+
+.abonos-registrados {
+  margin-top: var(--space-5);
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--border);
+}
+
+.abonos-titulo {
+  margin: 0 0 var(--space-2);
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.abono-fila {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: 9px 0;
+  border-top: 1px solid var(--border);
+}
+
+.abono-fila:first-of-type {
+  border-top: none;
+}
+
+.abono-detalle {
+  display: block;
+  font-size: 12px;
+  color: var(--text-muted);
+}

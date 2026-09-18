@@ -1,0 +1,213 @@
+/*
+  Configuración.
+
+  Acotado a .config, la clase que lleva solo esa pantalla.
+
+  La página era una sola tarjeta larguísima con tres asuntos dentro
+  —empresa, datos fiscales y usuarios— separados por una línea. Ahora
+  cada asunto es su propia sección con título propio. No se usaron
+  pestañas: son dos bloques, y esconder la mitad de la configuración
+  detrás de una pestaña cuesta más de lo que ahorra.
+
+  Los colores salen de los tokens. Aquí no se define ninguno.
+*/
+
+.config-card {
+  display: block;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
+  padding: var(--space-5) var(--space-5) var(--space-6);
+  margin-bottom: var(--space-4);
+}
+
+.config-titulo {
+  margin: 0 0 2px;
+  font-family: var(--font-display);
+  font-size: 17px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.config-subseccion {
+  margin-top: var(--space-6);
+  padding-top: var(--space-5);
+  border-top: 1px solid var(--border);
+}
+
+.config-subtitulo {
+  margin: 0 0 2px;
+  font-family: var(--font-display);
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.config-descripcion {
+  margin: 0 0 var(--space-4);
+  font-size: 13.5px;
+  color: var(--text-muted);
+  max-width: 70ch;
+}
+
+.config-cabecera {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-4);
+  flex-wrap: wrap;
+  margin-bottom: var(--space-4);
+}
+
+/* ── AVISO FISCAL ────────────────────────────────────────── */
+
+/*
+  Tres niveles: todo en orden, conviene mirarlo, y hay que resolverlo.
+  El color acompaña; lo que dice el estado es el texto del mensaje.
+*/
+.config-aviso {
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  border: 1px solid transparent;
+  font-size: 13.5px;
+  font-weight: 600;
+  margin-bottom: var(--space-4);
+}
+
+.config-aviso.ok      { background: var(--success-soft); color: var(--success); border-color: var(--success); }
+.config-aviso.aviso   { background: var(--warning-soft); color: var(--warning); border-color: var(--warning); }
+.config-aviso.bloqueo { background: var(--danger-soft);  color: var(--danger);  border-color: var(--danger); }
+
+/* ── PERMISOS ────────────────────────────────────────────── */
+
+.permisos-rejilla {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: var(--space-3);
+  margin-top: var(--space-3);
+}
+
+/*
+  Cada permiso es una casilla dentro de su propia tarjeta: toda el área
+  es pulsable, no solo el cuadradito.
+*/
+.permiso-opcion {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  padding: 11px 12px;
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  cursor: pointer;
+  transition: border-color 0.12s, background 0.12s;
+}
+
+.permiso-opcion:hover {
+  border-color: var(--border-strong);
+}
+
+.permiso-opcion.elegido {
+  border-color: var(--primary);
+  background: var(--primary-soft);
+}
+
+.permiso-opcion:focus-within {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+.permiso-opcion input {
+  margin-top: 2px;
+  accent-color: var(--primary);
+  flex: none;
+}
+
+.permiso-opcion strong {
+  display: block;
+  font-size: 14px;
+  color: var(--text-primary);
+}
+
+.permiso-opcion small {
+  display: block;
+  margin-top: 1px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.permiso-admin {
+  padding: var(--space-4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-secondary);
+  margin-top: var(--space-3);
+}
+
+.permiso-admin strong {
+  display: block;
+  font-size: 14px;
+  color: var(--text-primary);
+}
+
+/* ── TABLETA Y MÓVIL ─────────────────────────────────────── */
+
+@media (max-width: 720px) {
+  .config-card {
+    padding: var(--space-4);
+  }
+
+  .config-cabecera {
+    flex-direction: column;
+  }
+
+  .config-cabecera .btn {
+    width: 100%;
+  }
+}
+
+/* ── PIE DE FORMULARIO Y NOTAS ───────────────────────────── */
+
+.config-acciones {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-top: var(--space-5);
+}
+
+.config-nota {
+  margin: var(--space-3) 0 0;
+  padding-top: var(--space-3);
+  border-top: 1px dashed var(--border-strong);
+  font-size: 12.5px;
+  color: var(--text-muted);
+}
+
+/* ── CASILLA CON EXPLICACIÓN ─────────────────────────────── */
+
+.config-casilla {
+  margin-top: var(--space-5);
+}
+
+.config-casilla label {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  cursor: pointer;
+  font-size: 14px;
+}
+
+.config-casilla input {
+  accent-color: var(--primary);
+}
+
+.config-casilla .config-descripcion {
+  margin: 4px 0 0 26px;
+}
+
+@media (max-width: 720px) {
+  .config-acciones .btn {
+    width: 100%;
+  }
+}

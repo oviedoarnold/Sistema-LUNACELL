@@ -17,6 +17,8 @@ import EmptyState from "../components/crud/EmptyState"
 import PageHeader from "../components/crud/PageHeader"
 import SearchInput from "../components/crud/SearchInput"
 import StatusBadge from "../components/crud/StatusBadge"
+import FormField from "../components/forms/FormField"
+import ModalShell from "../components/forms/ModalShell"
 
 import {
   DEFAULT_LOCATION_TYPE,
@@ -190,20 +192,37 @@ function Locations() {
 
       {inactivas > 0 && <p className="crud-nota">{inactivas} ubicación{inactivas !== 1 ? "es" : ""} inactiva{inactivas !== 1 ? "s" : ""}. Siguen apareciendo en la lista porque conservan su historial.</p>}
 
-      {modalOpen && <div className="modal-overlay open" onMouseDown={(e) => e.target === e.currentTarget && closeModal()}>
-        <div className="modal">
-          <div className="modal-head"><h3>{form.id ? "Editar ubicación" : "Nueva ubicación"}</h3><button className="icon-btn" aria-label="Cerrar" onClick={closeModal}>✕</button></div>
-          <div className="modal-body"><div className="form-grid">
-            <div className="field full"><label htmlFor="locations-nombre">Nombre</label><input id="locations-nombre" value={form.name} placeholder="Ej. Bodega Principal" onChange={(e) => setForm({ ...form, name: e.target.value })} /></div>
-            <div className="field full"><label htmlFor="locations-tipo">Tipo</label>
+      {modalOpen && (
+        <ModalShell
+          titulo={form.id ? "Editar ubicación" : "Nueva ubicación"}
+          onCerrar={closeModal}
+          cerrarAlPulsarFuera
+          acciones={
+            <>
+              <button type="button" className="btn btn-secondary" onClick={closeModal}>Cancelar</button>
+              <button type="button" className="btn btn-primary" onClick={save} disabled={guardando}>
+                {guardando ? "Guardando…" : "Guardar ubicación"}
+              </button>
+            </>
+          }
+        >
+          <div className="form-grid">
+            <FormField etiqueta="Nombre" ancho="full">
+              <input id="locations-nombre" value={form.name} placeholder="Ej. Bodega Principal" onChange={(e) => setForm({ ...form, name: e.target.value })} />
+            </FormField>
+
+            <FormField
+              etiqueta="Tipo"
+              ancho="full"
+              ayuda="Determina con qué icono aparece la ubicación en el listado."
+            >
               <select id="locations-tipo" value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value })}>
                 {LOCATION_TYPE_OPTIONS.map((opcion) => <option key={opcion.value} value={opcion.value}>{opcion.label}</option>)}
               </select>
-            </div>
-          </div></div>
-          <div className="modal-foot"><button className="btn btn-primary" onClick={save} disabled={guardando}>{guardando ? "Guardando…" : "Guardar ubicación"}</button><button className="btn btn-secondary" onClick={closeModal}>Cancelar</button></div>
-        </div>
-      </div>}
+            </FormField>
+          </div>
+        </ModalShell>
+      )}
     </div>
   )
 }
