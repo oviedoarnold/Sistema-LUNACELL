@@ -16,8 +16,6 @@ jobs:
     permissions:
       contents: read
 
-    env:
-      SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
 
     steps:
       - name: Descargar el código
@@ -58,11 +56,13 @@ jobs:
       - name: Build de producción
         run: npm run build
 
-      # Se omite mientras no exista el secreto SONAR_TOKEN, para no dejar
-      # el pipeline en rojo antes de conectar el proyecto en SonarCloud.
-      - name: SonarCloud
-        if: env.SONAR_TOKEN != ''
-        uses: SonarSource/sonarqube-scan-action@689fb39b34b9aa95ebc5f8f119343ddd51542402 # v4
+      # El analisis de SonarCloud no corre aqui: el proyecto usa Automatic
+      # Analysis, que se dispara del lado de SonarCloud y publica el check
+      # "SonarCloud Code Analysis". Aqui vivia un step del scanner con
+      # if: env.SONAR_TOKEN != '' que nunca se cumplia porque el secreto no
+      # existe; se retira para que el workflow diga lo que de verdad hace.
+      # Consecuencia conocida: SonarCloud no recibe cobertura, porque eso
+      # solo lo sube el scanner. Queda anotado en requisitos-pendientes.
 
       - name: Publicar el reporte de cobertura
         if: always()
