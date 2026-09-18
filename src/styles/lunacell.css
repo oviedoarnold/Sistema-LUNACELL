@@ -110,10 +110,13 @@ td.num,th.num{text-align:right;font-family:var(--font-mono);}
 /* ── BADGES ── */
 .badge{display:inline-flex;align-items:center;gap:5px;padding:4px 10px;border-radius:20px;font-size:12.5px;font-weight:700;font-family:var(--font-mono);} 
 .badge-ok{background:var(--teal-light);color:var(--teal);} 
-.badge-low{background:var(--amber-light);color:var(--amber);} 
-.badge-out{background:var(--red-light);color:var(--red);} 
+/* El texto de estos dos no llegaba al minimo sobre su propio fondo:
+   ambar 3.30:1 y rojo 4.45:1. Se oscurece solo el texto del distintivo,
+   no los tokens --warning y --danger, que visten otras 17 reglas. */
+.badge-low{background:var(--amber-light);color:#8A6104;} 
+.badge-out{background:var(--red-light);color:#B23326;} 
 .badge-credit{background:var(--blue-light);color:var(--blue);} 
-.badge-overdue{background:var(--red-light);color:var(--red);} 
+.badge-overdue{background:var(--red-light);color:#B23326;} 
 .badge-paid{background:var(--green-light);color:var(--green);} 
 .badge-dot{width:6px;height:6px;border-radius:50%;background:currentColor;} 
 .role-tag{display:inline-block;padding:2px 8px;border-radius:20px;font-size:11px;font-weight:700;font-family:var(--font-mono);text-transform:uppercase;letter-spacing:.4px;} 
