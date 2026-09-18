@@ -118,6 +118,7 @@ página pública y **no publica credenciales**: el acceso es por
 | [PWA](docs/pwa.md) | Service worker y funcionamiento sin conexión |
 | [Recorrido](docs/demo.md) | Qué muestra la página pública /demo |
 | [Deuda técnica](docs/deuda-tecnica.md) | Lo que sabemos que falta arreglar, y por qué |
+| [Requisitos pendientes](docs/requisitos-pendientes.md) | Lo que el negocio necesita y todavía no existe |
 
 ## Autor
 
