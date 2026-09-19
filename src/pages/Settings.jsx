@@ -1079,13 +1079,7 @@ function Settings() {
                             String(
                               user?.id
                             ) && (
-                            <div
-                              className="sub"
-                              style={{
-                                fontSize:
-                                  11,
-                              }}
-                            >
+                            <div className="config-marca-sesion">
                               Sesión actual
                             </div>
                           )}
@@ -1131,12 +1125,7 @@ function Settings() {
                           </span>
                         </td>
 
-                        <td
-                          style={{
-                            maxWidth:
-                              360,
-                          }}
-                        >
+                        <td className="config-celda-permisos">
                           {systemUser.role ===
                           "admin" ? (
                             <span className="sub">
@@ -1145,17 +1134,7 @@ function Settings() {
                           ) : systemUser
                               .permissions
                               ?.length ? (
-                            <div
-                              style={{
-                                display:
-                                  "flex",
-
-                                flexWrap:
-                                  "wrap",
-
-                                gap: 5,
-                              }}
-                            >
+                            <div className="config-fichas-permisos">
                               {systemUser.permissions.map(
                                 (
                                   permission
@@ -1336,15 +1315,7 @@ function Settings() {
                       Contraseña
 
                       {isEditingUser && (
-                        <span
-                          style={{
-                            fontWeight:
-                              "normal",
-
-                            color:
-                              "var(--steel)",
-                          }}
-                        >
+                        <span className="config-etiqueta-opcional">
                           {" "}
                           (opcional)
                         </span>
