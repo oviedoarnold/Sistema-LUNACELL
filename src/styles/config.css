@@ -211,3 +211,33 @@
     width: 100%;
   }
 }
+
+/* ── LISTADO DE USUARIOS ─────────────────────────────────── */
+
+/*
+  Estas cuatro reglas vivian como atributos style en el JSX. Mismo
+  acabado, dicho una vez y con nombre.
+*/
+
+/* Marca de quien esta viendo la pantalla, bajo su propio nombre. */
+.config-marca-sesion {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+/* Los permisos de un usuario no deben estirar la tabla a lo ancho. */
+.config-celda-permisos {
+  max-width: 360px;
+}
+
+.config-fichas-permisos {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+/* "(opcional)" acompaña a la etiqueta sin competir con ella. */
+.config-etiqueta-opcional {
+  font-weight: 400;
+  color: var(--text-muted);
+}
