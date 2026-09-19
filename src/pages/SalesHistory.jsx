@@ -780,12 +780,16 @@ function SalesHistory() {
               ayuda={`Máximo ${formatMoney(payingBalance, currency)}`}
               error={paymentError || null}
             >
+              {/*
+                Sin autoFocus: ModalShell ya lleva el foco al primer
+                campo del cuerpo al abrir la ventana, y este lo es. El
+                atributo hacia el mismo trabajo dos veces.
+              */}
               <input
                 type="number"
                 step="0.01"
                 min="0.01"
                 max={payingBalance}
-                autoFocus
                 placeholder="0.00"
                 value={paymentAmount}
                 onChange={(event) => {
