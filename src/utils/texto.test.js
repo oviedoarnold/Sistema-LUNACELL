@@ -3,86 +3,80 @@ import { describe, expect, it } from "vitest"
 import { coincideBusqueda, normalizarTexto } from "./texto"
 
 /*
+  Estos dos se construyen en ejecucion a proposito: escritos en el fuente
+  serian caracteres invisibles, y un fuente con caracteres invisibles es
+  un fuente que nadie puede revisar mirandolo.
+*/
+// La tilde combinante que NFD deja detras de la n.
+const TILDE = String.fromCharCode(0x303)
+
+// Un caracter de control cualquiera, para el caso del centinela.
+const CONTROL = String.fromCharCode(1)
+
+/*
   Buscar sin tildes.
 
   El caso que originó esto: escribir "camion" en Ubicaciones no encontraba
   "Camión 01", y en un mostrador eso se lee como que el dato no existe.
+
+  Los casos van en tabla porque todos comprueban lo mismo con distinta
+  entrada; escribirlos uno a uno repetía el mismo bloque veinte veces.
 */
 
 describe("normalizarTexto", () => {
-  it("quita las tildes", () => {
-    expect(normalizarTexto("Camión")).toBe("camion")
-  })
-
-  it("baja a minúsculas", () => {
-    expect(normalizarTexto("CAMIÓN")).toBe("camion")
-  })
-
-  it("deja igual un texto sin tildes", () => {
-    expect(normalizarTexto("Bodega")).toBe("bodega")
-  })
-
-  it("cubre las cinco vocales acentuadas", () => {
-    expect(normalizarTexto("áéíóú ÁÉÍÓÚ")).toBe("aeiou aeiou")
-  })
-
-  it("quita la diéresis", () => {
-    expect(normalizarTexto("Güiro")).toBe("guiro")
+  it.each([
+    ["quita las tildes", "Camión", "camion"],
+    ["baja a minúsculas", "CAMIÓN", "camion"],
+    ["deja igual lo que no lleva tilde", "Bodega", "bodega"],
+    ["cubre las cinco vocales", "áéíóú ÁÉÍÓÚ", "aeiou aeiou"],
+    ["quita la diéresis", "Güiro", "guiro"],
+    ["acepta números", 123, "123"],
+    ["con nulo devuelve vacío", null, ""],
+    ["sin valor devuelve vacío", undefined, ""],
+  ])("%s", (_, entrada, esperado) => {
+    expect(normalizarTexto(entrada)).toBe(esperado)
   })
 
   /*
-    La ñ es una letra, no una n con tilde. Quien escribe "cañon" no busca
-    "canon", y confundirlas devolvería resultados que nadie pidió.
+    La ñ es una letra, no una n con tilde. Y da igual cómo venga escrita
+    en origen: como un solo carácter o como una n seguida de la tilde
+    combinante, que es lo que produce NFD.
   */
-  it("conserva la ñ", () => {
-    expect(normalizarTexto("Cañón")).toBe("cañon")
-  })
-
-  it("conserva la Ñ en minúscula, no la convierte en n", () => {
-    expect(normalizarTexto("ÑANDÚ")).toBe("ñandu")
+  it.each([
+    ["Cañón en un solo carácter", "Cañón", "cañon"],
+    ["Ñ mayúscula", "ÑANDÚ", "ñandu"],
+    ["n + tilde combinante", "can" + TILDE + "on", "cañon"],
+    ["N + tilde combinante", "CAN" + TILDE + "ON", "cañon"],
+  ])("conserva la ñ: %s", (_, entrada, esperado) => {
+    expect(normalizarTexto(entrada)).toBe(esperado)
   })
 
   it("no confunde cañon con canon", () => {
     expect(normalizarTexto("cañon")).not.toBe(normalizarTexto("canon"))
   })
 
-  it("con nada devuelve cadena vacía", () => {
-    expect(normalizarTexto(null)).toBe("")
-    expect(normalizarTexto(undefined)).toBe("")
-  })
-
-  it("acepta números sin romperse", () => {
-    expect(normalizarTexto(123)).toBe("123")
+  /*
+    Sin carácter centinela: el primer intento marcaba la
+    ñ con un carácter de control, y eso convertía en ñ cualquier
+    aparición de ese carácter en la entrada.
+  */
+  it("no trata caracteres de control como letras", () => {
+    expect(normalizarTexto("ca" + CONTROL + "on")).not.toBe("cañon")
   })
 })
 
 describe("coincideBusqueda", () => {
-  it("encuentra con tilde escribiendo sin tilde", () => {
-    expect(coincideBusqueda("Camión 01", "camion")).toBe(true)
-  })
-
-  it("encuentra sin tilde escribiendo con tilde", () => {
-    expect(coincideBusqueda("Camion 01", "camión")).toBe(true)
-  })
-
-  it("no distingue mayúsculas", () => {
-    expect(coincideBusqueda("Camión 01", "CAMION")).toBe(true)
-  })
-
-  it("encuentra texto normal", () => {
-    expect(coincideBusqueda("Bodega Principal", "bodega")).toBe(true)
-  })
-
-  it("coincide en medio del texto", () => {
-    expect(coincideBusqueda("Lunacell Store", "cell")).toBe(true)
-  })
-
-  it("no inventa coincidencias", () => {
-    expect(coincideBusqueda("Bodega Principal", "tienda")).toBe(false)
-  })
-
-  it("ignora los espacios de sobra alrededor", () => {
-    expect(coincideBusqueda("Camión 01", "  camion  ")).toBe(true)
+  it.each([
+    ["con tilde buscando sin tilde", "Camión 01", "camion", true],
+    ["sin tilde buscando con tilde", "Camion 01", "camión", true],
+    ["ignora mayúsculas", "Camión 01", "CAMION", true],
+    ["texto normal", "Bodega Principal", "bodega", true],
+    ["coincide en medio", "Lunacell Store", "cell", true],
+    ["ignora espacios de sobra", "Camión 01", "  camion  ", true],
+    ["no inventa coincidencias", "Bodega Principal", "tienda", false],
+    ["la ñ no casa con n", "Canon", "cañon", false],
+  ])("%s", (_, contenido, buscado, esperado) => {
+    expect(coincideBusqueda(contenido, buscado)).toBe(esperado)
   })
 
   /*

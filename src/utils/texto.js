@@ -4,30 +4,29 @@
   Quien busca un camión escribe "camion". Comparar tal cual deja fuera el
   resultado, y en un mostrador eso se lee como que el dato no existe.
 
-  Se separa cada letra de su tilde con la forma NFD de Unicode y se
-  quitan las marcas diacríticas, así que la comparación pasa a ser entre
-  letras desnudas: "Camión" y "camion" coinciden, y también "CAMIÓN".
+  El texto se descompone con la forma NFD de Unicode, que separa cada
+  letra de su tilde, y después se quitan las marcas diacríticas. La
+  comparación pasa a ser entre letras desnudas: "Camión", "camion" y
+  "CAMIÓN" coinciden.
 
-  La ñ se conserva. Es una letra del alfabeto, no una n con tilde: quien
-  escribe "cañon" no está buscando "canon", y confundirlas devolvería
-  resultados que nadie pidió.
+  La ñ se recompone antes de ese barrido. Es una letra del alfabeto, no
+  una n con tilde: quien escribe "cañon" no busca "canon", y confundirlas
+  devolvería resultados que nadie pidió. Se recompone después de
+  descomponer para que dé igual cómo venga escrita en origen, ya sea un
+  solo carácter o una n seguida de tilde combinante.
 */
 
-// Marcas diacríticas del bloque Unicode que NFD deja separadas.
-const DIACRITICOS = /[̀-ͯ]/g
+// La tilde combinante, que es lo que NFD deja suelto detrás de la n.
+const TILDE_SOBRE_ENE = /ñ/gi
 
-// Las dos formas de la ñ y la Ñ, que hay que proteger antes de descomponer.
-const ENE = /ñ/g
-const ENE_MAYUSCULA = /Ñ/g
-const MARCA_ENE = ""
+// El resto de marcas diacríticas del bloque de combinantes de Unicode.
+const DIACRITICOS = /[̀-ͯ]/g
 
 export function normalizarTexto(valor) {
   return String(valor ?? "")
-    .replace(ENE, MARCA_ENE)
-    .replace(ENE_MAYUSCULA, MARCA_ENE)
     .normalize("NFD")
+    .replace(TILDE_SOBRE_ENE, "ñ")
     .replace(DIACRITICOS, "")
-    .replace(new RegExp(MARCA_ENE, "g"), "ñ")
     .toLowerCase()
 }
 
