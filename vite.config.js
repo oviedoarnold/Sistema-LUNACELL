@@ -79,10 +79,20 @@ function precargarArchivosDelBuild() {
       // Solo la compilación del cliente escribe en dist/.
       if (opciones.dir && !opciones.dir.endsWith('dist')) return
 
+      /*
+        El orden se fija con un comparador explicito. El .sort() a secas
+        ordena por unidades UTF-16, que para estos nombres —rutas ASCII con
+        hash— da lo mismo, pero deja el criterio implicito en una lista que
+        acaba dentro del service worker. localeCompare no sirve aqui: es
+        sensible al idioma del entorno que construye, que es lo contrario
+        de lo que necesita un artefacto de build.
+      */
       const rutas = Object.keys(paquete)
         .filter((archivo) => /\.(js|css|woff2?)$/.test(archivo))
         .map((archivo) => '/' + archivo)
-        .sort()
+        .sort((unaRuta, otraRuta) =>
+          unaRuta < otraRuta ? -1 : unaRuta > otraRuta ? 1 : 0
+        )
 
       const sw = readFileSync('dist/sw.js', 'utf8')
 

@@ -17,6 +17,7 @@ import EmptyState from "../components/crud/EmptyState"
 import PageHeader from "../components/crud/PageHeader"
 import SearchInput from "../components/crud/SearchInput"
 import StatusBadge from "../components/crud/StatusBadge"
+import { coincideBusqueda } from "../utils/texto"
 import FormField from "../components/forms/FormField"
 import ModalShell from "../components/forms/ModalShell"
 
@@ -42,8 +43,7 @@ function Products() {
   const [imagenElegida, setImagenElegida] = useState(null)
 
   const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase()
-    return products.filter((p) => [p.name, p.category, p.code].some((v) => String(v || "").toLowerCase().includes(q)))
+    return products.filter((p) => [p.name, p.category, p.code].some((v) => coincideBusqueda(v, search)))
   }, [products, search])
 
   const lowProducts = products.filter((p) => Number(p.stock) <= Number(p.minStock ?? 5))

@@ -100,6 +100,32 @@ describe("Locations — búsqueda", () => {
 
     expect(screen.getByText(/no se encontraron resultados/i)).toBeInTheDocument()
   })
+
+  /*
+    Quien busca un camión escribe "camion". Antes la comparación era
+    literal y dejaba fuera "Camión 01", que en un mostrador se lee como
+    que el dato no existe.
+  */
+  it("encuentra Camión escribiendo camion, sin tilde", async () => {
+    await renderLocations()
+    buscar("camion")
+
+    expect(screen.getByText("Camión 01")).toBeInTheDocument()
+  })
+
+  it("tampoco le estorban las mayúsculas", async () => {
+    await renderLocations()
+    buscar("CAMION")
+
+    expect(screen.getByText("Camión 01")).toBeInTheDocument()
+  })
+
+  it("y sigue encontrando escribiéndolo con tilde", async () => {
+    await renderLocations()
+    buscar("camión")
+
+    expect(screen.getByText("Camión 01")).toBeInTheDocument()
+  })
 })
 
 describe("Locations — crear", () => {
