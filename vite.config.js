@@ -3,7 +3,6 @@ import { fileURLToPath, pathToFileURL } from 'node:url'
 
 import { defineConfig, build as construir } from 'vite'
 import react from '@vitejs/plugin-react'
-import tailwindcss from '@tailwindcss/vite'
 
 const CARPETA_TEMPORAL = 'dist-prerender'
 
@@ -110,7 +109,6 @@ function precargarArchivosDelBuild() {
 export default defineConfig({
   plugins: [
     react(),
-    tailwindcss(),
     prerenderizarLogin(),
     precargarArchivosDelBuild(),
   ],

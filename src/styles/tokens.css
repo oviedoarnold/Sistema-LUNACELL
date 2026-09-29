@@ -28,16 +28,11 @@
 */
 
 /*
-  Sobre @layer: la idea era abrir aquí las capas del sistema, pero Tailwind
-  —que se carga después, desde index.css— declara sus propios tokens dentro
-  de @layer theme, y entre dos capas gana la que se declara más tarde.
-  Metiendo estos tokens en una capa, Tailwind pasaba a sobrescribir
-  --radius-md, --radius-lg y --font-mono, que este sistema usa en 42
-  reglas. Fuera de capa no ocurre: el CSS sin capa siempre gana.
-
-  Así que el :root se queda sin capa, igual que estaba. La migración a
-  capas depende de resolver antes la convivencia con Tailwind, y ésa es
-  una decisión aparte.
+  Sobre @layer: estos tokens se quedan sin capa. Antes era obligado —Tailwind
+  declaraba --radius-md, --radius-lg y --font-mono dentro de @layer theme, y
+  al ir sin capa los nuestros ganaban—. Tailwind ya no está, pero el reset de
+  index.css sí vive en @layer base y debe seguir perdiendo frente a estas
+  reglas, así que la posición no cambia.
 */
 
 :root {
