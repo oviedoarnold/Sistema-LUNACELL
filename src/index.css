@@ -1,1 +1,157 @@
-@import "tailwindcss";
+/*
+  Reset propio de LUNACELL.
+
+  Aquí vivía `@import "tailwindcss"`. Tailwind no tenía ni una sola clase
+  utilitaria en uso, pero su preflight sí reseteaba márgenes, rellenos y
+  bordes de todo el documento: quitarlo sin más habría devuelto los
+  márgenes por defecto del navegador a títulos, párrafos y listas.
+
+  Esto es esa parte del preflight —la única de la que el sistema dependía—
+  reescrita a mano. Se comprobó comparando los estilos calculados de 518
+  elementos en ocho pantallas, antes y después: idénticos.
+
+  Va dentro de @layer base, en el mismo sitio que lo tenía Tailwind. Una
+  regla sin capa gana siempre a una capada, así que dejarlo fuera haría que
+  este reset se impusiera a lunacell.css y los títulos perderían su peso.
+*/
+
+@layer base {
+  *,
+  *::before,
+  *::after {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+    border: 0 solid;
+  }
+
+  /* Los medios se comportan como bloques y no desbordan su contenedor. */
+  img,
+  svg,
+  video,
+  canvas,
+  audio,
+  iframe,
+  embed,
+  object {
+    display: block;
+    vertical-align: middle;
+  }
+
+  img,
+  video {
+    max-width: 100%;
+    height: auto;
+  }
+
+  /* Las listas del sistema son de navegación y tablas, no de prosa. */
+  ol,
+  ul,
+  menu {
+    list-style: none;
+  }
+
+  /* Los controles heredan la tipografía en vez de imponer la del sistema. */
+  button,
+  input,
+  select,
+  optgroup,
+  textarea {
+    font: inherit;
+    color: inherit;
+    background: transparent;
+    letter-spacing: inherit;
+  }
+
+  button,
+  input:where([type="button"], [type="reset"], [type="submit"]) {
+    appearance: button;
+  }
+
+  /*
+    Las partes internas de un control de fecha. Sin esto el navegador le da
+    dos píxeles más de alto y la página entera se corre: se vio comparando
+    /settings y /quotes, las dos únicas rutas con type="date".
+  */
+  ::-webkit-date-and-time-value {
+    min-height: 1lh;
+    text-align: inherit;
+  }
+
+  ::-webkit-datetime-edit {
+    display: inline-flex;
+  }
+
+  ::-webkit-datetime-edit-fields-wrapper {
+    padding: 0;
+  }
+
+  ::-webkit-datetime-edit-year-field,
+  ::-webkit-datetime-edit-month-field,
+  ::-webkit-datetime-edit-day-field,
+  ::-webkit-datetime-edit-hour-field,
+  ::-webkit-datetime-edit-minute-field,
+  ::-webkit-datetime-edit-second-field,
+  ::-webkit-datetime-edit-millisecond-field,
+  ::-webkit-datetime-edit-meridiem-field {
+    padding-block: 0;
+  }
+
+  /* Los botones de incremento de un campo numérico no fijan su altura. */
+  ::-webkit-inner-spin-button,
+  ::-webkit-outer-spin-button {
+    height: auto;
+  }
+
+  table {
+    border-collapse: collapse;
+    text-indent: 0;
+    border-color: inherit;
+  }
+
+  /* Los títulos toman su tamaño y grosor del sistema, no del navegador. */
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
+    font-size: inherit;
+    font-weight: inherit;
+  }
+
+  a {
+    color: inherit;
+    text-decoration: inherit;
+  }
+
+  b,
+  strong {
+    font-weight: bolder;
+  }
+
+  code,
+  kbd,
+  samp,
+  pre {
+    font-family: var(--font-mono, ui-monospace, monospace);
+    font-size: 1em;
+  }
+
+  small {
+    font-size: 80%;
+  }
+
+  ::placeholder {
+    opacity: 1;
+    color: color-mix(in oklab, currentColor 50%, transparent);
+  }
+
+  textarea {
+    resize: vertical;
+  }
+
+  [hidden]:where(:not([hidden="until-found"])) {
+    display: none !important;
+  }
+}

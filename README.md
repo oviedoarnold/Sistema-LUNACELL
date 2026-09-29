@@ -44,8 +44,7 @@ URL directamente redirige a la primera sección que el usuario sí tenga habilit
 
 - **React 19** con React Router 7
 - **Vite 8** como bundler
-- **Tailwind 4** disponible, aunque la interfaz usa un sistema de estilos propio
-  (`src/styles/lunacell.css`) con tokens CSS
+- Sistema de estilos propio (`src/styles/`) con tokens CSS, sin framework
 - **jsPDF** y **html2canvas** para exportar facturas y cotizaciones
 - **SweetAlert2** para confirmaciones
 - Desplegado en **Vercel** con HTTPS

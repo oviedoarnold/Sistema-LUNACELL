@@ -8,6 +8,84 @@ Cuando algo de aquí se resuelva, se borra de la lista.
 
 ---
 
+## Promesas sin gestionar su rechazo (`S9383`) — destino: **E.3**
+
+**Cuatro hallazgos**, todos de la misma regla: *«Promises must be awaited,
+end with a call to `.catch`, end with a call to `.then` with a rejection
+handler or be explicitly marked as ignored with the `void` operator»*.
+
+| Archivo | Línea | Qué es |
+|---|---|---|
+| `public/sw.js` | 140 | `cache.put()` dentro del `.then` de un `fetch` |
+| `public/sw.js` | 159 | `cache.put("/index.html", …)` sin esperar |
+| `src/context/AuthContext.jsx` | 115 | el callback de `onAuthStateChange` llama a `aplicarSesion` |
+| `src/context/AuthContext.jsx` | 177 | `traerUsuariosDeLaEmpresa().then(…)` sin `.catch` |
+
+**Por qué importa.** Una promesa que se rechaza sin manejador no rompe la
+pantalla, pero se pierde en silencio. En los dos casos del service worker
+significa que un fallo al escribir en caché no se entera nadie; en los dos
+de `AuthContext`, que un error al aplicar la sesión o al traer los usuarios
+de la empresa desaparece sin rastro. Es justo el tipo de fallo que después
+cuesta reproducir.
+
+**Por qué no se corrigió en E.2.** `AuthContext` y el service worker están
+fuera del alcance que `CLAUDE.md` permite tocar sin autorización: uno es
+autenticación y el otro decide qué se sirve sin conexión. Además no es un
+cambio cosmético — hay que decidir **qué se hace** con cada error, no solo
+callar el aviso: registrarlo, reintentar o ignorarlo explícitamente con
+`void` son decisiones distintas y hay que tomarlas una por una.
+
+**Qué pide la corrección.** Para cada uno: decidir el tratamiento del
+rechazo y, donde afecte a la sesión o a los usuarios, una prueba que cubra
+el camino de error. No vale añadir `.catch(() => {})`: eso silencia el
+aviso sin resolver nada.
+
+**Aparecieron el 2026-09-07 según SonarCloud**, pero no figuraban en la
+auditoría de E.1: son de una regla que Sonar incorporó después, no de
+código nuevo nuestro.
+
+---
+
+## SonarCloud no recibe la cobertura de las pruebas
+
+**Estado.** Todo el lado local está hecho y funciona: `npm run coverage`
+genera `coverage/lcov.info` con el proveedor v8, el CI lo ejecuta en cada
+push y lo publica como artefacto, y `sonar-project.properties` ya apunta a
+ese archivo con `sonar.javascript.lcov.reportPaths`. Lo que falta no está
+en este repositorio.
+
+**Baseline real, medido.** 80,6 % de sentencias · 74,44 % de ramas ·
+79,78 % de funciones · 82,54 % de líneas, sobre 63 archivos. SonarCloud, en
+cambio, no tiene ningún dato de cobertura: la métrica sale vacía.
+
+**Por qué.** El proyecto usa **Automatic Analysis**
+(`sonar.autoscan.enabled = true`, comprobado contra la API). Ese modo
+analiza el repositorio en el servidor de SonarCloud y no tiene acceso a los
+artefactos de build, así que no puede leer un lcov. Solo el escáner lo sube,
+y el escáner no corre: no existe el secreto `SONAR_TOKEN`.
+
+**Qué haría falta, y por qué no se hizo aquí.** Los dos modos de análisis
+son excluyentes. Cambiar exige, en este orden:
+
+1. crear el secreto `SONAR_TOKEN` en el repositorio —es una credencial, la
+   genera el propietario en SonarCloud—;
+2. desactivar Automatic Analysis en la configuración del proyecto en
+   SonarCloud;
+3. devolver al workflow el paso del escáner.
+
+Entre el 2 y el 3 el proyecto se queda **sin ningún análisis**, y el análisis
+es parte obligatoria de la puerta de calidad. Es un cambio deliberado del
+propietario, con una credencial de por medio, no algo que deba ocurrir de
+paso en una tarea de saneamiento.
+
+**Qué revela el baseline.** Los archivos sin cubrir que más pesan son los
+que ya están excluidos de cobertura a propósito —plantillas de impresión y
+generación de PDF— más `App.jsx`, que es solo el árbol de proveedores. No
+hace falta una campaña de pruebas para que la integración funcione: lo que
+falta es la tubería, no las pruebas.
+
+---
+
 ## Duplicación entre `lib/api/cotizaciones.js` y `lib/api/ventas.js`
 
 **Tamaño:** 1 bloque, 24 líneas · 136 tokens (`cotizaciones.js` 18-41 ↔

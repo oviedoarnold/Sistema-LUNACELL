@@ -92,10 +92,20 @@
   Cada permiso es una casilla dentro de su propia tarjeta: toda el área
   es pulsable, no solo el cuadradito.
 */
+/*
+  Rejilla en vez de flex: la casilla a la izquierda y, a su derecha, el
+  titulo sobre la descripcion. Antes ese par iba envuelto en un <span>, pero
+  eso dejaba el texto a tres niveles de la etiqueta y la regla de
+  accesibilidad pide dos: sin el envoltorio, la etiqueta se anuncia sola.
+*/
 .permiso-opcion {
-  display: flex;
-  align-items: flex-start;
-  gap: var(--space-3);
+  display: grid;
+  grid-template-columns: auto 1fr;
+  grid-template-areas:
+    "casilla titulo"
+    "casilla detalle";
+  align-items: start;
+  column-gap: var(--space-3);
   padding: 11px 12px;
   border: 1.5px solid var(--border);
   border-radius: var(--radius-sm);
@@ -119,19 +129,20 @@
 }
 
 .permiso-opcion input {
+  grid-area: casilla;
   margin-top: 2px;
   accent-color: var(--primary);
   flex: none;
 }
 
 .permiso-opcion strong {
-  display: block;
+  grid-area: titulo;
   font-size: 14px;
   color: var(--text-primary);
 }
 
 .permiso-opcion small {
-  display: block;
+  grid-area: detalle;
   margin-top: 1px;
   font-size: 12px;
   color: var(--text-muted);

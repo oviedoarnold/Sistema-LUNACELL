@@ -1449,11 +1449,9 @@ function Settings() {
                                 }
                               />
 
-                              <span>
-                                <strong>{permission.label}</strong>
+                              <strong>{permission.label}</strong>
 
-                                <small>{permission.description}</small>
-                              </span>
+                              <small>{permission.description}</small>
                             </label>
                           )
                         })}
