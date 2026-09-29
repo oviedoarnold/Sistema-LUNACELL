@@ -57,13 +57,12 @@ function Sidebar({ abierto = false, onCerrar = () => {} }) {
       className={abierto ? "sidebar is-abierto" : "sidebar"}
       aria-label="Navegación principal"
     >
+      {/*
+        El emblema ya trae el nombre y el lema dentro, asi que no se
+        repiten en texto al lado: seria decir dos veces lo mismo.
+      */}
       <div className="sidebar-marca">
-        <LogoLunacell variante="simbolo" className="sidebar-simbolo" />
-
-        <span className="sidebar-marca-texto">
-          <b>LUNACELL</b>
-          <span>&amp; ASOCS.</span>
-        </span>
+        <LogoLunacell variante="emblema" className="sidebar-emblema" />
 
         <button
           type="button"

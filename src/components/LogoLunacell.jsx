@@ -12,18 +12,23 @@
 
   El completo solo funciona sobre fondo claro. El teléfono y el subtítulo
   son gris oscuro casi negro: sobre el carbón de la navegación quedan en
-  1.3:1 y desaparecen. Por eso la cabecera y el pie de la portada, que van
-  sobre oscuro, usan el símbolo —cuya media luna dorada sí se lee, a
-  6.2:1— acompañado del nombre en texto.
+  1.3:1 y desaparecen. Por eso la portada usa el símbolo —cuya media luna
+  dorada sí se lee, a 6.2:1— acompañado del nombre en texto.
 
-  Para poner el logo entero sobre fondo oscuro haría falta una variante
-  con el teléfono y el subtítulo en claro, que es material del diseñador y
-  no algo que deba inventarse aquí.
+  El emblema resuelve ese caso: es la versión dorada sobre negro que
+  faltaba, con el nombre y el lema ya dentro. Se le quitaron las esquinas
+  —lo que queda fuera del aro— para que el disco se apoye en cualquier
+  fondo oscuro sin arrastrar un cuadro negro.
+
+  Pide sitio: por debajo de unos 88px su texto deja de leerse y se
+  convierte en manchas. Donde no quepa, el símbolo con el nombre aparte
+  sigue siendo la forma correcta.
 */
 
 const ARCHIVOS = {
   completo: "/brand/lunacell-logo-transparent.png",
   simbolo: "/brand/lunacell-simbolo.png",
+  emblema: "/brand/lunacell-emblema.png",
 }
 
 function LogoLunacell({ variante = "completo", alto, className = "" }) {
