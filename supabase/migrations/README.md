@@ -16,6 +16,7 @@ duda de si ya se aplicó, correrla de nuevo es seguro.
 | 0009 | Claves de idempotencia en ventas, cotizaciones y abonos |
 | 0010 | Permisos de la cuenta demo, según el recorrido guiado |
 | 0011 | Ubicaciones: bodegas, tiendas y camiones como puntos de inventario, y la sección nueva en los permisos |
+| 0012 | `pagos`: la cabecera del dinero que entra del cliente, y `abonos.pago_id` para repartirlo entre sus facturas |
 
 ## Instalación en una base vacía
 
@@ -36,6 +37,7 @@ LUNACELL.
 | 0009 | **Correr.** Claves de idempotencia |
 | 0010 | **Omitir.** Permisos de la cuenta demo |
 | 0011 | **Correr.** Ubicaciones |
+| 0012 | **Correr.** `pagos` y `abonos.pago_id`. No hace backfill: los abonos que ya existan se quedan sin `pago_id`, que es un estado válido |
 
 Ninguna de las que se corren borra datos: solo la 0010 tiene un `delete`,
 y es de las que se omiten. Lo que sí hacen varias es recrear vistas y
