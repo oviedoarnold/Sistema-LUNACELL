@@ -8,6 +8,46 @@ Cuando algo de aquí se resuelva, se borra de la lista.
 
 ---
 
+## SonarCloud no recibe la cobertura de las pruebas
+
+**Estado.** Todo el lado local está hecho y funciona: `npm run coverage`
+genera `coverage/lcov.info` con el proveedor v8, el CI lo ejecuta en cada
+push y lo publica como artefacto, y `sonar-project.properties` ya apunta a
+ese archivo con `sonar.javascript.lcov.reportPaths`. Lo que falta no está
+en este repositorio.
+
+**Baseline real, medido.** 80,6 % de sentencias · 74,44 % de ramas ·
+79,78 % de funciones · 82,54 % de líneas, sobre 63 archivos. SonarCloud, en
+cambio, no tiene ningún dato de cobertura: la métrica sale vacía.
+
+**Por qué.** El proyecto usa **Automatic Analysis**
+(`sonar.autoscan.enabled = true`, comprobado contra la API). Ese modo
+analiza el repositorio en el servidor de SonarCloud y no tiene acceso a los
+artefactos de build, así que no puede leer un lcov. Solo el escáner lo sube,
+y el escáner no corre: no existe el secreto `SONAR_TOKEN`.
+
+**Qué haría falta, y por qué no se hizo aquí.** Los dos modos de análisis
+son excluyentes. Cambiar exige, en este orden:
+
+1. crear el secreto `SONAR_TOKEN` en el repositorio —es una credencial, la
+   genera el propietario en SonarCloud—;
+2. desactivar Automatic Analysis en la configuración del proyecto en
+   SonarCloud;
+3. devolver al workflow el paso del escáner.
+
+Entre el 2 y el 3 el proyecto se queda **sin ningún análisis**, y el análisis
+es parte obligatoria de la puerta de calidad. Es un cambio deliberado del
+propietario, con una credencial de por medio, no algo que deba ocurrir de
+paso en una tarea de saneamiento.
+
+**Qué revela el baseline.** Los archivos sin cubrir que más pesan son los
+que ya están excluidos de cobertura a propósito —plantillas de impresión y
+generación de PDF— más `App.jsx`, que es solo el árbol de proveedores. No
+hace falta una campaña de pruebas para que la integración funcione: lo que
+falta es la tubería, no las pruebas.
+
+---
+
 ## Duplicación entre `lib/api/cotizaciones.js` y `lib/api/ventas.js`
 
 **Tamaño:** 1 bloque, 24 líneas · 136 tokens (`cotizaciones.js` 18-41 ↔
