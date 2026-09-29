@@ -45,46 +45,36 @@
 }
 
 .sidebar-marca {
+  position: relative;
   display: flex;
   align-items: center;
-  gap: var(--space-3);
-  padding: var(--space-4) var(--space-4) var(--space-5);
+  justify-content: center;
+  padding: var(--space-5) var(--space-4);
   border-bottom: 1px solid rgba(255, 255, 255, 0.07);
 }
 
 /* Se nombra el contenedor para ganar a .logo-lunacell, que fija
    height:auto y se carga despues de este archivo. */
-.sidebar-marca .sidebar-simbolo {
-  height: 34px;
-  width: auto;
+/*
+  84px es el tamano al que el nombre dentro del emblema todavia se lee;
+  por debajo de unos 72 se convierte en manchas. Se midio antes de elegirlo.
+*/
+.sidebar-marca .sidebar-emblema {
+  height: 84px;
+  width: 84px;
   flex: none;
 }
 
-.sidebar-marca-texto {
-  display: flex;
-  flex-direction: column;
-  line-height: 1.15;
-  min-width: 0;
-}
-
-.sidebar-marca-texto b {
-  font-family: var(--font-display);
-  font-size: 17px;
-  letter-spacing: 0.5px;
-  color: #FFFFFF;
-}
-
-.sidebar-marca-texto span {
-  font-family: var(--font-mono);
-  font-size: 10.5px;
-  letter-spacing: 0.6px;
-  color: var(--sidebar-active);
-}
-
 /* El botón de cerrar solo existe mientras el cajón está desplegado. */
+/*
+  Absoluto y no en el flujo: la marca centra el emblema, y un boton que
+  empujara desde un lado lo sacaria del centro.
+*/
 .sidebar-cerrar {
   display: none;
-  margin-left: auto;
+  position: absolute;
+  top: var(--space-3);
+  right: var(--space-3);
   width: 32px;
   height: 32px;
   border: none;

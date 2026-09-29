@@ -110,6 +110,47 @@ API.
 
 ---
 
+## Branding heredado de la plantilla en assets que no son código
+
+**Dónde.** `public/og-image.svg`, `public/404.html`, `public/offline.html`,
+`public/icons/icono.svg` y `public/icons.svg`.
+
+**Qué está mal.** Todos vienen del commit inicial, que arrancó el proyecto
+desde la base de una ferretería, y siguen con esa identidad: el naranja
+`#E8590C`, el carbón `#23272A` y una llave inglesa como símbolo. La imagen
+de Open Graph además dice literalmente «de la bodega al camión», que es el
+lema de la ferretería, no de LUNACELL.
+
+A eso se suma un defecto de formato: la imagen de Open Graph es un SVG, y
+ni el rastreador de Facebook ni el de X renderizan SVG. Hoy cualquier
+enlace compartido del sistema sale sin previsualización.
+
+**Por qué no se arregló en la fase de branding.** Esa fase autorizaba
+actualizar el branding web «usando los assets actuales y sin ampliar
+significativamente el alcance», y documentar lo que exigiera crear o
+rediseñar assets. Estos cinco lo exigen:
+
+- La imagen de Open Graph son 1200×630 con maquetación y tipografía
+  propias. Reproducirla bien es diseñar una pieza nueva, no reescalar una
+  existente, y hay que pasarla a PNG.
+- `404.html` y `offline.html` traen su propia paleta, independiente de
+  `tokens.css`, y un recuadro de 56 px que hoy solo es un cuadrado naranja
+  de relleno. Cambiarle el color deja un cuadrado dorado vacío: hay que
+  decidir qué marca va ahí.
+- `icono.svg` es la llave inglesa vectorial y `icons.svg` un juego de
+  iconos de redes sociales de la plantilla. Ninguno de los dos está
+  referenciado desde ningún sitio.
+
+**Qué sí se arregló.** El favicon, los tres iconos de la PWA, el
+`theme-color` y los colores del manifiesto, porque salen de reescalar el
+símbolo del logo aprobado sobre el negro de marca, sin inventar nada.
+
+**Cuándo conviene hacerlo.** Cuando haya una tarea de diseño. Los dos SVG
+sin referencias se pueden borrar en cualquier momento; lo demás necesita
+que alguien decida cómo se ve.
+
+---
+
 ## Cómo se midió
 
 Con [`jscpd`](https://github.com/kucherenko/jscpd), al mismo umbral que usa

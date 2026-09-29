@@ -46,7 +46,11 @@
     --lc-gold-600: #A97C18;  /* fondo de la acción al pasar       */
     --lc-gold-700: #8A6414;  /* dorado legible como texto         */
 
-    /* Carbón de la navegación. */
+    /* Carbón de la navegación. El 950 es el negro del logo aprobado:
+       se midió sobre Lunacell-logo2.jpeg y el campo del emblema es
+       #000000 en el 74% de sus píxeles. El sidebar lo usa para que el
+       emblema se funda con la columna en vez de recortarse como disco. */
+    --lc-black-950: #000000;
     --lc-black-900: #171A1D;
     --lc-black-800: #202327;
 
@@ -99,12 +103,10 @@
     --info:         #3457A6;
     --info-soft:    #E8EEFB;
 
-    /* Navegación lateral. Todavía no hay sidebar; estos tokens
-       existen para que la fase B no tenga que inventar la paleta
-       oscura por su cuenta. El gris del texto es más claro que el
-       --text-muted del área clara porque sobre carbón hace falta
+    /* Navegación lateral. El gris del texto es más claro que el
+       --text-muted del área clara porque sobre negro hace falta
        más luz para llegar al mismo contraste. */
-    --sidebar-bg:        var(--lc-black-900);
+    --sidebar-bg:        var(--lc-black-950);
     --sidebar-surface:   var(--lc-black-800);
     --sidebar-text:      var(--lc-gray-400);
     --sidebar-active:    var(--lc-gold-400);
