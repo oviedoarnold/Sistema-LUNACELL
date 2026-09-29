@@ -242,6 +242,69 @@ describe("hasPermission", () => {
   })
 })
 
+/*
+  Qué pasa cuando la consulta se cae.
+
+  Antes estos dos caminos no estaban cubiertos, y el de la sesión era un
+  fallo real: si cargar el perfil rechazaba, aplicarSesion moría antes de
+  poner cargando en false y ProtectedRoute dejaba "Comprobando tu sesión"
+  para siempre.
+*/
+describe("cuando la base no responde", () => {
+  /*
+    Hace que una tabla concreta rechace, como haría supabase-js sin red.
+  */
+  function romperTabla(tabla, mensaje) {
+    const original = falso.from.bind(falso)
+
+    falso.from = (nombre) =>
+      nombre === tabla
+        ? {
+            select: () => {
+              throw new Error(mensaje)
+            },
+          }
+        : original(nombre)
+  }
+
+  it("deja de cargar en vez de quedarse colgado", async () => {
+    falso = crearSupabaseFalso({
+      tablas: DATOS_BASE,
+      cuentas: CUENTAS,
+      sesionInicial: { user: { id: "auth-admin" } },
+    })
+    globalThis.__supabaseFalso = falso
+    romperTabla("usuarios", "sin conexión")
+
+    const { AuthProvider } = await import("./AuthContext")
+    const { useAuth } = await import("../hooks/useAuth")
+
+    const { result } = renderHook(() => useAuth(), { wrapper: AuthProvider })
+
+    await waitFor(() => expect(result.current.cargando).toBe(false))
+    expect(result.current.user).toBeNull()
+  })
+
+  it("sin perfil no se queda marcada la sesión como abierta", async () => {
+    falso = crearSupabaseFalso({
+      tablas: DATOS_BASE,
+      cuentas: CUENTAS,
+      sesionInicial: { user: { id: "auth-admin" } },
+    })
+    globalThis.__supabaseFalso = falso
+    romperTabla("usuarios", "sin conexión")
+
+    const { AuthProvider } = await import("./AuthContext")
+    const { useAuth } = await import("../hooks/useAuth")
+
+    const { result } = renderHook(() => useAuth(), { wrapper: AuthProvider })
+
+    await waitFor(() => expect(result.current.cargando).toBe(false))
+    expect(result.current.isAdmin).toBe(false)
+    expect(result.current.hasPermission("settings")).toBe(false)
+  })
+})
+
 describe("administración de usuarios", () => {
   it("lista los usuarios de la empresa", async () => {
     const { result } = await renderAuth({

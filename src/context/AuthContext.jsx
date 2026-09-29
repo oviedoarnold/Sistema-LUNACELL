@@ -87,10 +87,21 @@ export function AuthProvider({ children }) {
 
     let vigente = true
 
+    /*
+      Nunca rechaza. Si consultar el perfil falla —sin red, o la consulta
+      se cae— lo que no puede pasar es quedarse cargando para siempre:
+      ProtectedRoute enseñaría "Comprobando tu sesión" y la pantalla no
+      avanzaría nunca. Ante el fallo se deja de cargar sin usuario, que es
+      lo honesto: no se pudo establecer quién es, así que no entra.
+    */
     const aplicarSesion = async (sesion) => {
-      const perfil = sesion?.user
-        ? await cargarPerfil(sesion.user.id)
-        : null
+      let perfil = null
+
+      try {
+        perfil = sesion?.user ? await cargarPerfil(sesion.user.id) : null
+      } catch (error) {
+        console.error("No se pudo cargar el perfil de la sesión:", error)
+      }
 
       /*
         La marca acompaña al perfil y no a la sesión de Supabase: una
@@ -106,13 +117,19 @@ export function AuthProvider({ children }) {
       }
     }
 
-    supabase.auth
+    /*
+      Las dos llamadas se lanzan sin esperar a proposito: la sesión se
+      resuelve por su cuenta y el efecto no puede ser asíncrono. El void
+      lo dice explícitamente, y es seguro porque aplicarSesion ya no
+      rechaza.
+    */
+    void supabase.auth
       .getSession()
       .then(({ data }) => aplicarSesion(data.session))
 
     const { data: suscripcion } = supabase.auth.onAuthStateChange(
       (_evento, sesion) => {
-        aplicarSesion(sesion)
+        void aplicarSesion(sesion)
       }
     )
 
@@ -174,11 +191,21 @@ export function AuthProvider({ children }) {
 
     let vigente = true
 
-    traerUsuariosDeLaEmpresa().then((lista) => {
-      if (vigente) {
-        setUsers(lista)
-      }
-    })
+    /*
+      La lista de usuarios de la empresa es administrativa: si no se puede
+      traer, la pantalla sigue funcionando con la que ya tenga. Lo que no
+      vale es que el fallo se pierda, porque entonces la lista se ve vacía
+      sin que nadie sepa por qué.
+    */
+    traerUsuariosDeLaEmpresa()
+      .then((lista) => {
+        if (vigente) {
+          setUsers(lista)
+        }
+      })
+      .catch((error) => {
+        console.error("No se pudieron cargar los usuarios de la empresa:", error)
+      })
 
     return () => {
       vigente = false
