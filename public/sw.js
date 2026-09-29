@@ -130,14 +130,29 @@ function esArchivoPropio(url) {
   return url.origin === self.location.origin
 }
 
+/*
+  Guardar en cache es un refresco en segundo plano. Si falla —cuota llena,
+  almacenamiento denegado— la respuesta ya esta servida y no hay que
+  romperla; pero tampoco debe desaparecer sin rastro, asi que queda escrito
+  en la consola del service worker, que es donde se mira cuando algo no se
+  actualiza.
+*/
+async function guardarEnCache(cache, clave, respuesta) {
+  try {
+    await cache.put(clave, respuesta)
+  } catch (error) {
+    console.warn("[sw] no se pudo guardar en cache:", clave, error)
+  }
+}
+
 async function responderConCacheYActualizar(request) {
   const cache = await caches.open(CACHE_NAME)
   const enCache = await cache.match(request)
 
   const descarga = fetch(request)
-    .then((respuesta) => {
+    .then(async (respuesta) => {
       if (respuesta && respuesta.ok) {
-        cache.put(request, respuesta.clone())
+        await guardarEnCache(cache, request, respuesta.clone())
       }
 
       return respuesta
@@ -156,7 +171,7 @@ async function responderNavegacion(request) {
     const respuesta = await fetch(request)
     const cache = await caches.open(CACHE_NAME)
 
-    cache.put("/index.html", respuesta.clone())
+    await guardarEnCache(cache, "/index.html", respuesta.clone())
 
     return respuesta
   } catch {

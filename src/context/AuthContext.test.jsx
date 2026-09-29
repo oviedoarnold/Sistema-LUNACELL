@@ -242,6 +242,69 @@ describe("hasPermission", () => {
   })
 })
 
+/*
+  Qué pasa cuando la consulta se cae.
+
+  Antes estos dos caminos no estaban cubiertos, y el de la sesión era un
+  fallo real: si cargar el perfil rechazaba, aplicarSesion moría antes de
+  poner cargando en false y ProtectedRoute dejaba "Comprobando tu sesión"
+  para siempre.
+*/
+describe("cuando la base no responde", () => {
+  /*
+    Hace que una tabla concreta rechace, como haría supabase-js sin red.
+  */
+  function romperTabla(tabla, mensaje) {
+    const original = falso.from.bind(falso)
+
+    falso.from = (nombre) =>
+      nombre === tabla
+        ? {
+            select: () => {
+              throw new Error(mensaje)
+            },
+          }
+        : original(nombre)
+  }
+
+  /*
+    Monta la sesión con la tabla de usuarios caída y espera a que el
+    contexto termine de resolverse. Si el fallo volviera a dejarlo
+    cargando, la espera vence y las dos pruebas fallan aquí.
+  */
+  async function renderConUsuariosCaidos() {
+    falso = crearSupabaseFalso({
+      tablas: DATOS_BASE,
+      cuentas: CUENTAS,
+      sesionInicial: { user: { id: "auth-admin" } },
+    })
+    globalThis.__supabaseFalso = falso
+    romperTabla("usuarios", "sin conexión")
+
+    const { AuthProvider } = await import("./AuthContext")
+    const { useAuth } = await import("../hooks/useAuth")
+
+    const { result } = renderHook(() => useAuth(), { wrapper: AuthProvider })
+
+    await waitFor(() => expect(result.current.cargando).toBe(false))
+
+    return result
+  }
+
+  it("deja de cargar en vez de quedarse colgado", async () => {
+    const result = await renderConUsuariosCaidos()
+
+    expect(result.current.user).toBeNull()
+  })
+
+  it("sin perfil no quedan permisos ni sesión de administrador", async () => {
+    const result = await renderConUsuariosCaidos()
+
+    expect(result.current.isAdmin).toBe(false)
+    expect(result.current.hasPermission("settings")).toBe(false)
+  })
+})
+
 describe("administración de usuarios", () => {
   it("lista los usuarios de la empresa", async () => {
     const { result } = await renderAuth({
