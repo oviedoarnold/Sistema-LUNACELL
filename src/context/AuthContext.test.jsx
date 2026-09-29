@@ -267,7 +267,12 @@ describe("cuando la base no responde", () => {
         : original(nombre)
   }
 
-  it("deja de cargar en vez de quedarse colgado", async () => {
+  /*
+    Monta la sesión con la tabla de usuarios caída y espera a que el
+    contexto termine de resolverse. Si el fallo volviera a dejarlo
+    cargando, la espera vence y las dos pruebas fallan aquí.
+  */
+  async function renderConUsuariosCaidos() {
     falso = crearSupabaseFalso({
       tablas: DATOS_BASE,
       cuentas: CUENTAS,
@@ -282,24 +287,19 @@ describe("cuando la base no responde", () => {
     const { result } = renderHook(() => useAuth(), { wrapper: AuthProvider })
 
     await waitFor(() => expect(result.current.cargando).toBe(false))
+
+    return result
+  }
+
+  it("deja de cargar en vez de quedarse colgado", async () => {
+    const result = await renderConUsuariosCaidos()
+
     expect(result.current.user).toBeNull()
   })
 
-  it("sin perfil no se queda marcada la sesión como abierta", async () => {
-    falso = crearSupabaseFalso({
-      tablas: DATOS_BASE,
-      cuentas: CUENTAS,
-      sesionInicial: { user: { id: "auth-admin" } },
-    })
-    globalThis.__supabaseFalso = falso
-    romperTabla("usuarios", "sin conexión")
+  it("sin perfil no quedan permisos ni sesión de administrador", async () => {
+    const result = await renderConUsuariosCaidos()
 
-    const { AuthProvider } = await import("./AuthContext")
-    const { useAuth } = await import("../hooks/useAuth")
-
-    const { result } = renderHook(() => useAuth(), { wrapper: AuthProvider })
-
-    await waitFor(() => expect(result.current.cargando).toBe(false))
     expect(result.current.isAdmin).toBe(false)
     expect(result.current.hasPermission("settings")).toBe(false)
   })
