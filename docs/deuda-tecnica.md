@@ -8,6 +8,44 @@ Cuando algo de aquí se resuelva, se borra de la lista.
 
 ---
 
+## Promesas sin gestionar su rechazo (`S9383`) — destino: **E.3**
+
+**Cuatro hallazgos**, todos de la misma regla: *«Promises must be awaited,
+end with a call to `.catch`, end with a call to `.then` with a rejection
+handler or be explicitly marked as ignored with the `void` operator»*.
+
+| Archivo | Línea | Qué es |
+|---|---|---|
+| `public/sw.js` | 140 | `cache.put()` dentro del `.then` de un `fetch` |
+| `public/sw.js` | 159 | `cache.put("/index.html", …)` sin esperar |
+| `src/context/AuthContext.jsx` | 115 | el callback de `onAuthStateChange` llama a `aplicarSesion` |
+| `src/context/AuthContext.jsx` | 177 | `traerUsuariosDeLaEmpresa().then(…)` sin `.catch` |
+
+**Por qué importa.** Una promesa que se rechaza sin manejador no rompe la
+pantalla, pero se pierde en silencio. En los dos casos del service worker
+significa que un fallo al escribir en caché no se entera nadie; en los dos
+de `AuthContext`, que un error al aplicar la sesión o al traer los usuarios
+de la empresa desaparece sin rastro. Es justo el tipo de fallo que después
+cuesta reproducir.
+
+**Por qué no se corrigió en E.2.** `AuthContext` y el service worker están
+fuera del alcance que `CLAUDE.md` permite tocar sin autorización: uno es
+autenticación y el otro decide qué se sirve sin conexión. Además no es un
+cambio cosmético — hay que decidir **qué se hace** con cada error, no solo
+callar el aviso: registrarlo, reintentar o ignorarlo explícitamente con
+`void` son decisiones distintas y hay que tomarlas una por una.
+
+**Qué pide la corrección.** Para cada uno: decidir el tratamiento del
+rechazo y, donde afecte a la sesión o a los usuarios, una prueba que cubra
+el camino de error. No vale añadir `.catch(() => {})`: eso silencia el
+aviso sin resolver nada.
+
+**Aparecieron el 2026-09-07 según SonarCloud**, pero no figuraban en la
+auditoría de E.1: son de una regla que Sonar incorporó después, no de
+código nuevo nuestro.
+
+---
+
 ## SonarCloud no recibe la cobertura de las pruebas
 
 **Estado.** Todo el lado local está hecho y funciona: `npm run coverage`
