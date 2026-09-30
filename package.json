@@ -11,7 +11,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "coverage": "vitest run --coverage",
-    "coverage:ci": "vitest run --coverage --reporter=default --reporter=json --outputFile=test-report.json"
+    "coverage:ci": "vitest run --coverage --reporter=default --reporter=json --outputFile=test-report.json",
+    "test:sql": "vitest run --config vitest.sql.config.js"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.112.4",
@@ -32,11 +33,13 @@
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^6.0.1",
     "@vitest/coverage-v8": "^4.1.11",
+    "embedded-postgres": "17.10.0-beta.17",
     "eslint": "^10.3.0",
     "eslint-plugin-react-hooks": "^7.1.1",
     "eslint-plugin-react-refresh": "^0.5.2",
     "globals": "^17.6.0",
     "jsdom": "^30.0.1",
+    "pg": "^8.23.0",
     "vite": "^8.0.12",
     "vitest": "^4.1.11"
   },

@@ -71,3 +71,53 @@ jobs:
           name: cobertura
           path: coverage/
           retention-days: 30
+
+  # ─────────────────────────────────────────────────────────
+  # Las pruebas contra PostgreSQL de verdad.
+  #
+  # Van en su propio job y no como un paso del anterior por dos razones:
+  # corren en paralelo, así que no retrasan el lint ni el build, y publican
+  # su propio check. Que se vea aparte importa, porque lo que vigilan —que
+  # una migración siga aplicándose, que un CHECK siga rechazando, que RLS
+  # siga aislando, que el reparto siga siendo FIFO y que dos cobros
+  # simultáneos no gasten el mismo saldo— no es lo mismo que una prueba de
+  # interfaz en jsdom, y confundir los dos fallos costaría tiempo.
+  #
+  # No lleva secretos ni variables de entorno. No puede apuntar a Supabase:
+  # el arnés construye su conexión él mismo contra una base desechable en
+  # el temporal del runner, y pruebas-sql/guardia.mjs lo comprueba en cada
+  # arranque. La versión de PostgreSQL la fija package-lock.json.
+  # ─────────────────────────────────────────────────────────
+  pruebas-sql:
+    name: Pruebas SQL contra PostgreSQL real
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+
+    steps:
+      - name: Descargar el código
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Preparar Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Instalar dependencias
+        run: npm ci --ignore-scripts
+
+      # --ignore-scripts, que es lo correcto para todo lo demás, deja sin
+      # correr el postinstall del paquete de binarios de PostgreSQL. Ese
+      # postinstall rehace los enlaces simbólicos de lib/, sin los cuales el
+      # servidor no arranca en Linux. Se rehace solo ese paquete, de forma
+      # explícita, en vez de levantar la restricción para todos.
+      - name: Preparar el binario de PostgreSQL
+        run: npm rebuild @embedded-postgres/linux-x64
+
+      # Bloquea: si el reparto deja de ser FIFO, si el sobrepago deja de
+      # rechazarse o si dos cobros simultáneos dejan de serializarse, el
+      # pipeline queda en rojo.
+      - name: Pruebas SQL
+        run: npm run test:sql

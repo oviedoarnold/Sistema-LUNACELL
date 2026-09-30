@@ -151,6 +151,77 @@ que alguien decida cómo se ve.
 
 ---
 
+## El abono directo sobre una factura se retira — **CxC-2.1 descartado**
+
+**No se va a reparar. Se va a quitar.**
+
+**Dónde.** `crearAbono()` y `ajustarEstadoPorSaldo()` en
+[`lib/api/ventas.js`](../src/lib/api/ventas.js), y `addPayment()` en
+[`SalesContext.jsx`](../src/context/SalesContext.jsx).
+
+**Qué le falta.** CxC-2 puso el reparto consolidado dentro de PostgreSQL,
+con candado, transacción y la deuda calculada en el motor. El camino de
+abonar contra una factura concreta se quedó como estaba, y le faltan cuatro
+cosas que el nuevo sí tiene:
+
+- **Concurrencia.** No toma ningún candado. Dos cajeros abonando a la vez
+  sobre la misma factura validan los dos contra el saldo que tenían en
+  pantalla, y los dos pasan.
+- **Sobrepago.** Lo comprueba el navegador, comparando contra la copia en
+  memoria de la venta. La base solo exige `monto > 0`, así que una llamada
+  directa a la API o una pantalla con datos viejos puede dejar una factura
+  sobrepagada.
+- **Atomicidad.** Son dos viajes: primero se inserta el abono y después se
+  actualiza el estado. Si el segundo no llega, el dinero queda cobrado y la
+  factura sigue apareciendo como pendiente.
+- **Idempotencia.** La clave y el índice único existen, así que un doble
+  clic no duplica. Pero `crearAbono()` devuelve el abono guardado **sin
+  comparar la factura ni el monto**: reusar una clave con datos distintos
+  no falla, devuelve el abono viejo y lo hace pasar por éxito.
+
+**Por qué no se arregla.** Se llegó a escribir el alcance de un arreglo
+—un RPC hermano que replicara el patrón sobre una sola factura— y se
+descartó por una decisión de arquitectura: **todo cobro nuevo de cuentas
+por cobrar entra exclusivamente por `registrar_pago_cliente()`**.
+
+Reparar el camino viejo habría dejado dos vías operativas de cobrar,
+ambas seguras pero distintas, y con ellas la pregunta de cuál usar en cada
+caso. Quitar la segunda cuesta menos que mantenerla y explica mejor el
+sistema: un cliente que paga no paga facturas, paga lo que debe.
+
+**Qué se retira y cuándo.** CxC-3 quita la posibilidad **operativa** de
+generar un abono directamente desde una factura: desaparece de la interfaz,
+y con ella el camino que no tenía las garantías.
+
+**Qué NO se toca.** La estructura se queda entera, y esto importa porque es
+lo que evita confundir "se retira la pantalla" con "se borra el modelo":
+
+- `abonos` sigue existiendo, y sigue siendo **el detalle de aplicación** de
+  un pago:
+
+  ```
+  pago
+    -> abono sobre la factura A
+    -> abono sobre la factura B
+    -> abono sobre la factura C
+  ```
+
+- `venta_id` sigue siendo obligatorio: cada renglón dice a qué factura fue
+  su parte.
+- **`pago_id` sigue siendo nullable**, por compatibilidad estructural con
+  los abonos que se registraron por el camino viejo. **No se endurece a
+  `NOT NULL` en esta fase**, y no depende de que hoy no haya ninguno: si
+  apareciera uno antes del despliegue, seguiría siendo válido.
+
+**Qué queda pendiente de verdad.** Nada de código en esta entrada. Lo único
+que queda es que CxC-3 cumpla su parte y retire el flujo de la interfaz.
+Mientras no lo haga, el camino viejo sigue accesible con los cuatro huecos
+de arriba, así que **la interfaz de cobros no debe darse por terminada
+antes de esa retirada**: dejarla a medias haría parecer seguro un camino
+que no lo es.
+
+---
+
 ## Cómo se midió
 
 Con [`jscpd`](https://github.com/kucherenko/jscpd), al mismo umbral que usa
