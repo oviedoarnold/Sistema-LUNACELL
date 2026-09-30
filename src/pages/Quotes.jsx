@@ -738,10 +738,7 @@ function Quotes() {
               </div>
             </div>
 
-            <div
-              className="field"
-              className="quotes-campo"
-            >
+            <div className="field quotes-campo">
               <label className="quotes-casilla">
                 <input
                   type="checkbox"

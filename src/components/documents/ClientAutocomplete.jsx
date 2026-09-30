@@ -97,6 +97,11 @@ function ClientAutocomplete({
     modal, la misma tecla la cerraría también, y quien solo quería salir de
     la lista perdería el formulario entero. Cuando la lista está cerrada el
     evento sigue su camino y la ventana se cierra como siempre.
+
+    Va en el campo y en cada opción, que son los que pueden tener el foco, y
+    no en el div que los envuelve. Colgarlo del contenedor funcionaba, pero
+    convertía en interactivo un elemento que no lo es: el mismo defecto que
+    esta pasada vino a quitar de aquí.
   */
   const handleKeyDown = (event) => {
     if (event.key === "Escape" && open) {
@@ -106,7 +111,7 @@ function ClientAutocomplete({
   }
 
   return (
-    <div ref={rootRef} onKeyDown={handleKeyDown}>
+    <div ref={rootRef}>
       <div className="field">
         <label htmlFor="clientautocomplete-opcional">
           {label}
@@ -124,6 +129,7 @@ function ClientAutocomplete({
             placeholder={placeholder}
             onFocus={() => setOpen(true)}
             onChange={handleInputChange}
+            onKeyDown={handleKeyDown}
           />
 
           {/*
@@ -153,6 +159,7 @@ function ClientAutocomplete({
                   onClick={() =>
                     handleSelectClient(client)
                   }
+                  onKeyDown={handleKeyDown}
                 >
                   <b>{client.name}</b>
 
@@ -190,6 +197,7 @@ function ClientAutocomplete({
                     event.preventDefault()
                   }
                   onClick={handleCreateClient}
+                  onKeyDown={handleKeyDown}
                 >
                   <FaPlus aria-hidden="true" />
                   Registrar cliente nuevo

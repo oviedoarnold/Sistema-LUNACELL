@@ -109,13 +109,33 @@ describe("buscador de cliente · se puede usar sin ratón", () => {
     expect(onCreateNew).toHaveBeenCalled()
   })
 
-  it("Escape cierra la lista", () => {
+  it("Escape cierra la lista desde el campo", () => {
     montarBuscador()
 
     fireEvent.focus(screen.getByRole("textbox"))
     expect(listaAbierta()).toBeInTheDocument()
 
     fireEvent.keyDown(screen.getByRole("textbox"), { key: "Escape" })
+
+    expect(listaAbierta()).not.toBeInTheDocument()
+  })
+
+  /*
+    El manejador vive en el campo y en cada opción, que son los que pueden
+    tener el foco, y no en el div que los envuelve. Esta prueba cubre el
+    caso que se perdería si alguien lo moviera de vuelta al contenedor y lo
+    quitara de las opciones.
+  */
+  it("Escape también cierra con el foco puesto en una opción", () => {
+    montarBuscador()
+
+    fireEvent.focus(screen.getByRole("textbox"))
+
+    const opcion = within(listaAbierta()).getByRole("button", {
+      name: /arnold oviedo/i,
+    })
+
+    fireEvent.keyDown(opcion, { key: "Escape" })
 
     expect(listaAbierta()).not.toBeInTheDocument()
   })
