@@ -10,7 +10,15 @@
   sembrados, y la que NO vuelve a hacer al correrla otra vez.
 */
 
-import { describe, it, expect, beforeAll, afterAll } from "vitest"
+import {
+  describe,
+  it,
+  expect,
+  beforeAll,
+  afterAll,
+  beforeEach,
+  afterEach,
+} from "vitest"
 import fs from "node:fs"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
@@ -306,11 +314,6 @@ describe("aislamiento con RLS", () => {
 
 describe("la apertura", () => {
   /*
-    La migración ya corrió sobre una base vacía al levantar el arnés, así
-    que aquí se ejecuta su mismo bloque sobre datos sembrados, dentro de
-    una transacción que se revierte.
-  */
-  /*
     La apertura se ejecuta corriendo LA MIGRACIÓN DE VERDAD, no una copia.
 
     Tenerla escrita dos veces ya se desincronizó una vez durante esta
@@ -326,184 +329,132 @@ describe("la apertura", () => {
     "utf8"
   )
 
-  it("12. conserva el total y lo deja en la bodega", async () => {
+  /*
+    La migración ya corrió sobre una base vacía al levantar el arnés, así
+    que aquí se ejecuta su mismo bloque sobre datos sembrados, dentro de
+    una transacción que se revierte.
+
+    Cada prueba arranca vaciando la tabla porque las de arriba dejaron
+    celdas y la apertura se salta si encuentra alguna. Olvidarlo no rompe
+    nada a la vista: las pruebas pasan sin ejecutar la apertura, que es lo
+    que ocurrió con cinco de ellas mientras se escribía esto. Por eso la
+    precondición vive aquí y no copiada en cada prueba, donde se puede
+    olvidar en la siguiente que alguien añada.
+  */
+  beforeEach(async () => {
     await db.query("begin")
+    await db.query("delete from inventario_ubicacion")
+  })
 
-    try {
-      /*
-        Las pruebas anteriores dejaron celdas, y la apertura se salta si
-        encuentra alguna. Se limpian dentro de la transacción, que al
-        revertirse las devuelve.
-      */
-      await db.query("delete from inventario_ubicacion")
+  afterEach(async () => {
+    await db.query("rollback")
+  })
 
-      const e = await escenario({ stock: 10 })
-      await db.query(APERTURA)
+  it("12. conserva el total y lo deja en la bodega", async () => {
+    const e = await escenario({ stock: 10 })
+    await db.query(APERTURA)
 
-      expect(await celda(db, e.bodega, e.producto)).toBe(10)
-      expect(await totalDelProducto(db, e.producto)).toBe(10)
-    } finally {
-      await db.query("rollback")
-    }
+    expect(await celda(db, e.bodega, e.producto)).toBe(10)
+    expect(await totalDelProducto(db, e.producto)).toBe(10)
   })
 
   it("13. la tienda y los camiones arrancan en cero", async () => {
-    await db.query("begin")
+    const e = await escenario({ stock: 10 })
+    await db.query(APERTURA)
 
-    try {
-      /*
-        Las pruebas anteriores dejaron celdas, y la apertura se salta si
-        encuentra alguna. Se limpian dentro de la transacción, que al
-        revertirse las devuelve.
-      */
-      await db.query("delete from inventario_ubicacion")
-
-      const e = await escenario({ stock: 10 })
-      await db.query(APERTURA)
-
-      /* Ausencia de celda es cero: no se crean filas de ceros. */
-      expect(await celda(db, e.camion, e.producto)).toBe(0)
-      expect(
-        await contar(db, "inventario_ubicacion", "ubicacion_id=$1", [e.camion])
-      ).toBe(0)
-    } finally {
-      await db.query("rollback")
-    }
+    /* Ausencia de celda es cero: no se crean filas de ceros. */
+    expect(await celda(db, e.camion, e.producto)).toBe(0)
+    expect(
+      await contar(db, "inventario_ubicacion", "ubicacion_id=$1", [e.camion])
+    ).toBe(0)
   })
 
   it("14. no duplica el stock al correrla dos veces", async () => {
-    await db.query("begin")
+    const e = await escenario({ stock: 10 })
 
-    try {
-      /*
-        Las pruebas anteriores dejaron celdas, y la apertura se salta si
-        encuentra alguna. Se limpian dentro de la transacción, que al
-        revertirse las devuelve.
-      */
-      await db.query("delete from inventario_ubicacion")
+    await db.query(APERTURA)
+    await db.query(APERTURA)
+    await db.query(APERTURA)
 
-      const e = await escenario({ stock: 10 })
-
-      await db.query(APERTURA)
-      await db.query(APERTURA)
-      await db.query(APERTURA)
-
-      expect(await totalDelProducto(db, e.producto)).toBe(10)
-    } finally {
-      await db.query("rollback")
-    }
+    expect(await totalDelProducto(db, e.producto)).toBe(10)
   })
 
-  it("15. aborta si el reparto no cuadra con los movimientos", async () => {
-    await db.query("begin")
+  /*
+    Esta prueba comprueba la comparación, no el camino que lleva a ella, y
+    conviene decir por qué.
 
-    try {
-      /*
-        Las pruebas anteriores dejaron celdas, y la apertura se salta si
-        encuentra alguna. Se limpian dentro de la transacción, que al
-        revertirse las devuelve.
-      */
-      await db.query("delete from inventario_ubicacion")
+    La cifra de control de la migración NO se puede disparar hoy con datos
+    válidos. El bucle reparte, por empresa, la suma de los movimientos de
+    cada uno de sus productos; la cifra suma después todos los movimientos
+    que existen. Para que las dos difieran haría falta un movimiento cuyo
+    producto no esté en `productos`, y `movimientos_inventario.producto_id`
+    es `not null references productos (id) on delete cascade`: no hay
+    huérfanos posibles.
 
-      const e = await escenario({ stock: 10 })
+    Es decir: la cifra de control es una red para un cambio futuro —que
+    alguien filtre el bucle por producto activo, o por tipo de
+    movimiento— y no para un dato de hoy. Lo que sí se puede probar es que
+    la comparación detecta un descuadre cuando existe, y es lo que se hace
+    aquí sembrando una unidad de más.
+  */
+  it("15. la cifra de control rechaza un descuadre", async () => {
+    const e = await escenario({ stock: 10 })
 
-      /* Se mete una unidad de más antes de la cifra de control. */
-      await db.query(
-        `insert into inventario_ubicacion (empresa_id, ubicacion_id, producto_id, cantidad)
-         values ($1,$2,$3,1)`,
-        [e.empresa, e.camion, e.producto]
-      )
+    await db.query(
+      `insert into inventario_ubicacion (empresa_id, ubicacion_id, producto_id, cantidad)
+       values ($1,$2,$3,1)`,
+      [e.empresa, e.camion, e.producto]
+    )
 
-      /*
-        Con celdas ya presentes la apertura se salta, así que para probar
-        la cifra de control se fuerza el descuadre sobre el bloque entero.
-      */
-      await expect(
-        db.query(`
-          do $$
-          declare v_esperado bigint; v_aplicado bigint;
-          begin
-            select coalesce(sum(cantidad),0) into v_esperado from movimientos_inventario;
-            select coalesce(sum(cantidad),0) into v_aplicado from inventario_ubicacion;
-            if v_esperado <> v_aplicado then
-              raise exception 'La apertura no cuadra: movimientos % contra celdas %', v_esperado, v_aplicado;
-            end if;
-          end $$;`)
-      ).rejects.toThrow(/no cuadra/i)
-    } finally {
-      await db.query("rollback")
-    }
+    await expect(
+      db.query(`
+        do $$
+        declare v_esperado bigint; v_aplicado bigint;
+        begin
+          select coalesce(sum(cantidad),0) into v_esperado from movimientos_inventario;
+          select coalesce(sum(cantidad),0) into v_aplicado from inventario_ubicacion;
+          if v_esperado <> v_aplicado then
+            raise exception 'La apertura no cuadra: movimientos % contra celdas %', v_esperado, v_aplicado;
+          end if;
+        end $$;`)
+    ).rejects.toThrow(/no cuadra/i)
   })
 
   it("16. aborta si la empresa no tiene bodega activa", async () => {
-    await db.query("begin")
+    await escenario({ conBodega: false, stock: 5 })
 
-    try {
-      /*
-        Las pruebas anteriores dejaron celdas, y la apertura se salta si
-        encuentra alguna. Se limpian dentro de la transacción, que al
-        revertirse las devuelve.
-      */
-      await db.query("delete from inventario_ubicacion")
-
-      await escenario({ conBodega: false, stock: 5 })
-
-      await expect(db.query(APERTURA)).rejects.toThrow(/bodega activa/i)
-    } finally {
-      await db.query("rollback")
-    }
+    await expect(db.query(APERTURA)).rejects.toThrow(/bodega activa/i)
   })
 
   /*
     El caso contrario al anterior: dos bodegas activas. La apertura no
     elige por su cuenta, y por eso no toma «la primera» ni «la menor»:
-    dejar 20 unidades en una de dos bodegas posibles es decidir dónde
-    está la mercadería sin saberlo, y eso se descubre haciendo un
-    inventario físico contra una cifra inventada.
+    dejar 20 unidades en una de dos bodegas posibles es decidir dónde está
+    la mercadería sin saberlo, y eso se descubre haciendo un inventario
+    físico contra una cifra inventada.
   */
   it("17. aborta si la empresa tiene más de una bodega activa", async () => {
-    await db.query("begin")
+    const { empresa } = await escenario({ stock: 5 })
 
-    try {
-      await db.query("delete from inventario_ubicacion")
+    await db.query(
+      `insert into ubicaciones (empresa_id, nombre, tipo)
+       values ($1, 'Bodega Norte', 'bodega')`,
+      [empresa]
+    )
 
-      const { empresa } = await escenario({ stock: 5 })
-
-      await db.query(
-        `insert into ubicaciones (empresa_id, nombre, tipo)
-         values ($1, 'Bodega Norte', 'bodega')`,
-        [empresa]
-      )
-
-      await expect(db.query(APERTURA)).rejects.toThrow(/2 bodegas activas/i)
-    } finally {
-      await db.query("rollback")
-    }
+    await expect(db.query(APERTURA)).rejects.toThrow(/2 bodegas activas/i)
   })
 
   it("18. aborta si el stock histórico es negativo", async () => {
-    await db.query("begin")
+    const e = await escenario({ stock: 5 })
 
-    try {
-      /*
-        Las pruebas anteriores dejaron celdas, y la apertura se salta si
-        encuentra alguna. Se limpian dentro de la transacción, que al
-        revertirse las devuelve.
-      */
-      await db.query("delete from inventario_ubicacion")
+    await db.query(
+      `insert into movimientos_inventario (empresa_id, producto_id, tipo, cantidad, motivo)
+       values ($1,$2,'salida',-9,'prueba')`,
+      [e.empresa, e.producto]
+    )
 
-      const e = await escenario({ stock: 5 })
-
-      await db.query(
-        `insert into movimientos_inventario (empresa_id, producto_id, tipo, cantidad, motivo)
-         values ($1,$2,'salida',-9,'prueba')`,
-        [e.empresa, e.producto]
-      )
-
-      await expect(db.query(APERTURA)).rejects.toThrow(/negativo/i)
-    } finally {
-      await db.query("rollback")
-    }
+    await expect(db.query(APERTURA)).rejects.toThrow(/negativo/i)
   })
 })
 
