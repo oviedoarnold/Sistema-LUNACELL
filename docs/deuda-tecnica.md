@@ -265,6 +265,51 @@ producción, o en cualquier rama que ya toque el cálculo de saldos.
 
 ---
 
+## `ModalDeCliente` no se anuncia como diálogo ni cierra con Escape
+
+**Dónde.** [`ModalDeCliente.jsx`](../src/components/documents/ModalDeCliente.jsx).
+
+**Qué le falta.** Dibuja su propia ventana —capa, caja, cabecera, cuerpo,
+pie— en vez de apoyarse en
+[`ModalShell`](../src/components/forms/ModalShell.jsx), que es el armazón
+que el resto del sistema usa. Al no hacerlo, se queda sin las cuatro cosas
+que ese armazón trae:
+
+- no lleva `role="dialog"` ni `aria-modal`, así que un lector de pantalla no
+  anuncia que se abrió una ventana;
+- no toma su nombre del título, aunque lo muestre;
+- no cierra con Escape;
+- no mueve el foco al abrirse ni lo devuelve al cerrarse.
+
+**Cómo se descubrió.** Validando F.2 en el navegador. Al comprobar que
+«Registrar cliente nuevo» seguía abriendo el formulario, la ventana apareció
+correctamente pero el conteo de `[role=dialog]` dio cero.
+
+**Por qué Sonar no lo marca.** Sus reglas de accesibilidad miran elementos
+no interactivos con manejadores de interacción, y aquí no hay ninguno: el
+problema es lo que falta, no lo que sobra. Por eso no salió con los tres
+`S6848` que F.2 corrigió.
+
+**Impacto.** Quien abre el formulario con el teclado entra en una ventana
+que no se anuncia y de la que no se sale con Escape. Se puede completar y
+guardar con Tab, así que no bloquea; molesta.
+
+**Por qué no se arregló en F.2.** Esa fase tenía autorizada la deuda
+documentada de `ClientAutocomplete` y `DocumentPreviewModal`, y esta no
+estaba en la lista. `ModalDeCliente` lo consumen facturar y cotizar, así que
+tocarlo vuelve a ser un cambio compartido que merece su propia revisión.
+
+**Qué habría que hacer.** Pasarlo a `ModalShell`, que ya resuelve las cuatro
+cosas y es lo que usan las demás ventanas del sistema. El cuerpo del
+formulario no cambia; lo que se sustituye es el armazón de alrededor.
+
+**Cuándo.** En cualquier rama que ya toque los componentes de documentos.
+Se comprobó y es la única que queda: `DocumentPreviewModal` también dibuja
+su propia ventana, pero F.2 ya le dio el rol, el nombre y el Escape que le
+faltaban, así que esta entrada cubre un solo archivo.
+
+---
+
 ## Cómo se midió
 
 Con [`jscpd`](https://github.com/kucherenko/jscpd), al mismo umbral que usa
