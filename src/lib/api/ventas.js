@@ -274,70 +274,24 @@ async function descargarInventario(ventaId, items, empresaId, usuarioId) {
   if (error) fallo(error, "descargar el inventario de la venta")
 }
 
-// ── ABONOS ─────────────────────────────────────────────────
-
-async function abonoConClave(clave, empresaId) {
-  if (!clave) return null
-
-  const { data } = await supabase
-    .from("abonos")
-    .select("*")
-    .eq("empresa_id", empresaId)
-    .eq("clave_idempotencia", clave)
-    .maybeSingle()
-
-  return data || null
-}
-
-export async function crearAbono(
-  ventaId,
-  { amount, note },
-  { empresaId, usuarioId, clave = null }
-) {
-  const yaRegistrado = await abonoConClave(clave, empresaId)
-
-  if (yaRegistrado) return aAbonoDeApp(yaRegistrado)
-
-  const { data, error } = await supabase
-    .from("abonos")
-    .insert({
-      empresa_id: empresaId,
-      venta_id: ventaId,
-      usuario_id: usuarioId || null,
-      monto: amount,
-      nota: note || "",
-      clave_idempotencia: clave,
-    })
-    .select("*")
-    .single()
-
-  if (error?.code === "23505" && clave) {
-    const registradoPorOtroIntento = await abonoConClave(clave, empresaId)
-
-    if (registradoPorOtroIntento) return aAbonoDeApp(registradoPorOtroIntento)
-  }
-
-  if (error) fallo(error, "registrar el abono")
-
-  return aAbonoDeApp(data)
-}
-
-export async function eliminarAbono(abonoId) {
-  const { error } = await supabase.from("abonos").delete().eq("id", abonoId)
-
-  if (error) fallo(error, "eliminar el abono")
-}
-
 /*
-  El estado de la factura lo decide el saldo, no el usuario. Se recalcula
-  después de cada abono para que "cancelada" nunca dependa de que la
-  pantalla se acuerde de actualizarlo.
-*/
-export async function ajustarEstadoPorSaldo(ventaId, saldoPendiente) {
-  const { error } = await supabase
-    .from("ventas")
-    .update({ estado: saldoPendiente <= 0 ? "pagada" : "pendiente" })
-    .eq("id", ventaId)
+  Escribir un abono ya no se hace desde aquí.
 
-  if (error) fallo(error, "actualizar el estado de la factura")
-}
+  Existían crearAbono(), eliminarAbono() y ajustarEstadoPorSaldo(): un abono
+  contra una factura concreta, y después, en otra llamada, el estado de esa
+  factura. Entre las dos cabía que se cayera la red y dejara el dinero
+  cobrado con la factura abierta, y ninguna tomaba un candado, así que dos
+  cajeros podían gastar el mismo saldo.
+
+  Ahora el dinero entra por registrar_pago_cliente(), que reparte el pago
+  entre las facturas del cliente dentro de una sola transacción y con la
+  cuenta bloqueada. Vive en lib/api/cobros.js.
+
+  Se retiran y no se dejan por si acaso: sin consumidores seguían siendo
+  llamables, y eliminarAbono() en particular ya no era solo insegura sino
+  incorrecta —borrar un abono que pertenece a un pago dejaría al pago
+  diciendo que repartió un dinero que ya no está en ningún renglón—.
+
+  Leer abonos sigue igual: aAbonoDeApp los traduce dentro de cada venta,
+  porque son parte de su historia y se siguen mostrando.
+*/

@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
 
-import { crearVenta, crearAbono } from "./ventas"
+import { crearVenta } from "./ventas"
 import { crearCotizacion } from "./cotizaciones"
 import { crearSupabaseFalso } from "../../test/supabaseFalso"
 
@@ -155,38 +155,6 @@ describe("facturar dos veces con la misma clave", () => {
     await crearVenta(venta(), contexto)
 
     expect(falso.datos.ventas).toHaveLength(2)
-  })
-})
-
-describe("abonar dos veces con la misma clave", () => {
-  const contextoAbono = { empresaId: EMPRESA, usuarioId: USUARIO }
-
-  it("registra un solo abono", async () => {
-    const falso = montar()
-
-    await crearAbono("v1", { amount: 50 }, { ...contextoAbono, clave: "abono-1" })
-    await crearAbono("v1", { amount: 50 }, { ...contextoAbono, clave: "abono-1" })
-
-    expect(falso.datos.abonos).toHaveLength(1)
-  })
-
-  it("el segundo intento devuelve el abono del primero", async () => {
-    montar()
-
-    const primero = await crearAbono("v1", { amount: 50 }, { ...contextoAbono, clave: "abono-1" })
-    const segundo = await crearAbono("v1", { amount: 50 }, { ...contextoAbono, clave: "abono-1" })
-
-    expect(segundo.id).toBe(primero.id)
-    expect(segundo.amount).toBe(50)
-  })
-
-  it("dos abonos distintos sí se registran los dos", async () => {
-    const falso = montar()
-
-    await crearAbono("v1", { amount: 50 }, { ...contextoAbono, clave: "abono-1" })
-    await crearAbono("v1", { amount: 30 }, { ...contextoAbono, clave: "abono-2" })
-
-    expect(falso.datos.abonos).toHaveLength(2)
   })
 })
 
