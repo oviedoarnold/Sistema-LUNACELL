@@ -454,7 +454,34 @@ describe("la apertura", () => {
     }
   })
 
-  it("17. aborta si el stock histórico es negativo", async () => {
+  /*
+    El caso contrario al anterior: dos bodegas activas. La apertura no
+    elige por su cuenta, y por eso no toma «la primera» ni «la menor»:
+    dejar 20 unidades en una de dos bodegas posibles es decidir dónde
+    está la mercadería sin saberlo, y eso se descubre haciendo un
+    inventario físico contra una cifra inventada.
+  */
+  it("17. aborta si la empresa tiene más de una bodega activa", async () => {
+    await db.query("begin")
+
+    try {
+      await db.query("delete from inventario_ubicacion")
+
+      const { empresa } = await escenario({ stock: 5 })
+
+      await db.query(
+        `insert into ubicaciones (empresa_id, nombre, tipo)
+         values ($1, 'Bodega Norte', 'bodega')`,
+        [empresa]
+      )
+
+      await expect(db.query(APERTURA)).rejects.toThrow(/2 bodegas activas/i)
+    } finally {
+      await db.query("rollback")
+    }
+  })
+
+  it("18. aborta si el stock histórico es negativo", async () => {
     await db.query("begin")
 
     try {
@@ -481,7 +508,7 @@ describe("la apertura", () => {
 })
 
 describe("compatibilidad con lo que ya existía", () => {
-  it("18. los movimientos históricos siguen sin ubicación y son válidos", async () => {
+  it("19. los movimientos históricos siguen sin ubicación y son válidos", async () => {
     const e = await escenario({ stock: 4 })
 
     const m = await db.query(
@@ -494,7 +521,7 @@ describe("compatibilidad con lo que ya existía", () => {
     expect(Number(m.rows[0].cantidad)).toBe(4)
   })
 
-  it("19. un movimiento nuevo sí puede llevar ubicación", async () => {
+  it("20. un movimiento nuevo sí puede llevar ubicación", async () => {
     const e = await escenario()
 
     await db.query(
@@ -511,7 +538,7 @@ describe("compatibilidad con lo que ya existía", () => {
     expect(m.rows[0].ubicacion_id).toBe(e.bodega)
   })
 
-  it("20. un movimiento no puede apuntar a una ubicación de otra empresa", async () => {
+  it("21. un movimiento no puede apuntar a una ubicación de otra empresa", async () => {
     const mia = await escenario()
     const ajena = await escenario()
 
@@ -524,7 +551,7 @@ describe("compatibilidad con lo que ya existía", () => {
     ).rejects.toThrow(/foreign key|llave foránea/i)
   })
 
-  it("21. las ventas aceptan ubicación nula y también una propia", async () => {
+  it("22. las ventas aceptan ubicación nula y también una propia", async () => {
     const e = await escenario()
 
     const sinUbicacion = await db.query(
@@ -542,7 +569,7 @@ describe("compatibilidad con lo que ya existía", () => {
     expect(conUbicacion.rows[0].ubicacion_id).toBe(e.camion)
   })
 
-  it("22. una venta no puede apuntar a una ubicación de otra empresa", async () => {
+  it("23. una venta no puede apuntar a una ubicación de otra empresa", async () => {
     const mia = await escenario()
     const ajena = await escenario()
 
@@ -560,7 +587,7 @@ describe("compatibilidad con lo que ya existía", () => {
     fase no la toca. Si la apertura hubiera escrito un movimiento, esa
     suma se habría duplicado: es la razón por la que no lo hace.
   */
-  it("23. las vistas de stock siguen dando lo mismo que antes", async () => {
+  it("24. las vistas de stock siguen dando lo mismo que antes", async () => {
     const e = await escenario({ stock: 10 })
 
     const vista = await db.query(
@@ -573,7 +600,7 @@ describe("compatibilidad con lo que ya existía", () => {
 })
 
 describe("la estructura quedó como se pidió", () => {
-  it("24. están las restricciones y los índices esperados", async () => {
+  it("25. están las restricciones y los índices esperados", async () => {
     const r = await db.query(`
       select
         (select count(*) from pg_constraint
@@ -604,7 +631,7 @@ describe("la estructura quedó como se pidió", () => {
     expect(x.operacion).toBe("r")
   })
 
-  it("25. la clave primaria es el par ubicación + producto", async () => {
+  it("26. la clave primaria es el par ubicación + producto", async () => {
     const r = await db.query(`
       select pg_get_constraintdef(oid) as def
         from pg_constraint
