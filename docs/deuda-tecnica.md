@@ -151,6 +151,80 @@ que alguien decida cómo se ve.
 
 ---
 
+## El abono por factura suelta no tiene las garantías del pago consolidado — destino: **CxC-2.1**
+
+**Obligatorio antes de la interfaz final de cobros.** No es una mejora que
+pueda esperar a que haya tiempo: mientras no se haga, hay dos formas de
+cobrarle a un cliente y solo una es segura.
+
+**Dónde.** `crearAbono()` y `ajustarEstadoPorSaldo()` en
+[`lib/api/ventas.js`](../src/lib/api/ventas.js), y `addPayment()` en
+[`SalesContext.jsx`](../src/context/SalesContext.jsx).
+
+**Qué le falta.** CxC-2 puso el reparto consolidado dentro de PostgreSQL,
+con candado, transacción y la deuda calculada en el motor. El camino viejo
+—abonar contra una factura concreta, que D4 conserva a propósito— sigue
+como estaba, y le faltan cuatro cosas que el nuevo sí tiene:
+
+- **Concurrencia.** No toma ningún candado. Dos cajeros abonando a la vez
+  sobre la misma factura validan los dos contra el saldo que tenían en
+  pantalla, y los dos pasan. El nuevo RPC bloquea la fila del cliente y las
+  de sus facturas; este no bloquea nada.
+- **Sobrepago.** Lo comprueba el navegador, en `addPayment`, comparando
+  contra la copia en memoria de la venta. La base solo exige `monto > 0`:
+  una llamada directa a la API, o una pantalla con datos viejos, puede
+  dejar una factura sobrepagada. El pago consolidado lo rechaza dentro de
+  la transacción, contra la deuda recién calculada.
+- **Atomicidad.** Son dos viajes: primero se inserta el abono y después se
+  actualiza el estado de la factura. Si el segundo no llega —la red, el
+  navegador que se cierra—, el dinero queda cobrado y la factura sigue
+  apareciendo como pendiente. El nuevo hace las dos cosas en una
+  transacción.
+- **Idempotencia.** Existe la clave y existe el índice único parcial, así
+  que un doble clic no duplica. Pero `crearAbono()` devuelve el abono
+  guardado **sin comparar la factura ni el monto**: reusar una clave con
+  datos distintos no falla, devuelve el abono viejo y lo hace pasar por
+  éxito. El nuevo RPC rechaza ese caso explícitamente.
+
+**Por qué no se arregló en CxC-2.** Esa rama traía el reparto consolidado y
+su infraestructura de pruebas. Arreglar esto exige tocar `SalesContext` y
+la capa de API —código de producción vivo, con pruebas que hoy pasan— y
+cambiar cómo se valida un cobro que el mostrador ya usa. Eso no cabe en una
+rama cuyo alcance era otro, y meterlo habría mezclado un camino nuevo sin
+estrenar con uno en uso.
+
+**Qué habría que hacer.** Un RPC hermano, `registrar_abono_factura(
+p_venta_id, p_monto, p_clave_idempotencia, p_nota)`, que es el mismo patrón
+ya probado pero sobre una sola factura:
+
+1. derivar empresa y usuario del contexto autenticado, nunca recibirlos;
+2. bloquear la fila de la venta con `for update` y comprobar que es de la
+   empresa, a crédito y no anulada;
+3. calcular su saldo dentro de la transacción;
+4. rechazar entero si el monto lo supera;
+5. comprobar la clave dentro del candado, y rechazar si viene con otra
+   factura u otro monto;
+6. insertar el abono con `pago_id` nulo y sus `saldo_anterior` y
+   `saldo_posterior`, y actualizar el estado, en la misma transacción.
+
+Después, que `crearAbono()` y `ajustarEstadoPorSaldo()` pasen a ser una
+sola llamada a ese RPC, y que `addPayment()` deje de decidir y solo muestre
+lo que el motor conteste. Las validaciones del navegador se quedan como
+ayuda para el usuario, no como la defensa.
+
+**Cuánto es.** El SQL es pequeño: una versión recortada del RPC que ya
+existe. Lo que pesa es lo otro —tocar dos archivos de producción, rehacer
+las pruebas de abono de `SalesContext.test.jsx` y añadir las de
+concurrencia y sobrepago contra PostgreSQL real, que el arnés de
+`pruebas-sql/` ya permite escribir—.
+
+**Por qué antes de la interfaz.** CxC-3 va a poner una pantalla de cobros.
+Si desde ahí se puede llegar al camino viejo, la interfaz nueva hará
+parecer seguro algo que no lo es, y nadie que la use tendrá forma de
+distinguir cuál de los dos caminos tomó su cobro.
+
+---
+
 ## Cómo se midió
 
 Con [`jscpd`](https://github.com/kucherenko/jscpd), al mismo umbral que usa
