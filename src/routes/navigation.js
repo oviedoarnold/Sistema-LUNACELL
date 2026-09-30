@@ -39,6 +39,10 @@ export const NAV_ROUTES = [
     permission: PERMISSIONS.SALES_HISTORY,
   },
   {
+    path: "/receivables",
+    permission: PERMISSIONS.SALES_HISTORY,
+  },
+  {
     path: "/locations",
     permission: PERMISSIONS.LOCATIONS,
   },

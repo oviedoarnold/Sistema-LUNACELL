@@ -13,6 +13,7 @@ import Products from "../pages/Products"
 import POS from "../pages/POS"
 import Quotes from "../pages/Quotes"
 import SalesHistory from "../pages/SalesHistory"
+import Receivables from "../pages/Receivables"
 import Locations from "../pages/Locations"
 import Clients from "../pages/Clients"
 import Suppliers from "../pages/Suppliers"
@@ -110,6 +111,18 @@ function AppRouter() {
             <ProtectedRoute permission={PERMISSIONS.SALES_HISTORY}>
               <MainLayout>
                 <SalesHistory />
+              </MainLayout>
+            </ProtectedRoute>
+          }
+        />
+
+        {/* CUENTAS POR COBRAR */}
+        <Route
+          path="/receivables"
+          element={
+            <ProtectedRoute permission={PERMISSIONS.SALES_HISTORY}>
+              <MainLayout>
+                <Receivables />
               </MainLayout>
             </ProtectedRoute>
           }
