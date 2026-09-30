@@ -6,6 +6,12 @@ import {
 
 import Swal from "sweetalert2"
 
+import { FaFileAlt, FaPlus, FaSearch, FaTrash } from "react-icons/fa"
+
+import EmptyState from "../components/crud/EmptyState"
+import PageHeader from "../components/crud/PageHeader"
+import SearchInput from "../components/crud/SearchInput"
+
 import { ProductContext } from "../context/contexts"
 import { ClientsContext } from "../context/contexts"
 import { QuotesContext } from "../context/contexts"
@@ -509,78 +515,35 @@ function Quotes() {
     }
 
   return (
-    <div className="view active">
-      <div className="view-header">
-        <div>
-          <h2>
-            Cotización
-          </h2>
-
-          <p className="sub">
-            Genera cotizaciones
-            de productos sin
-            afectar el inventario
-          </p>
-        </div>
-      </div>
+    <div className="view active crud quotes">
+      {/*
+        La barra superior ya escribe «Cotizar»; el h2 que habia aqui lo
+        repetia justo debajo. PageHeader deja solo la frase que explica la
+        pantalla, igual que en el resto del sistema.
+      */}
+      <PageHeader descripcion="Genera cotizaciones de productos sin afectar el inventario." />
 
       <div className="bill-grid">
         {/* PRODUCTOS */}
-        <div>
-          <div
-            className="search-box"
-            style={{
-              maxWidth: "none",
+        <section className="quotes-catalogo" aria-labelledby="quotes-titulo-catalogo">
+          <h2 id="quotes-titulo-catalogo" className="quotes-titulo">
+            Productos
+          </h2>
 
-              marginBottom:
-                12,
-            }}
-          >
-            <svg
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
-              <circle
-                cx="11"
-                cy="11"
-                r="8"
-              />
-
-              <line
-                x1="21"
-                y1="21"
-                x2="16.65"
-                y2="16.65"
-              />
-            </svg>
-
-            <input
-              type="text"
-              placeholder="Buscar producto para cotizar..."
-              value={search}
-              onChange={(
-                event
-              ) =>
-                setSearch(
-                  event
-                    .target
-                    .value
-                )
-              }
-            />
-          </div>
+          <SearchInput
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            placeholder="Buscar producto para cotizar..."
+            etiqueta="Buscar producto por nombre o código"
+          />
 
           <div className="picker-list">
-            {filteredProducts.length ===
-            0 ? (
-              <div className="cart-empty">
-                No se encontraron
-                resultados
-              </div>
+            {filteredProducts.length === 0 ? (
+              <EmptyState
+                Icono={FaSearch}
+                titulo="No se encontraron resultados"
+                descripcion="Prueba con otro nombre o código."
+              />
             ) : (
               filteredProducts.map(
                 (product) => {
@@ -677,6 +640,7 @@ function Quotes() {
                             )
                           }
                         >
+                          <FaPlus aria-hidden="true" />
                           Agregar
                         </button>
                       </div>
@@ -686,27 +650,17 @@ function Quotes() {
               )
             )}
           </div>
-        </div>
+        </section>
 
         {/* COTIZACIÓN ACTUAL */}
         <aside className="card cart-card">
           <div className="card-pad">
-            <h3
-              style={{
-                fontSize: 17,
-
-                marginBottom:
-                  12,
-              }}
-            >
-              📋 Cotización actual
-            </h3>
+            <h2 id="quotes-titulo-actual" className="quotes-titulo">
+              Cotización actual
+            </h2>
 
             <div
-              style={{
-                marginBottom:
-                  10,
-              }}
+              className="quotes-campo"
             >
               <ClientAutocomplete
                 clients={clients}
@@ -738,11 +692,7 @@ function Quotes() {
             </div>
 
             <div
-              className="form-grid"
-              style={{
-                marginBottom:
-                  10,
-              }}
+              className="form-grid quotes-campo"
             >
               <div className="field">
                 <label htmlFor="quotes-valida-hasta">
@@ -790,28 +740,9 @@ function Quotes() {
 
             <div
               className="field"
-              style={{
-                marginBottom:
-                  10,
-              }}
+              className="quotes-campo"
             >
-              <label
-                style={{
-                  display:
-                    "flex",
-
-                  alignItems:
-                    "center",
-
-                  gap: 7,
-
-                  fontWeight:
-                    "normal",
-
-                  cursor:
-                    "pointer",
-                }}
-              >
+              <label className="quotes-casilla">
                 <input
                   type="checkbox"
                   checked={
@@ -834,13 +765,12 @@ function Quotes() {
             </div>
 
             <div className="cart-items">
-              {cart.length ===
-              0 ? (
-                <div className="cart-empty">
-                  Agrega productos
-                  para generar la
-                  cotización
-                </div>
+              {cart.length === 0 ? (
+                <EmptyState
+                  Icono={FaFileAlt}
+                  titulo="Todavía no hay productos"
+                  descripcion="Agrega productos de la lista para generar la cotización."
+                />
               ) : (
                 cart.map(
                   (item) => (
@@ -909,13 +839,14 @@ function Quotes() {
                         type="button"
                         className="icon-btn danger cart-remove-button"
                         title="Eliminar producto"
+                        aria-label={`Eliminar ${item.name} de la cotización`}
                         onClick={() =>
                           removeFromCart(
                             item.id
                           )
                         }
                       >
-                        🗑
+                        <FaTrash aria-hidden="true" />
                       </button>
                     </div>
                   )
@@ -967,160 +898,75 @@ function Quotes() {
               </div>
             </div>
 
-            <button
-              type="button"
-              className="btn btn-primary btn-lg btn-block"
-              style={{
-                marginTop:
-                  14,
-              }}
-              disabled={
-                cart.length ===
-                  0 ||
-                guardandoCotizacion
-              }
-              onClick={
-                generateQuote
-              }
-            >
-              Generar y guardar
-              cotización
-            </button>
+            <div className="quotes-acciones">
+              <button
+                type="button"
+                className="btn btn-primary btn-lg btn-block"
+                disabled={
+                  cart.length === 0 || guardandoCotizacion
+                }
+                onClick={generateQuote}
+              >
+                Generar y guardar cotización
+              </button>
 
-            <button
-              type="button"
-              className="btn btn-ghost btn-block"
-              style={{
-                marginTop: 5,
-              }}
-              disabled={
-                cart.length ===
-                0
-              }
-              onClick={
-                clearCurrentQuote
-              }
-            >
-              Vaciar
-            </button>
+              <button
+                type="button"
+                className="btn btn-ghost btn-block"
+                disabled={cart.length === 0}
+                onClick={clearCurrentQuote}
+              >
+                Vaciar
+              </button>
+            </div>
           </div>
         </aside>
       </div>
 
       {/* HISTORIAL */}
-      <div
-        className="view-header"
-        style={{
-          marginTop: 30,
-        }}
-      >
-        <div>
-          <h2
-            style={{
-              fontSize: 19,
-            }}
-          >
-            Historial de
-            cotizaciones
-          </h2>
+      <section className="quotes-historial" aria-labelledby="quotes-titulo-historial">
+        <h2 id="quotes-titulo-historial" className="quotes-titulo-seccion">
+          Historial de cotizaciones
+        </h2>
 
-          <p className="sub">
-            Cotizaciones guardadas
-          </p>
-        </div>
-      </div>
+        <p className="crud-descripcion">Cotizaciones guardadas.</p>
 
       <div className="toolbar">
-        <div className="search-box">
-          <svg
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          >
-            <circle
-              cx="11"
-              cy="11"
-              r="8"
-            />
-
-            <line
-              x1="21"
-              y1="21"
-              x2="16.65"
-              y2="16.65"
-            />
-          </svg>
-
-          <input
-            type="text"
-            placeholder="Buscar por cliente o número..."
-            value={
-              historySearch
-            }
-            onChange={(
-              event
-            ) =>
-              setHistorySearch(
-                event
-                  .target
-                  .value
-              )
-            }
-          />
-        </div>
+        <SearchInput
+          value={historySearch}
+          onChange={(event) => setHistorySearch(event.target.value)}
+          placeholder="Buscar por cliente o número..."
+          etiqueta="Buscar cotización por cliente o número"
+        />
       </div>
 
       {cargandoCotizaciones ? (
-        <div className="empty-state">
-          <strong>
-            Cargando cotizaciones…
-          </strong>
-        </div>
+        <p className="crud-cargando" role="status">
+          Cargando cotizaciones…
+        </p>
       ) : quotes.length === 0 ? (
-        <div className="empty-state">
-          <strong>
-            No hay cotizaciones
-            guardadas
-          </strong>
-        </div>
+        <EmptyState
+          Icono={FaFileAlt}
+          titulo="No hay cotizaciones guardadas"
+          descripcion="Las cotizaciones que generes aparecerán aquí."
+        />
       ) : (
         <div
-          className="card"
-          style={{
-            display: "flex",
-            flexDirection:
-              "column",
-          }}
+          className="card quotes-lista"
         >
           {filteredQuotes.map(
-            (quote, index) => (
+            (quote) => (
               <div
                 key={
                   quote.id
                 }
                 className="sale-card"
-                style={{
-                  borderTop:
-                    index > 0
-                      ? "1px solid var(--line)"
-                      : "none",
-                }}
               >
                 <div className="left">
                   <div
-                    className="sale-icon"
-                    style={{
-                      background:
-                        "var(--purple-light)",
-
-                      color:
-                        "var(--purple)",
-                    }}
+                    className="sale-icon quote"
                   >
-                    📄
+                    <FaFileAlt aria-hidden="true" />
                   </div>
 
                   <div className="sale-info">
@@ -1196,28 +1042,30 @@ function Quotes() {
                     type="button"
                     className="icon-btn danger"
                     title="Eliminar cotización"
+                    aria-label={`Eliminar la cotización ${quote.quoteNumber}`}
                     onClick={() =>
                       deleteQuote(
                         quote.id
                       )
                     }
                   >
-                    🗑
+                    <FaTrash aria-hidden="true" />
                   </button>
                 </div>
               </div>
             )
           )}
 
-          {filteredQuotes.length ===
-            0 && (
-            <div className="empty-state">
-              No se encontraron
-              cotizaciones.
-            </div>
+          {filteredQuotes.length === 0 && (
+            <EmptyState
+              Icono={FaSearch}
+              titulo="No se encontraron cotizaciones"
+              descripcion="Prueba con otro cliente o número."
+            />
           )}
         </div>
       )}
+      </section>
 
       {/* NUEVO CLIENTE */}
       <ModalDeCliente
