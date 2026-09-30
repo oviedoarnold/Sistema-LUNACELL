@@ -692,7 +692,7 @@ function POS() {
             <div className="field pos-campo">
               <label htmlFor="pos-rtn-del-comprador-opcional">
                 RTN del comprador{" "}
-                <span className="pos-etiqueta-suave">(opcional)</span>
+                <span className="etiqueta-suave">(opcional)</span>
               </label>
 
               <input

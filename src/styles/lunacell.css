@@ -12,6 +12,7 @@
 @import "./config.css";
 @import "./receivables.css";
 @import "./pos.css";
+@import "./quotes.css";
 *{box-sizing:border-box;} html{scroll-behavior:smooth;}
 body{margin:0;font-family:var(--font-body);background:var(--cream);color:var(--charcoal);font-size:17px;line-height:1.5;-webkit-font-smoothing:antialiased;}
 h1,h2,h3{font-family:var(--font-display);font-weight:600;letter-spacing:.2px;margin:0;}
@@ -161,13 +162,40 @@ td.num,th.num{text-align:right;font-family:var(--font-mono);}
 .pay-toggle button svg{width:15px;height:15px;} 
 .pay-toggle button.active{border-color:var(--orange);background:var(--orange-light);color:var(--orange-dark);} 
 /* ── CLIENT AUTOCOMPLETE ── */
-.client-autocomplete{position:relative;} 
+/*
+  El matiz de una etiqueta: el "(opcional)" que acompania al nombre del
+  campo. Va aparte porque lo usan el buscador de cliente y el punto de
+  venta, y estaba escrito en linea en los dos.
+*/
+.etiqueta-suave{font-weight:400;color:var(--steel);}
+/*
+  El campo ocupa el ancho de su columna.
+
+  Se quedaba en los ~180 px que el navegador le da por omision a un input
+  de texto, asi que en el punto de venta y en cotizar se veia mas estrecho
+  que los campos de al lado y el nombre del cliente se cortaba antes de
+  tiempo. El contenedor ya medía lo correcto; era el input el que no lo
+  ocupaba.
+*/
+.client-autocomplete{position:relative;}
+.client-autocomplete input{width:100%;}
+
 .client-dropdown{position:absolute;top:100%;left:0;right:0;background:#fff;border:1.5px solid var(--orange);border-radius:0 0 10px 10px;border-top:none;z-index:20;max-height:200px;overflow-y:auto;box-shadow:var(--shadow);} 
-.client-dropdown-item{padding:10px 13px;cursor:pointer;font-size:14.5px;border-bottom:1px solid var(--line);} 
-.client-dropdown-item:last-child{border-bottom:none;} .client-dropdown-item:hover{background:var(--cream);} 
-.client-dropdown-item .sub{font-size:12px;color:var(--steel);} 
-.client-dropdown-add{padding:10px 13px;cursor:pointer;font-size:13.5px;color:var(--orange-dark);font-weight:600;display:flex;align-items:center;gap:6px;border-top:1px solid var(--line);} 
-.client-dropdown-add:hover{background:var(--orange-light);} 
+/*
+  Las opciones de la lista son <button>: un div no recibia el foco al
+  tabular ni respondia al teclado. Al cambiar de elemento hay que apagarle
+  los estilos que trae el navegador —fondo, borde, centrado, tipografia— y
+  dejarlo ocupando la fila entera, que es como se veia antes.
+*/
+.client-dropdown-item,
+.client-dropdown-add{display:block;width:100%;text-align:left;background:transparent;border:none;font:inherit;padding:10px 13px;cursor:pointer;}
+.client-dropdown-item{font-size:14.5px;border-bottom:1px solid var(--line);}
+.client-dropdown-item:last-child{border-bottom:none;} .client-dropdown-item:hover{background:var(--cream);}
+.client-dropdown-item b{display:block;}
+.client-dropdown-item .sub{display:block;font-size:12px;color:var(--steel);}
+.client-dropdown-vacio{margin:0;padding:10px 13px;font-size:12px;color:var(--steel);}
+.client-dropdown-add{display:flex;align-items:center;gap:6px;width:100%;font-size:13.5px;color:var(--orange-dark);font-weight:600;border-top:1px solid var(--line);}
+.client-dropdown-add:hover{background:var(--orange-light);}
 /* ── INVOICE (diseño moderno) ── */
 .receipt-wrap{display:flex;justify-content:center;} 
 .receipt{width:580px;max-width:100%;background:#fff;border-radius:14px;overflow:hidden;box-shadow:var(--shadow-lg);font-family:var(--font-body);color:var(--charcoal);} 

@@ -265,57 +265,48 @@ producción, o en cualquier rama que ya toque el cálculo de saldos.
 
 ---
 
-## Los componentes de documentos no son navegables con teclado — destino: **F.2**
+## `ModalDeCliente` no se anuncia como diálogo ni cierra con Escape
 
-**Dónde.** [`ClientAutocomplete.jsx`](../src/components/documents/ClientAutocomplete.jsx)
-y [`DocumentPreviewModal.jsx`](../src/components/documents/DocumentPreviewModal.jsx).
+**Dónde.** [`ModalDeCliente.jsx`](../src/components/documents/ModalDeCliente.jsx).
 
-**Qué está mal.** Tres hallazgos `S6848` abiertos en SonarCloud, los tres
-por lo mismo: un `div` que escucha `onClick` sin ser un control. Un `div` no
-recibe el foco al tabular, no responde a Enter ni a espacio, y no se anuncia
-como algo pulsable. Quien no usa el ratón no puede accionarlo.
+**Qué le falta.** Dibuja su propia ventana —capa, caja, cabecera, cuerpo,
+pie— en vez de apoyarse en
+[`ModalShell`](../src/components/forms/ModalShell.jsx), que es el armazón
+que el resto del sistema usa. Al no hacerlo, se queda sin las cuatro cosas
+que ese armazón trae:
 
-| Archivo | Líneas | Qué es ese `div` |
-|---|---|---|
-| `ClientAutocomplete.jsx` | 122 | cada cliente de la lista desplegable |
-| `ClientAutocomplete.jsx` | 163 | «Registrar cliente nuevo» |
-| `DocumentPreviewModal.jsx` | 115 | el control de la vista previa |
+- no lleva `role="dialog"` ni `aria-modal`, así que un lector de pantalla no
+  anuncia que se abrió una ventana;
+- no toma su nombre del título, aunque lo muestre;
+- no cierra con Escape;
+- no mueve el foco al abrirse ni lo devuelve al cerrarse.
 
-En `ClientAutocomplete` hay además dos cosas menores que conviene resolver
-en la misma pasada, porque se tocan los mismos archivos:
+**Cómo se descubrió.** Validando F.2 en el navegador. Al comprobar que
+«Registrar cliente nuevo» seguía abriendo el formulario, la ventana apareció
+correctamente pero el conteo de `[role=dialog]` dio cero.
 
-- Un `style` en línea en la línea 100 (`fontWeight: 400`). Es el único que
-  queda en la pantalla de facturar que no sea la API de tamaño de
-  `MiniaturaDeProducto`.
-- Su campo se ve **más estrecho que los demás** de la columna de venta: en
-  el punto de venta, el buscador de cliente no llega al ancho del RTN que
-  tiene justo debajo, y el nombre se corta antes de tiempo.
+**Por qué Sonar no lo marca.** Sus reglas de accesibilidad miran elementos
+no interactivos con manejadores de interacción, y aquí no hay ninguno: el
+problema es lo que falta, no lo que sobra. Por eso no salió con los tres
+`S6848` que F.2 corrigió.
 
-**Por qué no se arregló en F.1.** Esa fase renovaba el punto de venta, y
-estos dos componentes no son suyos:
+**Impacto.** Quien abre el formulario con el teclado entra en una ventana
+que no se anuncia y de la que no se sale con Escape. Se puede completar y
+guardar con Tab, así que no bloquea; molesta.
 
-- `ClientAutocomplete` lo comparten **facturar y cotizar**.
-- `DocumentPreviewModal` lo comparten **facturar, cotizar e historial**.
+**Por qué no se arregló en F.2.** Esa fase tenía autorizada la deuda
+documentada de `ClientAutocomplete` y `DocumentPreviewModal`, y esta no
+estaba en la lista. `ModalDeCliente` lo consumen facturar y cotizar, así que
+tocarlo vuelve a ser un cambio compartido que merece su propia revisión.
 
-Tocarlos habría cambiado pantallas que nadie pidió revisar, que es
-exactamente lo que el alcance de F.1 excluía. Se dejaron intactos: los tres
-hallazgos siguen siendo tres, ni uno más ni uno menos.
+**Qué habría que hacer.** Pasarlo a `ModalShell`, que ya resuelve las cuatro
+cosas y es lo que usan las demás ventanas del sistema. El cuerpo del
+formulario no cambia; lo que se sustituye es el armazón de alrededor.
 
-**Qué habría que hacer.** Convertir cada `div` en un `button` de verdad, o
-—si el marcado no lo permite— darle `role`, `tabIndex` y manejador de
-teclado. Lo primero es preferible: un `button` trae el foco, el teclado y
-el anuncio sin que haya que escribirlos. La lista desplegable de clientes
-pide además el patrón de `combobox` con `aria-activedescendant` si se
-quiere recorrer con flechas, que es como se espera que funcione un
-autocompletado.
-
-**Por qué conviene hacerlo de una vez.** Las tres pantallas que los
-consumen comparten el mismo defecto y el mismo arreglo. Repartirlo entre
-fases obligaría a abrir los mismos archivos tres veces y a revisar las tres
-pantallas cada una de ellas.
-
-**Cuándo.** F.2, o la tarea de accesibilidad de los componentes de
-documentos, lo que llegue primero.
+**Cuándo.** En cualquier rama que ya toque los componentes de documentos.
+Se comprobó y es la única que queda: `DocumentPreviewModal` también dibuja
+su propia ventana, pero F.2 ya le dio el rol, el nombre y el Escape que le
+faltaban, así que esta entrada cubre un solo archivo.
 
 ---
 

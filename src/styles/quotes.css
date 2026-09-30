@@ -1,0 +1,239 @@
+/*
+  La pantalla de cotizar.
+
+  Acotado bajo `.quotes` por la misma razón que el punto de venta bajo
+  `.pos`: las dos comparten .bill-grid, .picker-item, .cart-row y .totals,
+  y escribir esas clases sueltas rediseñaría las dos a la vez.
+
+  No es una copia del punto de venta. Cotizar hace otra cosa: no descuenta
+  inventario, no cobra, y tiene debajo un historial de documentos que el
+  punto de venta no tiene. De ahí que su rejilla reparta distinto y que el
+  total no domine igual: aquí el documento importa tanto como la cifra.
+
+  Los colores salen de los tokens. Aquí no se define ninguno.
+*/
+
+/* ── DISPOSICIÓN ─────────────────────────────────────────── */
+
+.quotes .bill-grid {
+  grid-template-columns: minmax(0, 1.35fr) minmax(340px, 1fr);
+  gap: var(--space-5);
+}
+
+.quotes .quotes-catalogo {
+  min-width: 0;
+}
+
+/* El rótulo de cada mitad, en el mismo tono que el resto del sistema. */
+.quotes .quotes-titulo {
+  margin: 0 0 var(--space-3);
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.quotes .search-box {
+  max-width: none;
+  margin-bottom: var(--space-3);
+}
+
+/* ── CATÁLOGO ────────────────────────────────────────────── */
+
+.quotes .picker-list {
+  max-height: min(52vh, 460px);
+  gap: var(--space-2);
+}
+
+.quotes .picker-item {
+  border-color: var(--border);
+  border-radius: var(--radius-md);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.quotes .picker-item:hover {
+  border-color: var(--border-strong);
+  box-shadow: var(--shadow-sm);
+}
+
+.quotes .picker-item .price {
+  color: var(--text-primary);
+  font-size: 15px;
+}
+
+/*
+  Cuántas unidades de ese producto ya van en la cotización. Es el dato que
+  evita agregarlo dos veces sin darse cuenta, así que se distingue.
+*/
+.quotes .picker-item .info b {
+  color: var(--primary-text);
+}
+
+.quotes .qty-input {
+  border-color: var(--border-strong);
+  border-radius: var(--radius-sm);
+}
+
+/* ── COTIZACIÓN ACTUAL ───────────────────────────────────── */
+
+.quotes .cart-card {
+  top: var(--space-5);
+}
+
+/* Los márgenes que antes iban escritos dentro del JSX, campo por campo. */
+.quotes .quotes-campo {
+  margin-bottom: var(--space-3);
+}
+
+/*
+  La casilla del ISV. Era una etiqueta con cinco declaraciones en línea; es
+  una casilla con su texto al lado, que es lo que tiene que parecer.
+*/
+.quotes .quotes-casilla {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-weight: 400;
+  cursor: pointer;
+}
+
+.quotes .cart-items {
+  margin-top: var(--space-2);
+}
+
+.quotes .cart-row {
+  border-bottom-color: var(--border);
+}
+
+/* ── RESUMEN ─────────────────────────────────────────────── */
+
+.quotes .totals {
+  border-top-color: var(--border);
+}
+
+/*
+  El total se separa del subtotal, pero menos que en el punto de venta: una
+  cotización no se cobra, se envía. La cifra importa; el documento, tanto
+  como ella.
+*/
+.quotes .totals-row.grand {
+  margin-top: var(--space-2);
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--border-strong);
+  font-size: 21px;
+}
+
+.quotes .totals-row.grand .v {
+  color: var(--primary-text);
+}
+
+.quotes .quotes-acciones {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin-top: var(--space-4);
+}
+
+/* ── HISTORIAL ───────────────────────────────────────────── */
+
+.quotes .quotes-historial {
+  margin-top: var(--space-7, 40px);
+}
+
+/*
+  Este sí es un título de sección y no un rótulo: abre una parte distinta
+  de la pantalla, debajo de la cotización que se está armando.
+*/
+.quotes .quotes-titulo-seccion {
+  margin: 0 0 2px;
+  font-family: var(--font-display);
+  font-size: 19px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.quotes .quotes-lista {
+  display: flex;
+  flex-direction: column;
+}
+
+/*
+  El filete entre cotizaciones va en el CSS y no calculado con el índice
+  dentro del JSX: la primera fila no lo lleva, y eso lo dice :first-child
+  sin que el marcado tenga que contar.
+*/
+.quotes .quotes-lista .sale-card + .sale-card {
+  border-top: 1px solid var(--border);
+}
+
+/* El documento tiene su propio color, igual que la compra tiene el suyo. */
+.quotes .sale-icon.quote {
+  background: var(--purple-light);
+  color: var(--purple);
+}
+
+/* ── ESTADOS VACÍOS ──────────────────────────────────────── */
+
+.quotes .picker-list .empty-state,
+.quotes .cart-items .empty-state {
+  padding: var(--space-5) var(--space-4);
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius-md);
+}
+
+/* ── TABLET ──────────────────────────────────────────────── */
+
+/*
+  Se apilan con el catálogo arriba, por lo mismo que en el punto de venta:
+  armar una cotización empieza por buscar un producto, y con el resumen
+  delante habría que pasarlo entero en cada línea.
+*/
+@media (max-width: 1080px) {
+  .quotes .bill-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .quotes .cart-card {
+    position: static;
+  }
+
+  .quotes .picker-list {
+    max-height: none;
+  }
+}
+
+/* ── MÓVIL ───────────────────────────────────────────────── */
+
+@media (max-width: 560px) {
+  .quotes .picker-item {
+    flex-wrap: wrap;
+  }
+
+  .quotes .picker-item .info {
+    flex: 1 1 60%;
+  }
+
+  .quotes .picker-actions {
+    flex: 1 1 100%;
+    justify-content: flex-end;
+  }
+
+  .quotes .picker-actions .price {
+    margin-right: auto;
+  }
+
+  .quotes .picker-actions .btn {
+    min-height: 38px;
+  }
+
+  .quotes .totals-row.grand {
+    font-size: 19px;
+  }
+
+  /* La fecha y las observaciones no caben una al lado de la otra. */
+  .quotes .form-grid {
+    grid-template-columns: 1fr;
+  }
+}

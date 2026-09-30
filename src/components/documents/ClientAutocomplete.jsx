@@ -5,6 +5,8 @@ import {
   useState,
 } from "react"
 
+import { FaPlus, FaTimes } from "react-icons/fa"
+
 function ClientAutocomplete({
   clients = [],
   label = "Cliente",
@@ -88,6 +90,26 @@ function ClientAutocomplete({
     onCreateNew?.()
   }
 
+  /*
+    Escape cierra la lista, como en cualquier desplegable.
+
+    Se detiene ahí a propósito: si este campo vive dentro de una ventana
+    modal, la misma tecla la cerraría también, y quien solo quería salir de
+    la lista perdería el formulario entero. Cuando la lista está cerrada el
+    evento sigue su camino y la ventana se cierra como siempre.
+
+    Va en el campo y en cada opción, que son los que pueden tener el foco, y
+    no en el div que los envuelve. Colgarlo del contenedor funcionaba, pero
+    convertía en interactivo un elemento que no lo es: el mismo defecto que
+    esta pasada vino a quitar de aquí.
+  */
+  const handleKeyDown = (event) => {
+    if (event.key === "Escape" && open) {
+      event.stopPropagation()
+      setOpen(false)
+    }
+  }
+
   return (
     <div ref={rootRef}>
       <div className="field">
@@ -95,14 +117,7 @@ function ClientAutocomplete({
           {label}
 
           {!required && (
-            <span
-              style={{
-                fontWeight: 400,
-              }}
-            >
-              {" "}
-              (opcional)
-            </span>
+            <span className="etiqueta-suave"> (opcional)</span>
           )}
         </label>
 
@@ -114,13 +129,29 @@ function ClientAutocomplete({
             placeholder={placeholder}
             onFocus={() => setOpen(true)}
             onChange={handleInputChange}
+            onKeyDown={handleKeyDown}
           />
 
+          {/*
+            Cada opción es un <button> de verdad y no un <div> que escucha
+            clics. Un div no recibe el foco al tabular, no responde a Enter
+            ni a espacio y no se anuncia como algo pulsable: quien no usa
+            ratón no podía elegir un cliente.
+
+            Se usa el elemento nativo y no un role inventado porque el
+            botón ya trae el foco, el teclado y el anuncio sin que haya que
+            escribirlos, y no hay forma de equivocarse al implementarlos.
+
+            El onMouseDown que evita el comportamiento por omisión se
+            queda: sin él, el campo pierde el foco antes de que el clic
+            llegue a contarse y la lista se cierra sin elegir nada.
+          */}
           {open && (
             <div className="client-dropdown">
               {matches.map((client) => (
-                <div
+                <button
                   key={client.id}
+                  type="button"
                   className="client-dropdown-item"
                   onMouseDown={(event) =>
                     event.preventDefault()
@@ -128,10 +159,11 @@ function ClientAutocomplete({
                   onClick={() =>
                     handleSelectClient(client)
                   }
+                  onKeyDown={handleKeyDown}
                 >
                   <b>{client.name}</b>
 
-                  <div className="sub">
+                  <span className="sub">
                     {[
                       client.phone,
                       client.address,
@@ -141,34 +173,35 @@ function ClientAutocomplete({
                     ]
                       .filter(Boolean)
                       .join(" · ")}
-                  </div>
-                </div>
+                  </span>
+                </button>
               ))}
 
+              {/*
+                Esto no es una opción: es un aviso. No lleva botón porque
+                no hay nada que pulsar, y ponerle uno dejaría al teclado
+                deteniéndose en algo que no hace nada.
+              */}
               {matches.length === 0 &&
                 value.trim() && (
-                  <div
-                    className="client-dropdown-item"
-                    style={{
-                      cursor: "default",
-                    }}
-                  >
-                    <span className="sub">
-                      No se encontraron clientes registrados.
-                    </span>
-                  </div>
+                  <p className="client-dropdown-vacio">
+                    No se encontraron clientes registrados.
+                  </p>
                 )}
 
               {onCreateNew && (
-                <div
+                <button
+                  type="button"
                   className="client-dropdown-add"
                   onMouseDown={(event) =>
                     event.preventDefault()
                   }
                   onClick={handleCreateClient}
+                  onKeyDown={handleKeyDown}
                 >
-                  ＋ Registrar cliente nuevo
-                </div>
+                  <FaPlus aria-hidden="true" />
+                  Registrar cliente nuevo
+                </button>
               )}
             </div>
           )}
@@ -205,9 +238,10 @@ function ClientAutocomplete({
             type="button"
             className="selected-client-clear"
             onClick={handleClearClient}
+            aria-label={`Quitar a ${selectedClient.name}`}
             title="Quitar cliente"
           >
-            ×
+            <FaTimes aria-hidden="true" />
           </button>
         </div>
       )}

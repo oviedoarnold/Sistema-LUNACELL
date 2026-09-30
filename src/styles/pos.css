@@ -118,11 +118,6 @@
   color: var(--primary-text);
 }
 
-.pos .pos-etiqueta-suave {
-  font-weight: 400;
-  color: var(--text-muted);
-}
-
 .pos .cart-items {
   margin-top: var(--space-2);
 }
