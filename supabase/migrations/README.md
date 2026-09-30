@@ -18,6 +18,7 @@ duda de si ya se aplicó, correrla de nuevo es seguro.
 | 0011 | Ubicaciones: bodegas, tiendas y camiones como puntos de inventario, y la sección nueva en los permisos |
 | 0012 | `pagos`: la cabecera del dinero que entra del cliente, y `abonos.pago_id` para repartirlo entre sus facturas |
 | 0013 | `registrar_pago_cliente()`: reparte un pago entre las facturas pendientes, de la más antigua a la más reciente, en una sola transacción |
+| 0014 | `inventario_ubicacion`: la existencia pasa a ser por producto y ubicación, con la apertura del stock que ya existía |
 
 ## Instalación en una base vacía
 
@@ -40,6 +41,7 @@ LUNACELL.
 | 0011 | **Correr.** Ubicaciones |
 | 0012 | **Correr.** `pagos` y `abonos.pago_id`. No hace backfill: los abonos que ya existan se quedan sin `pago_id`, que es un estado válido |
 | 0013 | **Correr.** La función que reparte el pago. Revoca su ejecución a `anon` |
+| 0014 | **Correr.** Inventario por ubicación. En una base vacía no hay stock que abrir, así que la apertura no hace nada y la tabla queda lista |
 
 Ninguna de las que se corren borra datos: solo la 0010 tiene un `delete`,
 y es de las que se omiten. Lo que sí hacen varias es recrear vistas y
