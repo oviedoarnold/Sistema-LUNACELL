@@ -1,6 +1,19 @@
 ﻿import { useContext, useEffect, useMemo, useState } from "react"
 import { useLocation, useNavigate } from "react-router-dom"
 import Swal from "sweetalert2"
+
+import {
+  FaMoneyBillWave,
+  FaPlus,
+  FaRegCreditCard,
+  FaSearch,
+  FaShoppingCart,
+  FaTrash,
+} from "react-icons/fa"
+
+import EmptyState from "../components/crud/EmptyState"
+import PageHeader from "../components/crud/PageHeader"
+import SearchInput from "../components/crud/SearchInput"
 import { ProductContext } from "../context/contexts"
 import { MiniaturaDeProducto } from "../components/ImagenDeProducto"
 import { claveDeIdempotencia } from "../utils/ids"
@@ -489,188 +502,116 @@ function POS() {
     }
 
   return (
-    <div className="view active">
-      <div className="view-header">
-        <div>
-          <h2>Facturar</h2>
-          <p className="sub">
-            Arma la venta y genera la
-            factura
-          </p>
-        </div>
-      </div>
+    <div className="view active crud pos">
+      {/*
+        El nombre del módulo lo escribe la barra superior. El h2 que había
+        aquí lo repetía justo debajo, que es la duplicación que se venía
+        arrastrando; PageHeader deja solo la frase que explica la pantalla,
+        igual que en el resto del sistema.
+      */}
+      <PageHeader descripcion="Arma la venta, revisa el total y genera la factura." />
 
       <div className="bill-grid">
-        <div>
-          <div
-            className="search-box"
-            style={{
-              maxWidth: "none",
-              marginBottom: 12,
-            }}
-          >
-            <svg
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
-              <circle
-                cx="11"
-                cy="11"
-                r="8"
-              />
+        {/* ── CATÁLOGO ─────────────────────────────────── */}
+        <section className="pos-catalogo" aria-labelledby="pos-titulo-catalogo">
+          <h2 id="pos-titulo-catalogo" className="pos-titulo">
+            Productos
+          </h2>
 
-              <line
-                x1="21"
-                y1="21"
-                x2="16.65"
-                y2="16.65"
-              />
-            </svg>
-
-            <input
-              type="text"
-              placeholder="Buscar producto para agregar..."
-              value={search}
-              onChange={(event) =>
-                setSearch(
-                  event.target.value
-                )
-              }
-            />
-          </div>
+          <SearchInput
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            placeholder="Buscar producto para agregar..."
+            etiqueta="Buscar producto por nombre o código"
+          />
 
           <div className="picker-list">
-            {filteredProducts.length ===
-            0 ? (
-              <div className="cart-empty">
-                No se encontraron
-                resultados
-              </div>
+            {filteredProducts.length === 0 ? (
+              <EmptyState
+                Icono={FaSearch}
+                titulo="No se encontraron resultados"
+                descripcion="Prueba con otro nombre o código."
+              />
             ) : (
-              filteredProducts.map(
-                (product) => {
-                  const available =
-                    availableStockFor(
-                      product
-                    )
+              filteredProducts.map((product) => {
+                const available = availableStockFor(product)
+                const disabled = available <= 0
+                const quantity = qtyMap[product.id] ?? 1
 
-                  const disabled =
-                    available <= 0
+                return (
+                  <div
+                    key={product.id}
+                    className={`picker-item${disabled ? " disabled" : ""}`}
+                  >
+                    <MiniaturaDeProducto
+                      url={product.imageUrl}
+                      nombre={product.name}
+                      tamano={44}
+                    />
 
-                  const quantity =
-                    qtyMap[
-                      product.id
-                    ] ?? 1
+                    <div className="info">
+                      <strong>{product.name}</strong>
 
-                  return (
-                    <div
-                      key={product.id}
-                      className={`picker-item${
-                        disabled
-                          ? " disabled"
-                          : ""
-                      }`}
-                    >
-                      <MiniaturaDeProducto
-                        url={product.imageUrl}
-                        nombre={product.name}
-                        tamano={44}
-                      />
-
-                      <div className="info">
-                        <strong>
-                          {
-                            product.name
-                          }
-                        </strong>
-
-                        <span>
-                          {product.code ||
-                            "S/C"}{" "}
-                          ·{" "}
-                          {product.category ||
-                            "Sin categoría"}{" "}
-                          · {available}{" "}
-                          disp.
-                        </span>
-                      </div>
-
-                      <div className="picker-actions">
-                        <span className="price">
-                          {formatMoney(
-                            product.price
-                          )}
-                        </span>
-
-                        <input
-                          type="number"
-                          className="qty-input"
-                          min="1"
-                          max={Math.max(
-                            available,
-                            1
-                          )}
-                          disabled={
-                            disabled
-                          }
-                          value={
-                            quantity
-                          }
-                          onChange={(
-                            event
-                          ) =>
-                            setQtyMap(
-                              (
-                                current
-                              ) => ({
-                                ...current,
-                                [product.id]:
-                                  event
-                                    .target
-                                    .value,
-                              })
-                            )
-                          }
-                        />
-
-                        <button
-                          type="button"
-                          className="btn btn-secondary btn-sm"
-                          disabled={
-                            disabled
-                          }
-                          onClick={() =>
-                            addToCartWithQty(
-                              product,
-                              quantity
-                            )
+                      <span>
+                        {product.code || "S/C"} ·{" "}
+                        {product.category || "Sin categoría"} ·{" "}
+                        <span
+                          className={
+                            disabled ? "pos-sin-stock" : "pos-con-stock"
                           }
                         >
-                          Agregar
-                        </button>
-                      </div>
+                          {available} disp.
+                        </span>
+                      </span>
                     </div>
-                  )
-                }
-              )
+
+                    <div className="picker-actions">
+                      <span className="price">
+                        {formatMoney(product.price)}
+                      </span>
+
+                      <input
+                        type="number"
+                        className="qty-input"
+                        min="1"
+                        max={Math.max(available, 1)}
+                        disabled={disabled}
+                        value={quantity}
+                        aria-label={`Cantidad de ${product.name}`}
+                        onChange={(event) =>
+                          setQtyMap((current) => ({
+                            ...current,
+                            [product.id]: event.target.value,
+                          }))
+                        }
+                      />
+
+                      <button
+                        type="button"
+                        className="btn btn-secondary btn-sm"
+                        disabled={disabled}
+                        onClick={() => addToCartWithQty(product, quantity)}
+                      >
+                        <FaPlus aria-hidden="true" />
+                        Agregar
+                      </button>
+                    </div>
+                  </div>
+                )
+              })
             )}
           </div>
-        </div>
+        </section>
 
-        <aside className="card cart-card">
+        {/* ── VENTA ACTUAL ─────────────────────────────── */}
+        <aside
+          className="card cart-card"
+          aria-labelledby="pos-titulo-venta"
+        >
           <div className="card-pad">
-            <h3
-              style={{
-                fontSize: 17,
-                marginBottom: 12,
-              }}
-            >
-              🧾 Venta actual
-            </h3>
+            <h2 id="pos-titulo-venta" className="pos-titulo">
+              Venta actual
+            </h2>
 
             {/*
               No es la etiqueta de un campo sino el nombre de un grupo de
@@ -681,243 +622,141 @@ function POS() {
               className="field"
               role="group"
               aria-labelledby="pos-forma-pago"
-              style={{
-                marginBottom: 8,
-              }}
             >
-              <span
-                id="pos-forma-pago"
-                className="rotulo-de-grupo"
-              >
+              <span id="pos-forma-pago" className="rotulo-de-grupo">
                 Forma de pago
               </span>
 
               <div className="pay-toggle">
                 <button
                   type="button"
-                  className={
-                    paymentType ===
-                    "contado"
-                      ? "active"
-                      : ""
-                  }
-                  onClick={() =>
-                    handlePaymentTypeChange(
-                      "contado"
-                    )
-                  }
+                  className={paymentType === "contado" ? "active" : ""}
+                  aria-pressed={paymentType === "contado"}
+                  onClick={() => handlePaymentTypeChange("contado")}
                 >
-                  $ Contado
+                  <FaMoneyBillWave aria-hidden="true" />
+                  Contado
                 </button>
 
                 <button
                   type="button"
-                  className={
-                    paymentType ===
-                    "credito"
-                      ? "active"
-                      : ""
-                  }
-                  onClick={() =>
-                    handlePaymentTypeChange(
-                      "credito"
-                    )
-                  }
+                  className={paymentType === "credito" ? "active" : ""}
+                  aria-pressed={paymentType === "credito"}
+                  onClick={() => handlePaymentTypeChange("credito")}
                 >
-                  ▣ Crédito
+                  <FaRegCreditCard aria-hidden="true" />
+                  Crédito
                 </button>
               </div>
             </div>
 
-            <div
-              style={{
-                marginBottom: 10,
-              }}
-            >
+            <div className="pos-campo">
               <ClientAutocomplete
                 clients={clients}
                 label={
-                  paymentType ===
-                  "credito"
+                  paymentType === "credito"
                     ? "Cliente requerido para crédito"
                     : "Cliente"
                 }
                 placeholder={
-                  paymentType ===
-                  "credito"
+                  paymentType === "credito"
                     ? "Busca el nombre del cliente..."
                     : "Escribe el nombre o busca un cliente..."
                 }
-                value={
-                  clientSearch
-                }
-                selectedClient={
-                  selectedClient
-                }
-                required={
-                  paymentType ===
-                  "credito"
-                }
-                allowFreeText={
-                  paymentType ===
-                  "contado"
-                }
-                onChange={
-                  handleClientSearchChange
-                }
-                onSelect={
-                  handleSelectClient
-                }
-                onClear={
-                  handleClearClient
-                }
-                onCreateNew={
-                  openNewClientModal
-                }
+                value={clientSearch}
+                selectedClient={selectedClient}
+                required={paymentType === "credito"}
+                allowFreeText={paymentType === "contado"}
+                onChange={handleClientSearchChange}
+                onSelect={handleSelectClient}
+                onClear={handleClearClient}
+                onCreateNew={openNewClientModal}
               />
             </div>
 
-            {paymentType ===
-              "credito" && (
-              <div
-                className="field"
-                style={{
-                  marginBottom: 10,
-                }}
-              >
+            {paymentType === "credito" && (
+              <div className="field pos-campo">
                 <label htmlFor="pos-fecha-de-vencimiento">
-                  Fecha de
-                  vencimiento
+                  Fecha de vencimiento
                 </label>
 
-                <input id="pos-fecha-de-vencimiento"
+                <input
+                  id="pos-fecha-de-vencimiento"
                   type="date"
                   value={dueDate}
-                  onChange={(
-                    event
-                  ) =>
-                    setDueDate(
-                      event.target
-                        .value
-                    )
-                  }
+                  onChange={(event) => setDueDate(event.target.value)}
                 />
               </div>
             )}
 
-            <div
-              className="field"
-              style={{
-                marginBottom: 10,
-              }}
-            >
+            <div className="field pos-campo">
               <label htmlFor="pos-rtn-del-comprador-opcional">
                 RTN del comprador{" "}
-                <span
-                  style={{
-                    fontWeight: 400,
-                  }}
-                >
-                  (opcional)
-                </span>
+                <span className="pos-etiqueta-suave">(opcional)</span>
               </label>
 
-              <input id="pos-rtn-del-comprador-opcional"
+              <input
+                id="pos-rtn-del-comprador-opcional"
                 type="text"
                 maxLength="20"
                 placeholder="Ej. 0801-1990-01234"
                 value={buyerRTN}
-                onChange={(
-                  event
-                ) =>
-                  setBuyerRTN(
-                    event.target
-                      .value
-                  )
-                }
+                onChange={(event) => setBuyerRTN(event.target.value)}
               />
 
               <span className="hint">
-                Se imprime en la
-                factura si el cliente
-                lo solicita.
+                Se imprime en la factura si el cliente lo solicita.
               </span>
             </div>
 
             <div className="cart-items">
               {cart.length === 0 ? (
-                <div className="cart-empty">
-                  Agrega productos de
-                  la lista para iniciar
-                  la venta
-                </div>
+                <EmptyState
+                  Icono={FaShoppingCart}
+                  titulo="Todavía no hay productos"
+                  descripcion="Agrega productos de la lista para iniciar la venta."
+                />
               ) : (
                 cart.map((item) => (
-                  <div
-                    key={item.id}
-                    className="cart-row"
-                  >
+                  <div key={item.id} className="cart-row">
                     <div className="name">
                       {item.name}
 
-                      <small>
-                        {formatMoney(
-                          item.price
-                        )}{" "}
-                        c/u
-                      </small>
+                      <small>{formatMoney(item.price)} c/u</small>
                     </div>
 
                     <div className="stepper">
                       <button
                         type="button"
-                        onClick={() =>
-                          changeQuantity(
-                            item.id,
-                            -1
-                          )
-                        }
+                        aria-label={`Quitar una unidad de ${item.name}`}
+                        onClick={() => changeQuantity(item.id, -1)}
                       >
                         −
                       </button>
 
-                      <span>
-                        {
-                          item.quantity
-                        }
-                      </span>
+                      <span>{item.quantity}</span>
 
                       <button
                         type="button"
-                        onClick={() =>
-                          changeQuantity(
-                            item.id,
-                            1
-                          )
-                        }
+                        aria-label={`Agregar una unidad de ${item.name}`}
+                        onClick={() => changeQuantity(item.id, 1)}
                       >
                         +
                       </button>
                     </div>
 
                     <div className="sub">
-                      {formatMoney(
-                        item.price *
-                          item.quantity
-                      )}
+                      {formatMoney(item.price * item.quantity)}
                     </div>
 
                     <button
                       type="button"
                       className="icon-btn danger cart-remove-button"
-                      onClick={() =>
-                        removeFromCart(
-                          item.id
-                        )
-                      }
+                      onClick={() => removeFromCart(item.id)}
+                      aria-label={`Eliminar ${item.name} de la venta`}
                       title="Eliminar producto"
                     >
-                      🗑
+                      <FaTrash aria-hidden="true" />
                     </button>
                   </div>
                 ))
@@ -926,82 +765,52 @@ function POS() {
 
             <div className="totals">
               <div className="totals-row">
-                <span>
-                  Subtotal
-                </span>
+                <span>Subtotal</span>
 
-                <span className="v">
-                  {formatMoney(
-                    subtotal
-                  )}
-                </span>
+                <span className="v">{formatMoney(subtotal)}</span>
               </div>
 
               <div className="totals-row">
-                <span>
-                  ISV ({tasaISV}%)
-                </span>
+                <span>ISV ({tasaISV}%)</span>
 
-                <span className="v">
-                  {formatMoney(tax)}
-                </span>
+                <span className="v">{formatMoney(tax)}</span>
               </div>
 
               <div className="totals-row grand">
                 <span>Total</span>
 
-                <span className="v">
-                  {formatMoney(total)}
-                </span>
+                <span className="v">{formatMoney(total)}</span>
               </div>
             </div>
 
-            <button
-              type="button"
-              className="btn btn-primary btn-lg btn-block"
-              style={{
-                marginTop: 14,
-              }}
-              disabled={
-                cart.length === 0 ||
-                facturando
-              }
-              onClick={generateSale}
-            >
-              {facturando
-                ? "Registrando…"
-                : "Generar factura"}
-            </button>
+            <div className="pos-acciones">
+              <button
+                type="button"
+                className="btn btn-primary btn-lg btn-block"
+                disabled={cart.length === 0 || facturando}
+                onClick={generateSale}
+              >
+                {facturando ? "Registrando…" : "Generar factura"}
+              </button>
 
-            <button
-              type="button"
-              className="btn btn-secondary btn-block"
-              style={{
-                marginTop: 7,
-              }}
-              disabled={
-                cart.length === 0
-              }
-              onClick={openPreview}
-            >
-              Vista previa
-            </button>
+              <button
+                type="button"
+                className="btn btn-secondary btn-block"
+                disabled={cart.length === 0}
+                onClick={openPreview}
+              >
+                Vista previa
+              </button>
 
-            <button
-              type="button"
-              className="btn btn-ghost btn-block"
-              style={{
-                marginTop: 5,
-              }}
-              disabled={
-                cart.length === 0
-              }
-              onClick={
-                clearCurrentSale
-              }
-            >
-              Vaciar venta
-            </button>
+              <button
+                type="button"
+                className="btn btn-ghost btn-block"
+                disabled={cart.length === 0}
+                onClick={clearCurrentSale}
+              >
+                Vaciar venta
+              </button>
+            </div>
           </div>
         </aside>
       </div>
@@ -1017,41 +826,25 @@ function POS() {
       />
 
       <DocumentPreviewModal
-        open={
-          previewOpen &&
-          !!previewSale
-        }
+        open={previewOpen && !!previewSale}
         title={
-          previewMode === "saved"
-            ? "Factura"
-            : "Vista previa de factura"
+          previewMode === "saved" ? "Factura" : "Vista previa de factura"
         }
         fileName={
           previewMode === "saved"
-            ? `Factura-${
-                previewSale?.invoiceNumber ||
-                "venta"
-              }.pdf`
+            ? `Factura-${previewSale?.invoiceNumber || "venta"}.pdf`
             : "Vista-previa-factura.pdf"
         }
         printTitle="Factura"
-        canExport={
-          previewMode === "saved"
-        }
-        onConfirm={
-          previewMode === "preview"
-            ? confirmPreviewSale
-            : undefined
-        }
+        canExport={previewMode === "saved"}
+        onConfirm={previewMode === "preview" ? confirmPreviewSale : undefined}
         confirmLabel="Generar factura"
         onClose={() => {
           setPreviewOpen(false)
           setPreviewSale(null)
         }}
       >
-        <InvoiceTemplate
-          sale={previewSale}
-        />
+        <InvoiceTemplate sale={previewSale} />
       </DocumentPreviewModal>
     </div>
   )

@@ -17,12 +17,28 @@ export const filaDelCarrito = (nombre) =>
   filasDelCarrito().find((fila) => fila.textContent.includes(nombre))
 
 /*
+  Los dos nombres que puede tener el botón de subir o bajar una unidad.
+
+  En el punto de venta llevan aria-label, porque un botón cuyo único
+  nombre accesible es «+» no dice nada a quien no ve la fila. Cotizar
+  todavía usa el signo suelto y esta fase no viene a cambiarlo, así que el
+  ayudante acepta las dos formas en vez de obligar a las dos pantallas a
+  parecerse antes de tiempo.
+*/
+const NOMBRE_DEL_PASO = {
+  "+": /^\+$|agregar una unidad/i,
+  "−": /^−$|quitar una unidad/i,
+}
+
+/*
   El nombre del producto aparece en el catálogo y en el carrito, así que
   hay que buscar el botón dentro de su fila y no en toda la pantalla.
 */
 export const paso = (nombre, signo) =>
   fireEvent.click(
-    within(filaDelCarrito(nombre)).getByRole("button", { name: signo })
+    within(filaDelCarrito(nombre)).getByRole("button", {
+      name: NOMBRE_DEL_PASO[signo] || signo,
+    })
   )
 
 export const quitarDelCarrito = (nombre) =>
