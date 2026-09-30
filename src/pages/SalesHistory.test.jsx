@@ -141,60 +141,34 @@ describe("SalesHistory con ventas", () => {
   })
 })
 
-describe("SalesHistory: abonos", () => {
-  it("ofrece abonar solo en las facturas a crédito con saldo", async () => {
+describe("SalesHistory: el cobro ya no vive aquí", () => {
+  /*
+    El historial tenía un botón «Abonar» por factura que aplicaba el dinero
+    a esa factura concreta. Cobrar pasó a ser una operación del cliente, en
+    Cuentas por Cobrar, y ese camino se retiró.
+
+    Esta prueba vigila la retirada: si alguien vuelve a poner un botón de
+    abono por factura, aquí se entera.
+  */
+  it("no ofrece abonar desde una factura a crédito con saldo", async () => {
     await renderHistory([factura(), aCredito()])
 
     expect(
-      within(filaDe("FAC-01002")).getByRole("button", { name: /abonar/i })
-    ).toBeInTheDocument()
+      screen.queryByRole("button", { name: /abonar/i })
+    ).not.toBeInTheDocument()
 
     expect(
-      within(filaDe("FAC-01001")).queryByRole("button", { name: /abonar/i })
+      within(filaDe("FAC-01002")).queryByRole("button", { name: /abonar/i })
     ).not.toBeInTheDocument()
   })
 
-  it("muestra lo abonado y lo que resta", async () => {
+  it("sigue mostrando lo abonado y lo que resta", async () => {
     await renderHistory([aCredito({ payments: [{ id: "a1", amount: 400 }] })])
 
     const fila = filaDe("FAC-01002")
 
     expect(fila).toHaveTextContent("Abonado")
     expect(fila).toHaveTextContent("Resta")
-  })
-
-  it("abre el modal de abonos con el saldo actual", async () => {
-    await renderHistory([aCredito({ payments: [{ id: "a1", amount: 400 }] })])
-
-    fireEvent.click(
-      within(filaDe("FAC-01002")).getByRole("button", { name: /abonar/i })
-    )
-
-    expect(screen.getByText(/abonar a/i)).toBeInTheDocument()
-    expect(screen.getByText("Saldo")).toBeInTheDocument()
-  })
-
-  it("el monto no permite superar el saldo pendiente", async () => {
-    await renderHistory([aCredito()])
-
-    fireEvent.click(screen.getByRole("button", { name: /abonar/i }))
-
-    expect(screen.getByPlaceholderText("0.00")).toHaveAttribute("max", "1000")
-  })
-
-  it("lista los abonos ya registrados", async () => {
-    await renderHistory([
-      aCredito({
-        payments: [
-          { id: "a1", amount: 400, date: "22/08/2026", note: "Efectivo" },
-        ],
-      }),
-    ])
-
-    fireEvent.click(screen.getByRole("button", { name: /abonar/i }))
-
-    expect(screen.getByText(/abonos registrados/i)).toBeInTheDocument()
-    expect(screen.getByText(/efectivo/i)).toBeInTheDocument()
   })
 })
 

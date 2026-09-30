@@ -1,0 +1,159 @@
+/*
+  Cuentas por cobrar.
+
+  La pantalla reutiliza la tabla, la barra de herramientas, el estado vacío
+  y el armazón de ventana que ya usan las demás. Lo que hay aquí es solo lo
+  que esta no podía tomar prestado: los números de dinero alineados a la
+  derecha, el resumen de la cuenta dentro de la ventana de cobro y la vista
+  previa del reparto.
+*/
+
+/* Una cifra se lee mejor contra el margen derecho, y así las de una
+   columna se comparan sin recorrer la fila entera. */
+.celda-numero {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.cxc-saldo {
+  font-weight: 600;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+.cxc-facturas {
+  display: block;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.tabla-leyenda {
+  caption-side: top;
+  padding: 0 0 var(--space-2);
+  text-align: left;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+/* ── RESUMEN DE LA CUENTA, DENTRO DE LA VENTANA DE COBRO ── */
+
+.cxc-resumen {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-3);
+  margin-bottom: var(--space-4);
+  padding: var(--space-3) var(--space-4);
+  background: var(--surface-muted, var(--table-header));
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm, 8px);
+}
+
+.cxc-resumen-dato {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.cxc-resumen-label {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.cxc-resumen-valor {
+  font-size: 18px;
+  font-variant-numeric: tabular-nums;
+}
+
+/*
+  Sin margen negativo: pegado al campo se comía su anillo de foco. Va
+  separado, como el botón aparte que es.
+*/
+.cxc-atajo {
+  margin: 0 0 var(--space-4);
+}
+
+/* ── VISTA PREVIA DEL REPARTO ────────────────────────────── */
+
+.cxc-previa {
+  margin-top: var(--space-5);
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--border);
+}
+
+.cxc-previa-titulo {
+  margin: 0 0 2px;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+/*
+  La advertencia de que esto es una previa va junto al título y no al pie:
+  quien mire el reparto tiene que leerla antes de creérselo.
+*/
+.cxc-previa-nota {
+  margin: 0 0 var(--space-3);
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.cxc-previa-lista {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.cxc-previa-fila {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: 8px 0;
+  border-top: 1px solid var(--border);
+}
+
+.cxc-previa-fila:first-child {
+  border-top: none;
+}
+
+.cxc-previa-monto {
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  margin-left: auto;
+}
+
+.cxc-previa-resto {
+  min-width: 11ch;
+  text-align: right;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+/*
+  En un teléfono la fila de tres partes no cabe en una línea sin apretar
+  las cifras, así que el resto baja y el monto se queda junto al número de
+  factura, que es la pareja que se lee.
+*/
+@media (max-width: 520px) {
+  .cxc-resumen {
+    grid-template-columns: 1fr;
+    gap: var(--space-2);
+  }
+
+  .cxc-previa-fila {
+    flex-wrap: wrap;
+  }
+
+  .cxc-previa-resto {
+    width: 100%;
+    text-align: left;
+    min-width: 0;
+  }
+}

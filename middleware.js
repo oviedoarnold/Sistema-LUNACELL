@@ -22,6 +22,7 @@ export const config = {
     "/clients",
     "/suppliers",
     "/sales-history",
+    "/receivables",
     "/quotes",
     "/locations",
     "/settings",

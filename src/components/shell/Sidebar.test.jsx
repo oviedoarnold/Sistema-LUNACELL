@@ -81,7 +81,7 @@ const enlaces = () =>
 const TODOS = Object.values(PERMISSIONS)
 
 describe("Sidebar · permisos", () => {
-  it("el administrador ve los nueve módulos", async () => {
+  it("el administrador ve los diez módulos", async () => {
     await montarSidebar({ rol: "admin", secciones: TODOS })
 
     expect(enlaces()).toEqual([
@@ -92,6 +92,7 @@ describe("Sidebar · permisos", () => {
       "/locations",
       "/clients",
       "/suppliers",
+      "/receivables",
       "/sales-history",
       "/settings",
     ])

@@ -222,6 +222,49 @@ que no lo es.
 
 ---
 
+## `getSaleBalance` no mira si la factura está anulada
+
+**Dónde.** [`getSaleBalance`](../src/utils/salesUtils.js) y sus dos
+consumidores que suman: el «Saldo por cobrar» de
+[`SalesHistory`](../src/pages/SalesHistory.jsx) y el KPI «Por cobrar» de
+[`metricas.js`](../src/pages/dashboard/metricas.js).
+
+**Qué está mal.** La función solo distingue crédito de contado. Nunca
+consulta `estado`, así que para ella una factura anulada a crédito sigue
+debiendo su total menos lo abonado. Las dos pantallas que suman esa función
+contarían esa factura dentro de lo que hay por cobrar.
+
+**Por qué no muerde hoy.** Porque no hay ninguna anulada: se comprobó
+contra la base y `ventas` tiene 0 filas en estado `anulada`. El defecto
+aparecería el día que alguien anule la primera factura a crédito, y
+aparecería como dos cifras que no cuadran entre sí.
+
+**Por qué nació así.** La función es anterior a que las ventas pudieran
+anularse. Cuando se añadió el estado `anulada` al esquema, nadie volvió
+sobre el cálculo del saldo.
+
+**Cómo se descubrió.** Escribiendo la cuenta consolidada de CxC-3. Esa
+pantalla necesitaba excluir las anuladas, y al buscar dónde hacerlo se vio
+que el helper compartido no lo hacía.
+
+**Qué NO hereda el defecto.** Cuentas por Cobrar. Su
+[`cuentasPorCobrar`](../src/utils/cuentasPorCobrar.js) filtra el estado por
+su cuenta antes de sumar, así que la cuenta del cliente ya es correcta.
+El filtro se puso ahí y no dentro de `getSaleBalance` a propósito: tocar el
+helper cambiaría también el panel, y eso no cabía en una rama cuyo alcance
+era la pantalla de cobros.
+
+**Qué habría que hacer.** Añadir el estado a la condición de
+`getSaleBalance` —una venta anulada arrastra saldo cero, igual que una de
+contado— y comprobar de paso las pruebas del panel y del historial, que hoy
+no cubren el caso. Es pequeño; lo que pide es tocar tres archivos a la vez
+y mirar que las tres cifras sigan cuadrando.
+
+**Cuándo conviene.** Antes de que se anule la primera factura a crédito en
+producción, o en cualquier rama que ya toque el cálculo de saldos.
+
+---
+
 ## Cómo se midió
 
 Con [`jscpd`](https://github.com/kucherenko/jscpd), al mismo umbral que usa

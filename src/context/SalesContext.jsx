@@ -7,18 +7,9 @@ import {
   traerVentas,
   conFormaDeApp,
   crearVenta,
-  crearAbono,
-  eliminarAbono,
-  ajustarEstadoPorSaldo,
 } from "../lib/api/ventas"
 
-import {
-  roundMoney,
-  isCreditSale,
-  getSalePayments,
-  getSaleBalance,
-  applyPayments,
-} from "../utils/salesUtils"
+import { roundMoney } from "../utils/salesUtils"
 
 import { hasEnoughStock } from "../utils/cart"
 import { existenciaEnCatalogo } from "../utils/existencias"
@@ -229,84 +220,18 @@ function SalesProvider({ children }) {
   )
 
   /*
-    Registra un abono sobre una venta a crédito. Al quedar el saldo en
-    cero la factura pasa a pagada.
+    Cobrar ya no pasa por aquí.
+
+    Había addPayment() y deletePayment(): un abono contra una factura
+    concreta, validado contra la copia en memoria de la venta y escrito en
+    dos llamadas. Ahora el dinero entra por registrar_pago_cliente(), que
+    reparte el pago del cliente entre sus facturas en una sola transacción
+    y con la cuenta bloqueada; Cuentas por Cobrar lo llama a través de
+    lib/api/cobros.js sin pasar por este contexto.
+
+    Este contexto sigue sirviendo las ventas y sabe refrescarlas, que es lo
+    que esa pantalla necesita después de cobrar.
   */
-  const addPayment = useCallback(
-    async (saleId, payment = {}, clave = null) => {
-      const venta = buscarVenta(saleId)
-
-      if (!venta) {
-        throw new Error("La factura no existe.")
-      }
-
-      if (!isCreditSale(venta)) {
-        throw new Error("Solo las facturas a crédito admiten abonos.")
-      }
-
-      const monto = roundMoney(payment.amount)
-
-      if (!Number.isFinite(monto) || monto <= 0) {
-        throw new Error("El monto del abono debe ser mayor que cero.")
-      }
-
-      const saldo = getSaleBalance(venta)
-
-      if (saldo <= 0) {
-        throw new Error("Esta factura ya está cancelada.")
-      }
-
-      if (monto > saldo) {
-        throw new Error(
-          `El abono no puede superar el saldo pendiente de ${saldo.toFixed(2)}.`
-        )
-      }
-
-      const abono = await crearAbono(
-        saleId,
-        { ...payment, amount: monto },
-        { empresaId, usuarioId, clave }
-      )
-
-      const conElAbono = applyPayments(venta, [
-        ...getSalePayments(venta),
-        abono,
-      ])
-
-      await ajustarEstadoPorSaldo(saleId, getSaleBalance(conElAbono))
-      await refrescarVentas()
-
-      return abono
-    },
-    [buscarVenta, empresaId, usuarioId, refrescarVentas]
-  )
-
-  /*
-    Permite corregir un abono mal registrado; el saldo y el estado se
-    recalculan solos.
-  */
-  const deletePayment = useCallback(
-    async (saleId, paymentId) => {
-      const venta = buscarVenta(saleId)
-
-      if (!venta) {
-        throw new Error("La factura no existe.")
-      }
-
-      await eliminarAbono(paymentId)
-
-      const sinElAbono = applyPayments(
-        venta,
-        getSalePayments(venta).filter(
-          (abono) => String(abono.id) !== String(paymentId)
-        )
-      )
-
-      await ajustarEstadoPorSaldo(saleId, getSaleBalance(sinElAbono))
-      await refrescarVentas()
-    },
-    [buscarVenta, refrescarVentas]
-  )
 
   const getSaleByInvoiceNumber = useCallback(
     (invoiceNumber) =>
@@ -335,8 +260,6 @@ function SalesProvider({ children }) {
       error,
 
       addSale,
-      addPayment,
-      deletePayment,
 
       getSaleById: buscarVenta,
       getSaleByInvoiceNumber,
@@ -349,8 +272,6 @@ function SalesProvider({ children }) {
       cargando,
       error,
       addSale,
-      addPayment,
-      deletePayment,
       buscarVenta,
       getSaleByInvoiceNumber,
       refrescarVentas,

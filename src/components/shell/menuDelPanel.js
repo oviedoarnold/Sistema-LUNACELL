@@ -3,6 +3,7 @@ import {
   FaCashRegister,
   FaCog,
   FaFileAlt,
+  FaHandHoldingUsd,
   FaHistory,
   FaHome,
   FaTruck,
@@ -27,9 +28,8 @@ import { PERMISSIONS } from "../../context/permissions"
   módulos son exactamente los que ya existen en NAV_ROUTES, y una prueba
   comprueba que las dos listas no se separen.
 
-  No se incluyen módulos que todavía no existen —cuentas por cobrar,
-  reportes, traslados, kardex—: un menú con elementos muertos invita a
-  pulsarlos.
+  No se incluyen módulos que todavía no existen —reportes, traslados,
+  kardex—: un menú con elementos muertos invita a pulsarlos.
 */
 
 export const GRUPOS_DEL_MENU = [
@@ -98,6 +98,18 @@ export const GRUPOS_DEL_MENU = [
   {
     titulo: "Control",
     modulos: [
+      /*
+        Cuentas por cobrar comparte el permiso del historial y no estrena
+        uno propio: quien ve el historial ya ve todos los saldos, así que
+        separarlos no protegería nada y sí dejaría a la mitad del equipo
+        sin poder cobrar.
+      */
+      {
+        to: "/receivables",
+        label: "Por cobrar",
+        Icono: FaHandHoldingUsd,
+        permiso: PERMISSIONS.SALES_HISTORY,
+      },
       {
         to: "/sales-history",
         label: "Historial",

@@ -4,15 +4,12 @@
   useState,
 } from "react"
 
-import Swal from "sweetalert2"
-import { claveDeIdempotencia } from "../utils/ids"
 
 import { SalesContext } from "../context/contexts"
 
 import {
   getSaleBalance,
   getSalePaid,
-  getSalePayments,
   isCreditSale,
 } from "../utils/salesUtils"
 
@@ -25,8 +22,6 @@ import EmptyState from "../components/crud/EmptyState"
 import PageHeader from "../components/crud/PageHeader"
 import SearchInput from "../components/crud/SearchInput"
 import StatusBadge from "../components/crud/StatusBadge"
-import FormField from "../components/forms/FormField"
-import ModalShell from "../components/forms/ModalShell"
 
 import { FaFileInvoiceDollar, FaSearch } from "react-icons/fa"
 
@@ -77,45 +72,24 @@ function getClientName(sale) {
 }
 
 function SalesHistory() {
-  const {
-    sales = [],
-    addPayment,
-    deletePayment,
-  } = useContext(SalesContext)
+  /*
+    Aquí ya no se cobra.
+
+    El historial mostraba un botón «Abonar» en cada factura a crédito, y ese
+    camino aplicaba el dinero a esa factura concreta, validando el saldo
+    contra lo que hubiera en pantalla y en dos viajes separados. Cobrar es
+    ahora una operación del cliente: vive en Cuentas por Cobrar y reparte el
+    pago entre sus facturas dentro de una sola transacción.
+
+    Esta pantalla se queda con lo que siempre fue: consultar lo emitido. Los
+    abonos se siguen viendo dentro de cada factura, porque son parte de su
+    historia; lo que ya no existe es la forma de crear uno desde aquí.
+  */
+  const { sales = [] } = useContext(SalesContext)
 
   const {
     company = {},
   } = useContext(ProductContext)
-
-  const [
-    payingSaleId,
-    setPayingSaleId,
-  ] = useState(null)
-
-  const [abonando, setAbonando] = useState(false)
-
-  /*
-    Identifica al intento de abono, no al clic. Si la red tarda y el
-    cajero vuelve a pulsar, viaja la misma clave y la base devuelve el
-    abono que ya registro en vez de cobrarle dos veces al cliente. Se
-    renueva al abrir el formulario para otra factura.
-  */
-  const [claveDelAbono, setClaveDelAbono] = useState(claveDeIdempotencia)
-
-  const [
-    paymentAmount,
-    setPaymentAmount,
-  ] = useState("")
-
-  const [
-    paymentNote,
-    setPaymentNote,
-  ] = useState("")
-
-  const [
-    paymentError,
-    setPaymentError,
-  ] = useState("")
 
   const [search, setSearch] =
     useState("")
@@ -240,140 +214,6 @@ function SalesHistory() {
         getSaleBalance(sale),
       0
     )
-
-  /*
-    Se busca por id en cada render en
-    vez de guardar la venta: así el
-    modal refleja el saldo nuevo
-    apenas se registra un abono.
-  */
-  const payingSale =
-    payingSaleId
-      ? sales.find(
-          (sale) =>
-            String(sale.id) ===
-            String(payingSaleId)
-        )
-      : null
-
-  const payingBalance =
-    payingSale
-      ? getSaleBalance(
-          payingSale
-        )
-      : 0
-
-  const closePaymentModal = () => {
-    setPayingSaleId(null)
-    setPaymentAmount("")
-    setPaymentNote("")
-    setPaymentError("")
-  }
-
-  const openPaymentModal = (
-    sale
-  ) => {
-    setClaveDelAbono(claveDeIdempotencia())
-    setPayingSaleId(sale.id)
-    setPaymentAmount("")
-    setPaymentNote("")
-    setPaymentError("")
-  }
-
-  const submitPayment = async (
-    event
-  ) => {
-    event.preventDefault()
-
-    if (!payingSale || abonando) {
-      return
-    }
-
-    const wasLastPayment =
-      Number(paymentAmount) >=
-      payingBalance
-
-    setAbonando(true)
-
-    try {
-      await addPayment(
-        payingSale.id,
-        {
-          amount:
-            paymentAmount,
-          note: paymentNote,
-        },
-        claveDelAbono
-      )
-    } catch (error) {
-      setPaymentError(
-        error.message
-      )
-
-      return
-    } finally {
-      setAbonando(false)
-    }
-
-    closePaymentModal()
-
-    Swal.fire({
-      icon: "success",
-
-      title: wasLastPayment
-        ? "Factura cancelada"
-        : "Abono registrado",
-
-      text: wasLastPayment
-        ? "El saldo quedó en cero."
-        : "El saldo pendiente se actualizó.",
-    })
-  }
-
-  const removePayment = async (
-    sale,
-    payment
-  ) => {
-    const result =
-      await Swal.fire({
-        icon: "warning",
-
-        title: "¿Eliminar abono?",
-
-        text: `Se quitará el abono de ${formatMoney(
-          payment.amount,
-          currency
-        )} y el saldo volverá a subir.`,
-
-        showCancelButton: true,
-
-        confirmButtonText:
-          "Sí, eliminar",
-
-        cancelButtonText:
-          "Cancelar",
-      })
-
-    if (!result.isConfirmed) {
-      return
-    }
-
-    try {
-      await deletePayment(
-        sale.id,
-        payment.id
-      )
-    } catch (error) {
-      Swal.fire({
-        icon: "error",
-
-        title:
-          "No se pudo eliminar el abono",
-
-        text: error.message,
-      })
-    }
-  }
 
   const getStatusBadge = (sale) => {
     if (sale.status === "pagada") {
@@ -670,24 +510,6 @@ function SalesHistory() {
                         )}
                     </div>
 
-                    {isCreditSale(
-                      sale
-                    ) &&
-                      getSaleBalance(
-                        sale
-                      ) > 0 && (
-                        <button
-                          type="button"
-                          className="btn btn-primary btn-sm"
-                          onClick={() =>
-                            openPaymentModal(
-                              sale
-                            )
-                          }
-                        >
-                          Abonar
-                        </button>
-                      )}
 
                     <button
                       type="button"
@@ -718,135 +540,6 @@ function SalesHistory() {
           )}
 
         </div>
-      )}
-
-      {/* ABONOS */}
-      {payingSale && (
-        <ModalShell
-          titulo={`Abonar a ${payingSale.invoiceNumber}`}
-          onCerrar={closePaymentModal}
-          cerrarAlPulsarFuera
-          acciones={
-            <>
-              <button
-                type="button"
-                className="btn btn-secondary"
-                onClick={closePaymentModal}
-              >
-                Cancelar
-              </button>
-
-              {/*
-                El botón vive en el pie de la ventana y el formulario en el
-                cuerpo: form="..." los enlaza sin sacar el submit de su sitio.
-              */}
-              <button
-                type="submit"
-                form="form-abono"
-                className="btn btn-primary"
-                disabled={abonando}
-              >
-                {abonando ? "Registrando…" : "Registrar abono"}
-              </button>
-            </>
-          }
-        >
-          <form id="form-abono" onSubmit={submitPayment}>
-            <div className="modal-resumen">
-              <div>
-                <span className="modal-resumen-label">Total</span>
-                <strong className="modal-resumen-valor">
-                  {formatMoney(payingSale.total, currency)}
-                </strong>
-              </div>
-
-              <div>
-                <span className="modal-resumen-label">Abonado</span>
-                <strong className="modal-resumen-valor abonado">
-                  {formatMoney(getSalePaid(payingSale), currency)}
-                </strong>
-              </div>
-
-              <div>
-                <span className="modal-resumen-label">Saldo</span>
-                <strong className="modal-resumen-valor saldo">
-                  {formatMoney(payingBalance, currency)}
-                </strong>
-              </div>
-            </div>
-
-            <FormField
-              etiqueta="Monto del abono"
-              ayuda={`Máximo ${formatMoney(payingBalance, currency)}`}
-              error={paymentError || null}
-            >
-              {/*
-                Sin autoFocus: ModalShell ya lleva el foco al primer
-                campo del cuerpo al abrir la ventana, y este lo es. El
-                atributo hacia el mismo trabajo dos veces.
-              */}
-              <input
-                type="number"
-                step="0.01"
-                min="0.01"
-                max={payingBalance}
-                placeholder="0.00"
-                value={paymentAmount}
-                onChange={(event) => {
-                  setPaymentAmount(event.target.value)
-                  setPaymentError("")
-                }}
-              />
-            </FormField>
-
-            <button
-              type="button"
-              className="btn btn-secondary btn-sm abono-atajo"
-              onClick={() => {
-                setPaymentAmount(String(payingBalance))
-                setPaymentError("")
-              }}
-            >
-              Pagar el saldo completo
-            </button>
-
-            <FormField etiqueta="Nota (opcional)">
-              <input
-                type="text"
-                placeholder="Efectivo, transferencia, recibo #..."
-                value={paymentNote}
-                onChange={(event) => setPaymentNote(event.target.value)}
-              />
-            </FormField>
-
-            {getSalePayments(payingSale).length > 0 && (
-              <div className="abonos-registrados">
-                <h4 className="abonos-titulo">Abonos registrados</h4>
-
-                {getSalePayments(payingSale).map((payment) => (
-                  <div className="abono-fila" key={payment.id}>
-                    <div>
-                      <b>{formatMoney(payment.amount, currency)}</b>
-
-                      <span className="abono-detalle">
-                        {payment.date}
-                        {payment.note ? ` · ${payment.note}` : ""}
-                      </span>
-                    </div>
-
-                    <button
-                      type="button"
-                      className="btn btn-danger btn-sm"
-                      onClick={() => removePayment(payingSale, payment)}
-                    >
-                      Eliminar
-                    </button>
-                  </div>
-                ))}
-              </div>
-            )}
-          </form>
-        </ModalShell>
       )}
 
       {/* FACTURA */}
