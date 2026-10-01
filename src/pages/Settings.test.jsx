@@ -17,6 +17,12 @@ vi.mock("../lib/supabase", () => ({
   exigirSupabase: () => globalThis.__supabaseFalso,
 }))
 
+const UBICACIONES = [
+  { id: "u-bodega", name: "Lunacell Bodega", type: "bodega" },
+  { id: "u-c1", name: "Camión 01", type: "camion" },
+  { id: "u-retirado", name: "Camión viejo", type: "camion", active: false },
+]
+
 const EMPRESA = {
   name: "Ferretería El Yunque",
   address: "San Pedro Sula",
@@ -40,7 +46,11 @@ beforeEach(() => {
   vi.resetModules()
 })
 
-async function renderSettings({ empresa = EMPRESA, correlativo = 1000 } = {}) {
+async function renderSettings({
+  empresa = EMPRESA,
+  correlativo = 1000,
+  ubicaciones = UBICACIONES,
+} = {}) {
   montarSupabaseFalso({
     usuarios: [
       usuarioDePrueba({ rol: "admin", nombre: "Administrador" }),
@@ -58,20 +68,35 @@ async function renderSettings({ empresa = EMPRESA, correlativo = 1000 } = {}) {
       ventas: [],
       detalle_venta: [],
       abonos: [],
+      /*
+        Settings ofrece la ubicación operativa, así que necesita las
+        ubicaciones activas de la empresa.
+      */
+      ubicaciones: ubicaciones.map((u) => ({
+        id: u.id,
+        empresa_id: "empresa-1",
+        nombre: u.name,
+        tipo: u.type || "camion",
+        activa: u.active !== false,
+        creada_en: "2026-01-01",
+      })),
     },
   })
 
   const { AuthProvider } = await import("../context/AuthContext")
   const ProductProvider = (await import("../context/ProductContext")).default
   const SalesProvider = (await import("../context/SalesContext")).default
+  const LocationsProvider = (await import("../context/LocationsContext")).default
   const Settings = (await import("./Settings")).default
 
   render(
     <AuthProvider>
       <ProductProvider>
-        <SalesProvider>
-          <Settings />
-        </SalesProvider>
+        <LocationsProvider>
+          <SalesProvider>
+            <Settings />
+          </SalesProvider>
+        </LocationsProvider>
       </ProductProvider>
     </AuthProvider>
   )
@@ -224,5 +249,129 @@ describe("Settings: usuarios", () => {
 
     expect(within(modal).getByText("Facturar")).toBeInTheDocument()
     expect(within(modal).getByText("Inventario")).toBeInTheDocument()
+  })
+})
+
+/*
+  Lo que el administrador configura en INV-2.3: desde dónde trabaja cada
+  persona y cuánto inventario alcanza a ver.
+
+  Los permisos no se presentan crudos. Quien reparte accesos no tiene por
+  qué saber qué es «inventory-all»; lo que necesita elegir es si esa
+  persona ve solo lo suyo o lo de todos.
+*/
+describe("Settings: inventario y ubicación operativa", () => {
+  const abrirFormulario = async () => {
+    await renderSettings()
+
+    fireEvent.click(screen.getByRole("button", { name: /nuevo usuario/i }))
+
+    return document.querySelector(".modal")
+  }
+
+  it("ofrece asignar una ubicación operativa", async () => {
+    await abrirFormulario()
+
+    expect(
+      screen.getByLabelText(/ubicación operativa/i)
+    ).toBeInTheDocument()
+  })
+
+  /* Una ubicación retirada no es un sitio desde el que nadie trabaje. */
+  it("el selector solo ofrece ubicaciones activas", async () => {
+    await abrirFormulario()
+
+    const selector = screen.getByLabelText(/ubicación operativa/i)
+    const opciones = within(selector)
+      .getAllByRole("option")
+      .map((o) => o.textContent)
+
+    expect(opciones).toContain("Lunacell Bodega")
+    expect(opciones).toContain("Camión 01")
+    expect(opciones).not.toContain("Camión viejo")
+  })
+
+  it("se puede dejar sin asignar", async () => {
+    await abrirFormulario()
+
+    const selector = screen.getByLabelText(/ubicación operativa/i)
+
+    expect(within(selector).getByText("Sin asignar")).toBeInTheDocument()
+    expect(selector).toHaveValue("")
+  })
+
+  it("elegir una ubicación la deja seleccionada", async () => {
+    await abrirFormulario()
+
+    const selector = screen.getByLabelText(/ubicación operativa/i)
+    fireEvent.change(selector, { target: { value: "u-c1" } })
+
+    expect(selector).toHaveValue("u-c1")
+  })
+
+  it("ofrece los tres niveles de consulta en palabras, no en permisos", async () => {
+    await abrirFormulario()
+
+    const selector = screen.getByLabelText(/inventario que puede consultar/i)
+    const opciones = within(selector)
+      .getAllByRole("option")
+      .map((o) => o.textContent)
+
+    expect(opciones).toEqual([
+      "No puede consultar existencias",
+      "Solo el inventario de su ubicación",
+      "El inventario de todas las ubicaciones",
+    ])
+
+    for (const opcion of opciones) {
+      expect(opcion).not.toMatch(/inventory-/)
+    }
+  })
+
+  /*
+    Un vendedor nuevo nace viendo lo de su ubicación, así que el selector
+    tiene que abrirse ya en ese nivel y no en «ninguno».
+  */
+  it("un vendedor nuevo arranca viendo el inventario de su ubicación", async () => {
+    await abrirFormulario()
+
+    expect(
+      screen.getByLabelText(/inventario que puede consultar/i)
+    ).toHaveValue("propia")
+  })
+
+  it("se puede subir a ver todas las ubicaciones", async () => {
+    await abrirFormulario()
+
+    const selector = screen.getByLabelText(/inventario que puede consultar/i)
+    fireEvent.change(selector, { target: { value: "todas" } })
+
+    expect(selector).toHaveValue("todas")
+  })
+
+  it("y se puede quitar del todo", async () => {
+    await abrirFormulario()
+
+    const selector = screen.getByLabelText(/inventario que puede consultar/i)
+    fireEvent.change(selector, { target: { value: "ninguno" } })
+
+    expect(selector).toHaveValue("ninguno")
+  })
+
+  /*
+    Al administrador no se le reparte: los tiene todos por su rol, y un
+    selector editable sugeriría que se le pueden quitar.
+  */
+  it("para un administrador el nivel no se edita", async () => {
+    await abrirFormulario()
+
+    fireEvent.change(screen.getByLabelText(/^rol$/i), {
+      target: { value: "admin" },
+    })
+
+    const selector = screen.getByLabelText(/inventario que puede consultar/i)
+
+    expect(selector).toBeDisabled()
+    expect(selector).toHaveValue("todas")
   })
 })

@@ -55,6 +55,14 @@ async function renderEnRuta(rutaInicial) {
             }
           />
           <Route
+            path="/inventory"
+            element={
+              <ProtectedRoute permission={PERMISSIONS.INVENTORY_OWN}>
+                <Pantalla nombre="Existencias" />
+              </ProtectedRoute>
+            }
+          />
+          <Route
             path="/settings"
             element={
               <ProtectedRoute permission={PERMISSIONS.SETTINGS}>
@@ -228,5 +236,47 @@ describe("ProtectedRoute con sesión", () => {
     await renderEnRuta("/dashboard")
 
     expect(await screen.findByText("Pantalla de login")).toBeInTheDocument()
+  })
+})
+
+/*
+  La pantalla de existencias dejó de depender del permiso del catálogo en
+  INV-2.3. Escribir la dirección a mano no debe revelar nada: a quien no
+  la tiene habilitada se le desvía, como a cualquier otra ruta.
+*/
+describe("ProtectedRoute · Existencias", () => {
+  it("deja entrar a quien ve el inventario de su ubicación", async () => {
+    entrarComo({ secciones: [PERMISSIONS.INVENTORY_OWN] })
+
+    await renderEnRuta("/inventory")
+
+    expect(await screen.findByText("Existencias")).toBeInTheDocument()
+  })
+
+  /* Sin marcarle además la de su ubicación: la implicación basta. */
+  it("deja entrar a quien ve el inventario de todas", async () => {
+    entrarComo({ secciones: [PERMISSIONS.INVENTORY_ALL] })
+
+    await renderEnRuta("/inventory")
+
+    expect(await screen.findByText("Existencias")).toBeInTheDocument()
+  })
+
+  it("no deja entrar solo con el permiso del catálogo", async () => {
+    entrarComo({ secciones: [PERMISSIONS.PRODUCTS, PERMISSIONS.DASHBOARD] })
+
+    await renderEnRuta("/inventory")
+
+    expect(screen.queryByText("Existencias")).not.toBeInTheDocument()
+    expect(await screen.findByText("Dashboard")).toBeInTheDocument()
+  })
+
+  it("a quien no tiene ninguna sección le muestra el aviso de sin acceso", async () => {
+    entrarComo({ secciones: [] })
+
+    await renderEnRuta("/inventory")
+
+    expect(await screen.findByText(/sin acceso/i)).toBeInTheDocument()
+    expect(screen.queryByText("Existencias")).not.toBeInTheDocument()
   })
 })

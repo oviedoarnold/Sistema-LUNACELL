@@ -72,17 +72,24 @@ export const GRUPOS_DEL_MENU = [
         permiso: PERMISSIONS.PRODUCTS,
       },
       /*
-        Existencias comparte el permiso de Inventario y no estrena uno
-        propio: quien administra el catálogo ya ve el stock de cada
-        producto, así que separarlos no protegería nada. Cuánto hay en
-        cada ubicación lo sigue decidiendo la base, con inventory-own e
-        inventory-all, que es otro eje: éste solo abre la pantalla.
+        Existencias tiene su propio permiso y no comparte el del catálogo:
+        administrar productos y saber cuánto hay en cada camión son dos
+        concesiones distintas, y un vendedor necesita la segunda sin la
+        primera.
+
+        Basta con «ver el inventario de mi ubicación» para que la pestaña
+        aparezca. Quien tenga «ver el de todas» también la ve, porque ese
+        permiso ya incluye al otro: la implicación vive en
+        concedePermiso(), no en dos marcas que haya que acordarse de
+        poner juntas.
+
+        Cuánto se ve dentro lo sigue decidiendo la base.
       */
       {
         to: "/inventory",
         label: "Existencias",
         Icono: FaBoxes,
-        permiso: PERMISSIONS.PRODUCTS,
+        permiso: PERMISSIONS.INVENTORY_OWN,
       },
       {
         to: "/locations",

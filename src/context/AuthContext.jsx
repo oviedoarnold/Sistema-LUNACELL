@@ -13,6 +13,7 @@ import {
   PERMISSIONS,
   ADMIN_PERMISSIONS,
   SELLER_PERMISSIONS,
+  concedePermiso,
 } from "./permissions"
 
 /*
@@ -24,7 +25,7 @@ import {
 async function cargarPerfil(authId) {
   const { data, error } = await supabase
     .from("usuarios")
-    .select("id, empresa_id, email, nombre, rol, activo")
+    .select("id, empresa_id, email, nombre, rol, activo, ubicacion_id")
     .eq("auth_id", authId)
     .eq("activo", true)
     .maybeSingle()
@@ -42,8 +43,33 @@ async function cargarPerfil(authId) {
     ...data,
     name: data.nombre,
     role: data.rol,
+    locationId: data.ubicacion_id || "",
     permissions: (filas || []).map((f) => f.seccion),
   }
+}
+
+/*
+  Qué se le cuenta al administrador cuando la base rechaza guardar.
+
+  Mismo criterio que en api/ubicaciones.js, y por el mismo motivo: P0001 es
+  lo que devuelve un RAISE EXCEPTION, o sea un texto que alguien escribió
+  para que lo lea una persona. Aquí lo levanta el disparador que impide
+  asignar una ubicación operativa inactiva, y decirle «no se pudo» a quien
+  solo tiene que activarla antes es dejarlo adivinando.
+
+  23505 se traduce porque su texto trae el nombre de un índice, que no
+  significa nada para quien lo lee.
+*/
+function motivoDelUsuario(error, queHacia) {
+  if (error?.code === "23505") {
+    return "Ya existe un usuario con ese correo."
+  }
+
+  if (error?.code === "P0001" && String(error.message || "").trim()) {
+    return error.message
+  }
+
+  return `No se pudo ${queHacia}.`
 }
 
 async function traerUsuariosDeLaEmpresa() {
@@ -53,7 +79,7 @@ async function traerUsuariosDeLaEmpresa() {
 
   const { data } = await supabase
     .from("usuarios")
-    .select("id, email, nombre, rol, activo, entro_en, permisos_usuario(seccion)")
+    .select("id, email, nombre, rol, activo, entro_en, ubicacion_id, permisos_usuario(seccion)")
     .order("nombre")
 
   return (data || []).map((fila) => ({
@@ -62,6 +88,7 @@ async function traerUsuariosDeLaEmpresa() {
     name: fila.nombre,
     username: fila.email,
     role: fila.rol,
+    locationId: fila.ubicacion_id || "",
     active: fila.activo,
     // Sin entro_en, la invitación sigue sin aceptarse.
     aceptoInvitacion: Boolean(fila.entro_en),
@@ -240,7 +267,7 @@ export function AuthProvider({ children }) {
     en la base la vincula a la empresa al hacerlo.
   */
   const addUser = useCallback(
-    async ({ name, email, role = "vendedor", permissions = [], active = true }) => {
+    async ({ name, email, role = "vendedor", permissions = [], active = true, locationId = "" }) => {
       const correo = String(email || "").trim().toLowerCase()
       const nombre = String(name || "").trim()
 
@@ -255,16 +282,13 @@ export function AuthProvider({ children }) {
           nombre,
           rol: role,
           activo: active,
+          ubicacion_id: locationId || null,
         })
         .select("id")
         .single()
 
       if (error) {
-        throw new Error(
-          error.code === "23505"
-            ? "Ya existe un usuario con ese correo."
-            : "No se pudo crear el usuario."
-        )
+        throw new Error(motivoDelUsuario(error, "crear el usuario"))
       }
 
       await guardarPermisos(
@@ -280,12 +304,13 @@ export function AuthProvider({ children }) {
   )
 
   const updateUser = useCallback(
-    async (id, { name, role, active, permissions }) => {
+    async (id, { name, role, active, permissions, locationId }) => {
       const cambios = {}
 
       if (name !== undefined) cambios.nombre = String(name).trim()
       if (role !== undefined) cambios.rol = role
       if (active !== undefined) cambios.activo = active
+      if (locationId !== undefined) cambios.ubicacion_id = locationId || null
 
       if (Object.keys(cambios).length) {
         const { error } = await supabase
@@ -293,7 +318,7 @@ export function AuthProvider({ children }) {
           .update(cambios)
           .eq("id", id)
 
-        if (error) throw new Error("No se pudo actualizar el usuario.")
+        if (error) throw new Error(motivoDelUsuario(error, "actualizar el usuario"))
       }
 
       if (permissions !== undefined || role !== undefined) {
@@ -339,10 +364,13 @@ export function AuthProvider({ children }) {
         return true
       }
 
-      return (
-        Array.isArray(user.permissions) &&
-        user.permissions.includes(permission)
-      )
+      /*
+        No basta con buscar el permiso en la lista: «ver el inventario de
+        todas las ubicaciones» ya incluye ver el de la propia, y quien lo
+        tenga debe poder abrir la pantalla sin que nadie le haya marcado
+        además la casilla de su ubicación.
+      */
+      return concedePermiso(user.permissions, permission)
     },
     [user]
   )

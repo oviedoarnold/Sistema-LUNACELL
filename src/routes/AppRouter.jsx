@@ -73,7 +73,7 @@ function AppRouter() {
         <Route
           path="/inventory"
           element={
-            <ProtectedRoute permission={PERMISSIONS.PRODUCTS}>
+            <ProtectedRoute permission={PERMISSIONS.INVENTORY_OWN}>
               <MainLayout>
                 <Inventory />
               </MainLayout>

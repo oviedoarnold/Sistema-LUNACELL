@@ -507,13 +507,69 @@ describe("la ubicación operativa", () => {
 
 // ── VER NO ES ESCRIBIR ────────────────────────────────────
 
+/*
+  Lo que ve un usuario no es una foto que se tomó al entrar: cambia en
+  cuanto cambian sus permisos o su ubicación. Estas dos pruebas existen
+  porque es lo que hace que un cambio hecho en Configuración sirva de algo
+  sin obligar a nadie a volver a iniciar sesión.
+*/
+describe("lo visible cambia cuando cambia la autorización", () => {
+  it("21. quitar el permiso deja al vendedor sin existencias", async () => {
+    const { e, v } = await conVendedor(["inventory-all"])
+
+    await comoUsuario(db, v.authId)
+    const antes = await ubicacionesVisibles(db)
+    await comoDueno(db)
+
+    expect(antes).toHaveLength(4)
+
+    await db.query(
+      "delete from permisos_usuario where usuario_id = $1 and seccion = $2",
+      [v.usuario, "inventory-all"]
+    )
+
+    await comoUsuario(db, v.authId)
+    const despues = await ubicacionesVisibles(db)
+    const celdas = await db.query(
+      "select count(*)::int as n from inventario_ubicacion"
+    )
+    await comoDueno(db)
+
+    expect(despues).toEqual([])
+    expect(celdas.rows[0].n).toBe(0)
+    expect(e.bodega).toBeDefined()
+  })
+
+  it("22. cambiar la ubicación operativa cambia lo que ve", async () => {
+    const { e, v } = await conVendedor(["inventory-own"])
+
+    await comoUsuario(db, v.authId)
+    const antes = await ubicacionesVisibles(db)
+    await comoDueno(db)
+
+    expect(antes).toEqual(["Camión 01"])
+
+    await db.query("update usuarios set ubicacion_id = $1 where id = $2", [
+      e.bodega,
+      v.usuario,
+    ])
+
+    await comoUsuario(db, v.authId)
+    const despues = await visibles(db, e.cargador)
+    await comoDueno(db)
+
+    /* Pasa a ver la bodega, con su cantidad real, y deja de ver el camión. */
+    expect(despues).toEqual(["Bodega=15"])
+  })
+})
+
 describe("ver no concede escribir", () => {
   /*
     Los tres se prueban porque son tres puertas distintas. El update es
     el que más engaña: sin el revoke de la 0014 no falla, afecta cero
     filas y devuelve éxito.
   */
-  it("21. inventory-all no permite insertar existencias", async () => {
+  it("23. inventory-all no permite insertar existencias", async () => {
     const { e, v } = await conVendedor(["inventory-all"])
 
     await comoUsuario(db, v.authId)
@@ -526,7 +582,7 @@ describe("ver no concede escribir", () => {
     await comoDueno(db)
   })
 
-  it("22. inventory-all no permite modificar ni borrar existencias", async () => {
+  it("24. inventory-all no permite modificar ni borrar existencias", async () => {
     const { e, v } = await conVendedor(["inventory-all"])
 
     await comoUsuario(db, v.authId)
@@ -550,7 +606,7 @@ describe("ver no concede escribir", () => {
     expect(r.rows[0].cantidad).toBe(15)
   })
 
-  it("23. tampoco se puede escribir en la vista", async () => {
+  it("25. tampoco se puede escribir en la vista", async () => {
     const e = await escenario()
 
     await comoUsuario(db, e.authId)
@@ -569,7 +625,7 @@ describe("la vista no revela lo que no le toca", () => {
     El costo sigue sin protección propia en el resto del esquema —es un
     problema aparte, de otra fase—, pero esta vista no lo empeora.
   */
-  it("24. no expone costo, margen ni utilidad", async () => {
+  it("26. no expone costo, margen ni utilidad", async () => {
     const r = await db.query(
       `select column_name from information_schema.columns
         where table_schema = 'public'
@@ -588,7 +644,7 @@ describe("la vista no revela lo que no le toca", () => {
     )
   })
 
-  it("25. un producto inactivo no aparece", async () => {
+  it("27. un producto inactivo no aparece", async () => {
     const e = await escenario()
 
     await db.query("update productos set activo = false where id = $1", [
@@ -605,7 +661,7 @@ describe("la vista no revela lo que no le toca", () => {
     expect(r.rows[0].n).toBe(0)
   })
 
-  it("26. sin autenticar no se ve nada", async () => {
+  it("28. sin autenticar no se ve nada", async () => {
     await escenario()
 
     await comoUsuario(db, null)
@@ -630,7 +686,7 @@ describe("la migración se puede volver a correr", () => {
     Se ejecuta el archivo de verdad, no una copia de su texto: tenerla
     escrita dos veces ya se desincronizó una vez en INV-1.
   */
-  it("27. correrla otra vez no rompe nada y deja lo mismo", async () => {
+  it("29. correrla otra vez no rompe nada y deja lo mismo", async () => {
     const e = await escenario()
 
     const migracion = fs.readFileSync(
