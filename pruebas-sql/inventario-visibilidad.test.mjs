@@ -97,6 +97,24 @@ async function escenario() {
   }
 }
 
+/*
+  El escenario más un vendedor del Camión 01 con los permisos que pida el
+  caso, que es la forma de casi todas las pruebas de abajo. Pasar
+  `ubicacion: null` sirve para el caso del vendedor sin ubicación
+  asignada.
+*/
+async function conVendedor(permisos, ubicacion = "camion1") {
+  const e = await escenario()
+
+  const v = await crearVendedor(db, {
+    empresa: e.empresa,
+    ubicacion: ubicacion === null ? null : e[ubicacion],
+    permisos,
+  })
+
+  return { e, v }
+}
+
 /* Lo que la vista le muestra a quien esté autenticado ahora mismo. */
 async function visibles(conexion, productoId = null) {
   const r = await conexion.query(
@@ -179,12 +197,7 @@ describe("el administrador", () => {
 
 describe("el vendedor", () => {
   it("4. con inventory-own ve solo su ubicación operativa", async () => {
-    const e = await escenario()
-    const v = await crearVendedor(db, {
-      empresa: e.empresa,
-      ubicacion: e.camion1,
-      permisos: ["inventory-own"],
-    })
+    const { e, v } = await conVendedor(["inventory-own"])
 
     await comoUsuario(db, v.authId)
     const vistas = await ubicacionesVisibles(db)
@@ -198,12 +211,7 @@ describe("el vendedor", () => {
     Se comprueba en la vista y en la tabla, porque son dos puertas.
   */
   it("5. con inventory-own no ve la ubicación de otro", async () => {
-    const e = await escenario()
-    const v = await crearVendedor(db, {
-      empresa: e.empresa,
-      ubicacion: e.camion1,
-      permisos: ["inventory-own"],
-    })
+    const { e, v } = await conVendedor(["inventory-own"])
 
     await comoUsuario(db, v.authId)
     const enLaVista = await db.query(
@@ -221,12 +229,7 @@ describe("el vendedor", () => {
   })
 
   it("6. con inventory-all ve todas las activas de su empresa", async () => {
-    const e = await escenario()
-    const v = await crearVendedor(db, {
-      empresa: e.empresa,
-      ubicacion: e.camion1,
-      permisos: ["inventory-all"],
-    })
+    const { e, v } = await conVendedor(["inventory-all"])
 
     await comoUsuario(db, v.authId)
     const vistas = await ubicacionesVisibles(db)
@@ -236,12 +239,7 @@ describe("el vendedor", () => {
   })
 
   it("7. sin ninguno de los dos permisos no ve ninguna existencia", async () => {
-    const e = await escenario()
-    const v = await crearVendedor(db, {
-      empresa: e.empresa,
-      ubicacion: e.camion1,
-      permisos: ["pos", "quotes"],
-    })
+    const { e, v } = await conVendedor(["pos", "quotes"])
 
     await comoUsuario(db, v.authId)
     const vistas = await visibles(db)
@@ -260,12 +258,7 @@ describe("el vendedor", () => {
     —enseñarle todo— convertiría un dato sin rellenar en un permiso.
   */
   it("8. con inventory-own y sin ubicación operativa no ve nada", async () => {
-    const e = await escenario()
-    const v = await crearVendedor(db, {
-      empresa: e.empresa,
-      ubicacion: null,
-      permisos: ["inventory-own"],
-    })
+    const { e, v } = await conVendedor(["inventory-own"], null)
 
     await comoUsuario(db, v.authId)
     const vistas = await ubicacionesVisibles(db)
@@ -309,12 +302,7 @@ describe("el cero y lo prohibido no se parecen", () => {
     vista filtra las ubicaciones ANTES de unirlas.
   */
   it("10. una ubicación prohibida no aparece, ni con 0", async () => {
-    const e = await escenario()
-    const v = await crearVendedor(db, {
-      empresa: e.empresa,
-      ubicacion: e.camion1,
-      permisos: ["inventory-own"],
-    })
+    const { e, v } = await conVendedor(["inventory-own"])
 
     await comoUsuario(db, v.authId)
     const delCargador = await visibles(db, e.cargador)
@@ -327,12 +315,7 @@ describe("el cero y lo prohibido no se parecen", () => {
   })
 
   it("11. el total visible suma lo visible y no lo que existe", async () => {
-    const e = await escenario()
-    const v = await crearVendedor(db, {
-      empresa: e.empresa,
-      ubicacion: e.camion1,
-      permisos: ["inventory-own"],
-    })
+    const { e, v } = await conVendedor(["inventory-own"])
 
     const total = async (authId) => {
       await comoUsuario(db, authId)
@@ -427,11 +410,7 @@ describe("la ubicación operativa", () => {
   it("16. no se puede desactivar una ubicación desde la que alguien opera", async () => {
     const e = await escenario()
 
-    await crearVendedor(db, {
-      empresa: e.empresa,
-      ubicacion: e.camion1,
-      permisos: ["inventory-own"],
-    })
+    await crearVendedor(db, { empresa: e.empresa, ubicacion: e.camion1, permisos: ["inventory-own"] })
 
     await expect(
       db.query("update ubicaciones set activa = false where id = $1", [
@@ -461,12 +440,7 @@ describe("la ubicación operativa", () => {
     que se desactivó después de asignársela.
   */
   it("18. editar otro campo del usuario no revalida la ubicación", async () => {
-    const e = await escenario()
-    const v = await crearVendedor(db, {
-      empresa: e.empresa,
-      ubicacion: e.camion1,
-      permisos: ["inventory-own"],
-    })
+    const { e, v } = await conVendedor(["inventory-own"])
 
     /* Se desactiva por detrás, sin pasar por el disparador. */
     await db.query("alter table ubicaciones disable trigger ubicaciones_operativa_en_uso")
@@ -483,12 +457,7 @@ describe("la ubicación operativa", () => {
   })
 
   it("19. inventory-all no cambia la ubicación operativa", async () => {
-    const e = await escenario()
-    const v = await crearVendedor(db, {
-      empresa: e.empresa,
-      ubicacion: e.camion1,
-      permisos: ["inventory-all"],
-    })
+    const { e, v } = await conVendedor(["inventory-all"])
 
     await comoUsuario(db, v.authId)
     const operativa = (await db.query("select ubicacion_del_usuario() as u"))
@@ -510,12 +479,7 @@ describe("ver no concede escribir", () => {
     filas y devuelve éxito.
   */
   it("20. inventory-all no permite insertar existencias", async () => {
-    const e = await escenario()
-    const v = await crearVendedor(db, {
-      empresa: e.empresa,
-      ubicacion: e.camion1,
-      permisos: ["inventory-all"],
-    })
+    const { e, v } = await conVendedor(["inventory-all"])
 
     await comoUsuario(db, v.authId)
     const intento = db.query(
@@ -528,12 +492,7 @@ describe("ver no concede escribir", () => {
   })
 
   it("21. inventory-all no permite modificar ni borrar existencias", async () => {
-    const e = await escenario()
-    const v = await crearVendedor(db, {
-      empresa: e.empresa,
-      ubicacion: e.camion1,
-      permisos: ["inventory-all"],
-    })
+    const { e, v } = await conVendedor(["inventory-all"])
 
     await comoUsuario(db, v.authId)
 
