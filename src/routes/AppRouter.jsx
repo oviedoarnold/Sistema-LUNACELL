@@ -10,6 +10,7 @@ import Demo from "../pages/Demo"
 import Login from "../pages/Login"
 import Dashboard from "../pages/Dashboard"
 import Products from "../pages/Products"
+import Inventory from "../pages/Inventory"
 import POS from "../pages/POS"
 import Quotes from "../pages/Quotes"
 import SalesHistory from "../pages/SalesHistory"
@@ -63,6 +64,18 @@ function AppRouter() {
             <ProtectedRoute permission={PERMISSIONS.PRODUCTS}>
               <MainLayout>
                 <Products />
+              </MainLayout>
+            </ProtectedRoute>
+          }
+        />
+
+        {/* EXISTENCIAS POR UBICACIÓN */}
+        <Route
+          path="/inventory"
+          element={
+            <ProtectedRoute permission={PERMISSIONS.PRODUCTS}>
+              <MainLayout>
+                <Inventory />
               </MainLayout>
             </ProtectedRoute>
           }
