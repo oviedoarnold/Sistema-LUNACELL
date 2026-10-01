@@ -28,10 +28,35 @@ const aUbicacionDeBase = (ubicacion, empresaId) => ({
     : DEFAULT_LOCATION_TYPE,
 })
 
+/*
+  Cuando la base levanta la mano a propósito, lo que dice sirve.
+
+  PostgreSQL devuelve P0001 —`raise_exception`— únicamente cuando una
+  función o un disparador ejecutan un RAISE EXCEPTION. Eso no es un fallo
+  interno que se escapó: es un texto que alguien escribió para que lo lea
+  una persona, y normalmente dice qué hacer a continuación.
+
+  El ejemplo que motivó esto: al intentar desactivar una ubicación desde la
+  que alguien opera, la base contesta «No se puede desactivar «Camión 01»:
+  es la ubicación operativa de 1 usuario(s). Cámbiales la ubicación antes.»
+  El administrador veía «No se pudo cambiar el estado de la ubicación.» y se
+  quedaba sin saber que le faltaba reasignar al vendedor.
+
+  Se distingue por el código y no por el texto. Un error cualquiera del
+  motor no se muestra: 23505 dice «duplicate key value violates unique
+  constraint "ubicaciones_nombre_unico"», que no es una frase para nadie
+  —de ahí que falloAlGuardar la traduzca aparte— y además enseña el nombre
+  de un índice. Comparar cadenas sería peor todavía: se rompe en cuanto
+  alguien corrige una tilde en el mensaje de la migración.
+*/
+function mensajeParaElUsuario(error) {
+  return error?.code === "P0001" ? String(error.message || "").trim() : ""
+}
+
 function fallo(error, queHacia) {
   console.error(`No se pudo ${queHacia}:`, error)
 
-  throw new Error(`No se pudo ${queHacia}.`)
+  throw new Error(mensajeParaElUsuario(error) || `No se pudo ${queHacia}.`)
 }
 
 /*

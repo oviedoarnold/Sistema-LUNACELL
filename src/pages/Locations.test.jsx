@@ -22,14 +22,14 @@ const UBICACIONES = [
   { id: "u4", name: "Camión 02", type: LOCATION_TYPES.TRUCK, active: false },
 ]
 
-function renderLocations(ubicaciones = UBICACIONES) {
+function renderLocations(ubicaciones = UBICACIONES, fallarEn = {}) {
   return renderizarPantalla(
     <AuthProvider>
       <LocationsProvider>
         <Locations />
       </LocationsProvider>
     </AuthProvider>,
-    { ubicaciones, esperar: ["ubicaciones"] }
+    { ubicaciones, fallarEn, esperar: ["ubicaciones"] }
   )
 }
 
@@ -255,5 +255,68 @@ describe("Locations — estado", () => {
       const camion02 = falso.datos.ubicaciones.find((u) => u.id === "u4")
       expect(camion02.activa).toBe(true)
     })
+  })
+})
+
+/*
+  Cuando la base rechaza el cambio con un motivo escrito para una persona,
+  ese motivo tiene que llegar al diálogo. Antes llegaba solo a la consola.
+*/
+describe("Locations · el motivo del rechazo llega al diálogo", () => {
+  const DEL_DISPARADOR =
+    "No se puede desactivar «Bodega Principal»: es la ubicación operativa de 1 usuario(s). Cámbiales la ubicación antes."
+
+  const textoDelError = () => {
+    const llamada = Swal.fire.mock.calls
+      .map(([args]) => args)
+      .reverse()
+      .find((args) => args && args.icon === "error")
+
+    return llamada ? llamada.text : null
+  }
+
+  it("muestra la causa real que devolvió la base", async () => {
+    await renderLocations(UBICACIONES, {
+      ubicaciones: { update: { code: "P0001", message: DEL_DISPARADOR } },
+    })
+
+    Swal.fire.mockResolvedValueOnce({ isConfirmed: true })
+    fireEvent.click(screen.getAllByRole("button", { name: /desactivar/i })[0])
+
+    await waitFor(() => {
+      expect(textoDelError()).toBe(DEL_DISPARADOR)
+    })
+  })
+
+  it("si no hay motivo utilizable, mantiene un aviso comprensible", async () => {
+    await renderLocations(UBICACIONES, {
+      ubicaciones: { update: { message: "Failed to fetch" } },
+    })
+
+    Swal.fire.mockResolvedValueOnce({ isConfirmed: true })
+    fireEvent.click(screen.getAllByRole("button", { name: /desactivar/i })[0])
+
+    await waitFor(() => {
+      expect(textoDelError()).toMatch(/no se pudo cambiar el estado/i)
+    })
+  })
+
+  /*
+    Y la fila no se queda mintiendo: si la base dijo que no, la ubicación
+    sigue activa en pantalla.
+  */
+  it("la ubicación no cambia de estado cuando la base lo rechaza", async () => {
+    const { falso } = await renderLocations(UBICACIONES, {
+      ubicaciones: { update: { code: "P0001", message: DEL_DISPARADOR } },
+    })
+
+    Swal.fire.mockResolvedValueOnce({ isConfirmed: true })
+    fireEvent.click(screen.getAllByRole("button", { name: /desactivar/i })[0])
+
+    await waitFor(() => {
+      expect(textoDelError()).toBeTruthy()
+    })
+
+    expect(falso.datos.ubicaciones.find((u) => u.id === "u1").activa).toBe(true)
   })
 })
