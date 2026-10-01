@@ -95,8 +95,14 @@ function InvoiceTemplate({
         </div>
 
         <div className="inv-doc-type">
+          {/*
+            Un documento interno no se llama factura. Solo las ventas de
+            una ubicación con numeración autorizada lo son, y llamar
+            factura a las demás es justo la confusión que INV-3.2 viene a
+            evitar.
+          */}
           <div className="inv-doc-label">
-            FACTURA
+            {sale.fiscal ? "FACTURA" : "DOCUMENTO INTERNO"}
           </div>
 
           <div className="inv-doc-num">
