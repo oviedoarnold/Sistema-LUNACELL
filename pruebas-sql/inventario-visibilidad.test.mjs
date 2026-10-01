@@ -456,7 +456,42 @@ describe("la ubicación operativa", () => {
     ).resolves.toBeDefined()
   })
 
-  it("19. inventory-all no cambia la ubicación operativa", async () => {
+  /*
+    El código de error, no solo el mensaje.
+
+    La capa de acceso del frontend decide si un rechazo se le enseña al
+    usuario mirando el SQLSTATE: P0001 es lo que PostgreSQL devuelve cuando
+    un disparador ejecuta RAISE EXCEPTION, es decir, cuando el texto lo
+    escribió alguien para que lo lea una persona.
+
+    Sin esta prueba, cambiar el disparador para que levante un SQLSTATE
+    propio dejaría al administrador viendo otra vez un aviso genérico, y
+    nada en la suite lo notaría: el rechazo seguiría ocurriendo.
+  */
+  it("19. el rechazo llega con SQLSTATE P0001 y su motivo", async () => {
+    const e = await escenario()
+
+    await crearVendedor(db, {
+      empresa: e.empresa,
+      ubicacion: e.camion1,
+      permisos: ["inventory-own"],
+    })
+
+    let fallo
+    try {
+      await db.query("update ubicaciones set activa = false where id = $1", [
+        e.camion1,
+      ])
+    } catch (problema) {
+      fallo = problema
+    }
+
+    expect(fallo).toBeDefined()
+    expect(fallo.code).toBe("P0001")
+    expect(fallo.message).toMatch(/ubicación operativa de/i)
+  })
+
+  it("20. inventory-all no cambia la ubicación operativa", async () => {
     const { e, v } = await conVendedor(["inventory-all"])
 
     await comoUsuario(db, v.authId)
@@ -478,7 +513,7 @@ describe("ver no concede escribir", () => {
     el que más engaña: sin el revoke de la 0014 no falla, afecta cero
     filas y devuelve éxito.
   */
-  it("20. inventory-all no permite insertar existencias", async () => {
+  it("21. inventory-all no permite insertar existencias", async () => {
     const { e, v } = await conVendedor(["inventory-all"])
 
     await comoUsuario(db, v.authId)
@@ -491,7 +526,7 @@ describe("ver no concede escribir", () => {
     await comoDueno(db)
   })
 
-  it("21. inventory-all no permite modificar ni borrar existencias", async () => {
+  it("22. inventory-all no permite modificar ni borrar existencias", async () => {
     const { e, v } = await conVendedor(["inventory-all"])
 
     await comoUsuario(db, v.authId)
@@ -515,7 +550,7 @@ describe("ver no concede escribir", () => {
     expect(r.rows[0].cantidad).toBe(15)
   })
 
-  it("22. tampoco se puede escribir en la vista", async () => {
+  it("23. tampoco se puede escribir en la vista", async () => {
     const e = await escenario()
 
     await comoUsuario(db, e.authId)
@@ -534,7 +569,7 @@ describe("la vista no revela lo que no le toca", () => {
     El costo sigue sin protección propia en el resto del esquema —es un
     problema aparte, de otra fase—, pero esta vista no lo empeora.
   */
-  it("23. no expone costo, margen ni utilidad", async () => {
+  it("24. no expone costo, margen ni utilidad", async () => {
     const r = await db.query(
       `select column_name from information_schema.columns
         where table_schema = 'public'
@@ -553,7 +588,7 @@ describe("la vista no revela lo que no le toca", () => {
     )
   })
 
-  it("24. un producto inactivo no aparece", async () => {
+  it("25. un producto inactivo no aparece", async () => {
     const e = await escenario()
 
     await db.query("update productos set activo = false where id = $1", [
@@ -570,7 +605,7 @@ describe("la vista no revela lo que no le toca", () => {
     expect(r.rows[0].n).toBe(0)
   })
 
-  it("25. sin autenticar no se ve nada", async () => {
+  it("26. sin autenticar no se ve nada", async () => {
     await escenario()
 
     await comoUsuario(db, null)
@@ -595,7 +630,7 @@ describe("la migración se puede volver a correr", () => {
     Se ejecuta el archivo de verdad, no una copia de su texto: tenerla
     escrita dos veces ya se desincronizó una vez en INV-1.
   */
-  it("26. correrla otra vez no rompe nada y deja lo mismo", async () => {
+  it("27. correrla otra vez no rompe nada y deja lo mismo", async () => {
     const e = await escenario()
 
     const migracion = fs.readFileSync(
