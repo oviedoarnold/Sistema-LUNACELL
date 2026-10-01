@@ -114,6 +114,32 @@ describe("Sidebar · permisos", () => {
   })
 
   /*
+    Existencias tiene permiso propio desde INV-2.3: administrar el catálogo
+    y saber cuánto hay en cada camión son dos concesiones distintas.
+  */
+  it("el permiso del catálogo ya no abre Existencias", async () => {
+    await montarSidebar({ secciones: [PERMISSIONS.PRODUCTS] })
+
+    expect(enlaces()).toEqual(["/products"])
+  })
+
+  it("ver el inventario de su ubicación muestra Existencias", async () => {
+    await montarSidebar({ secciones: [PERMISSIONS.INVENTORY_OWN] })
+
+    expect(enlaces()).toEqual(["/inventory"])
+  })
+
+  /*
+    Y quien puede ver todas también la ve, sin que nadie le haya marcado
+    además la de su ubicación: la implicación la deriva concedePermiso().
+  */
+  it("ver el inventario de todas también la muestra", async () => {
+    await montarSidebar({ secciones: [PERMISSIONS.INVENTORY_ALL] })
+
+    expect(enlaces()).toEqual(["/inventory"])
+  })
+
+  /*
     Un encabezado de grupo sin nada debajo hace pensar que algo no cargó.
   */
   it("oculta el encabezado de un grupo cuyos módulos no están permitidos", async () => {
