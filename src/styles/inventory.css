@@ -103,6 +103,20 @@
   border-radius: 0;
 }
 
+/*
+  Y sin la anchura mínima que crud.css le pone a las tablas.
+
+  Esos 720 px están escritos para las ocho columnas de Productos, donde
+  sin ellos los importes se parten en dos líneas. Aquí hay tres columnas,
+  y en móvil dos: heredar el mínimo dejaba la tabla en 720 px dentro de un
+  contenedor de 356, así que la columna de la cantidad quedaba fuera de la
+  pantalla y había que arrastrar la tabla de lado para ver el número que
+  se vino a buscar. Se midió a 390 px.
+*/
+.inventory .inventory-producto table {
+  min-width: 0;
+}
+
 .inventory .inventory-producto tbody tr:last-child td {
   border-bottom: 0;
 }
