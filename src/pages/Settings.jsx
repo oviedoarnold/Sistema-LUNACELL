@@ -1636,7 +1636,7 @@ function Settings() {
                       >
                         {userForm.role === "admin"
                           ? "Los administradores consultan el inventario de todas las ubicaciones."
-                          : "«Solo su ubicación» muestra únicamente lo que hay donde trabaja."}
+                          : "Decide qué muestra la pantalla Existencias. «Solo su ubicación» enseña únicamente lo que hay donde trabaja."}
                       </p>
                     </div>
 
