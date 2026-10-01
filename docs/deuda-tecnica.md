@@ -8,6 +8,66 @@ Cuando algo de aquí se resuelva, se borra de la lista.
 
 ---
 
+## Una ubicación con existencia se puede desactivar — destino: **INV-2.2**
+
+**Dónde.** Migración
+[`0015_visibilidad_por_ubicacion.sql`](../supabase/migrations/0015_visibilidad_por_ubicacion.sql),
+disparador `ubicaciones_operativa_en_uso`, y la vista
+`existencias_por_ubicacion` que define.
+
+**Qué pasa.** La `0015` impide desactivar una ubicación que sea la
+**ubicación operativa** de algún usuario. No impide desactivar una que
+tenga **existencia guardada**, porque son dos condiciones distintas y solo
+la primera se decidió.
+
+Entonces, hoy:
+
+1. el Camión 02 tiene 12 cargadores en `inventario_ubicacion`;
+2. nadie lo tiene como ubicación operativa;
+3. un administrador lo desactiva, y el sistema lo permite;
+4. la vista `existencias_por_ubicacion` filtra por `u.activa`, así que esas
+   12 unidades **dejan de aparecer**;
+5. pero siguen almacenadas: la celda está intacta y `usuario_ve_ubicacion()`
+   la deja consultar, porque a propósito no filtra por `activa`.
+
+El resultado es un inventario que, visto desde la pantalla, perdió doce
+unidades sin que ningún movimiento lo explique. Visto desde la tabla, no
+perdió nada.
+
+**Por qué la vista filtra por `activa` de todas formas.** Porque sirve a la
+operación del día, y una ubicación retirada no es un destino con el que se
+opere. El error no está en ese filtro: está en que se pueda llegar a un
+estado donde haya mercadería en un sitio que ya no se muestra.
+
+**Qué no se sabe todavía.** Cuál es la solución correcta, y por eso no se
+improvisa:
+
+- **impedir la desactivación** mientras quede existencia, como se hizo con
+  la ubicación operativa — es lo más simple, pero obliga a vaciar el camión
+  antes de retirarlo, y vaciarlo necesita traslados, que son de INV-4;
+- **permitirla y mostrarla aparte**, con un aviso de que hay existencia
+  varada en ubicaciones retiradas — no bloquea a nadie, pero añade un
+  estado más que alguien tiene que mirar;
+- **exigir destino al desactivar**, moviendo la existencia en el mismo acto
+  — es lo correcto de cara al negocio y lo más caro: es un traslado con
+  otro nombre.
+
+Las tres dependen de decisiones que aún no están tomadas. La elección se
+hace durante **INV-2.2**, antes de cerrar esa fase, cuando exista la
+pantalla que mostraría el problema y se pueda ver cómo se comporta.
+
+**Cómo se descubrió.** Escribiendo las pruebas de la `0015`. La prueba 12
+comprueba que una ubicación inactiva no aparece en la vista, y la 13 que su
+existencia sigue siendo consultable. Las dos pasan, y son correctas por
+separado; poniéndolas una al lado de la otra se ve que describen un hueco.
+
+**Por qué no se arregló en INV-2.1.** Se reportó al cerrar la fase y la
+decisión del propietario fue dejarlo registrado con destino, sin asumir
+todavía cuál será la solución. Arreglar hoy la vía fácil —bloquear la
+desactivación— podría ser arreglar la equivocada.
+
+---
+
 ## Promesas sin gestionar su rechazo (`S9383`) — destino: **E.3**
 
 **Cuatro hallazgos**, todos de la misma regla: *«Promises must be awaited,

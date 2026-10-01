@@ -147,6 +147,174 @@ Mientras las dos existan, la comprobación de que no se han separado es que
 cuanto el motor nuevo escriba solo en las celdas, y ahí es donde el libro
 pasa a ser lo que se quería que fuera: el relato, no la fuente.
 
+## Quién ve qué: tres ejes que es fácil confundir
+
+La sección anterior deja la existencia guardada por producto y ubicación.
+Falta la otra mitad: quién puede mirarla. Y ahí hay tres preguntas
+distintas que, juntas en una sola, producen los permisos que no se
+entienden:
+
+| | Pregunta | Dónde vive |
+|---|---|---|
+| **Ubicación operativa** | ¿desde dónde trabajo? | `usuarios.ubicacion_id` |
+| **Visibilidad** | ¿qué puedo consultar? | `permisos_usuario` |
+| **Operación** | ¿desde dónde puedo mover existencia? | todavía no existe (INV-3) |
+
+La frase que resume la fase: **ver el inventario del Camión 02 no es poder
+vender desde el Camión 02.** La primera es una consulta; la segunda, una
+operación que descuenta unidades. Que hoy el sistema no pueda hacer la
+segunda es lo que hace seguro abrir la primera.
+
+### La ubicación operativa es una columna, no una tabla
+
+Un valor por usuario, igual que `rol`. Una tabla de relación serviría para
+«desde cuáles puede operar», que es la tercera pregunta y de otra fase.
+
+Es **nullable** por dos razones concretas y no por comodidad: el dueño
+puede legítimamente no operar desde un sitio fijo, y el único usuario que
+existía cuando se escribió esto no tenía ninguna. Un `not null` habría
+obligado a inventarle una.
+
+La llave lleva la empresa dentro —`(ubicacion_id, empresa_id)`— como la
+`0012` para clientes y la `0014` para el inventario, y por la misma razón:
+sin el par, un administrador podría asignarle a su vendedor el camión de
+otra empresa, y RLS no lo impediría porque quien escribe puede ser una
+función `SECURITY DEFINER`.
+
+### Que esté activa lo guardan dos disparadores, no una restricción
+
+Un `check` no puede mirar otra tabla, así que esto no se puede declarar.
+Y hacen falta **dos** disparadores porque son dos agujeros distintos:
+
+1. asignar a alguien una ubicación que ya está inactiva
+2. desactivar una ubicación que alguien ya tiene asignada
+
+El segundo es el que de verdad muerde. Sin él, desactivar el Camión 01
+deja a su vendedor con permiso de «ver mi ubicación» sobre una ubicación
+que la vista no muestra: **deja de ver su propio inventario y nada le dice
+por qué.** El fallo no se parece a su causa, y ésos son los que cuestan
+una tarde.
+
+El primero solo valida cuando la ubicación cambia. Si validara siempre,
+corregir el nombre de un usuario fallaría por una ubicación que se
+desactivó después de asignársela: arreglar un dato quedaría bloqueado por
+otro que nadie está tocando.
+
+### Dos permisos, porque son dos preguntas
+
+```
+inventory-own   ver el inventario de mi ubicación
+inventory-all   ver el inventario de todas las ubicaciones de mi empresa
+```
+
+Reutilizan `permisos_usuario`, que ya existía, en vez de estrenar un
+sistema aparte. Son dos y no uno porque «ver lo mío» lo necesita
+cualquiera que venda, y «ver todo» es una concesión distinta: con un solo
+permiso habría que elegir entre no ver nada o verlo todo.
+
+No se guarda una lista de ubicaciones visibles por usuario. Con cuatro
+ubicaciones, «las otras tres» y «algunas de las otras tres» casi siempre
+coinciden, y una tabla de relación añade su RLS, su UI y su mantenimiento
+para una distinción que nadie ha pedido. Si llega a hacer falta, se añade
+dentro de `usuario_ve_ubicacion()` sin cambiar la forma de la política;
+quitar una tabla ya poblada no sería igual de fácil.
+
+**El administrador los tiene todos** sin que nadie se los reparta:
+`usuario_tiene_permiso()` devuelve verdadero para él, igual que ya hacía
+`hasPermission()` en el frontend. Su ubicación operativa **no** limita lo
+que consulta: son dos columnas distintas en dos tablas distintas.
+
+### El motor también sabe de permisos ahora
+
+`usuario_tiene_permiso()` es la primera vez que la base consulta
+`permisos_usuario` para decidir acceso a datos. Hasta esta migración el
+reparto por secciones vivía **solo en el frontend**, así que saltárselo
+daba acceso a todo lo de la empresa. Que el motor diga lo mismo es lo que
+hace que saltarse el frontend no sirva de nada.
+
+Que las dos reglas coincidan es ahora una obligación de mantenimiento: si
+alguien cambia una, tiene que cambiar la otra.
+
+### `usuario_ve_ubicacion()` no filtra por activa, a propósito
+
+Una ubicación desactivada que todavía tenga existencia **tiene que poder
+consultarse**. Si la función la ocultara, desactivar una ubicación haría
+desaparecer de la vista unidades que nadie movió, y el inventario dejaría
+de cuadrar sin que ningún movimiento lo explicara.
+
+El filtro de `activa` vive en la vista, que es la que sirve a la operación
+del día. La función contesta «¿puedes verla?»; la vista decide «¿se opera
+con ella hoy?». Son dos preguntas y por eso están en dos sitios.
+
+### La política se estrechó
+
+Antes: cualquiera de la empresa veía las celdas de todas las ubicaciones.
+Ahora: solo las de las ubicaciones que puede consultar.
+
+Es un cambio de comportamiento y conviene que esté escrito: un usuario sin
+ninguno de los dos permisos pasa de ver todo el inventario a no ver
+ninguna celda. Cuando se aplicó no afectaba a nadie —el único usuario era
+administrador— pero afecta al primer vendedor que se cree, y es
+exactamente lo que se quería.
+
+Sigue siendo `for select`. Los `revoke` de `insert`, `update` y `delete` de
+la `0014` no se tocaron: ninguno de los dos permisos nuevos concede
+escritura, porque no hay ninguna escritura que conceder desde el
+navegador.
+
+### Por qué hay una vista, y no una consulta
+
+Esto es lo más delicado del diseño.
+
+La `0014` representa el cero por **ausencia de celda**. Si la consulta se
+limitara a filtrar `inventario_ubicacion`, dos situaciones completamente
+distintas se verían iguales, porque en las dos no hay fila:
+
+| | Qué es | Qué debe mostrar |
+|---|---|---|
+| **A** | ubicación que puedo ver, sin ese producto | `0` |
+| **B** | ubicación que no puedo ver | **nada** |
+
+Confundir B con A no es un detalle de presentación: mostraría
+«Camión 02: 0» a quien no tiene permiso de saberlo, y encima sería mentira
+cuando el camión lleva doce.
+
+`existencias_por_ubicacion` parte de las **ubicaciones** y no de las
+celdas, y filtra la visibilidad **antes** de unirlas:
+
+```sql
+  from ubicaciones u
+  join productos p on p.empresa_id = u.empresa_id
+  left join inventario_ubicacion i
+    on i.ubicacion_id = u.id and i.producto_id = p.id
+ where u.activa and p.activo and usuario_ve_ubicacion(u.id);
+```
+
+El `left join` produce el `0` del caso A; el caso B no llega a la unión
+porque su ubicación ya quedó fuera.
+
+**El filtro sobre `ubicaciones` es imprescindible y no basta con RLS.** Con
+`security_invoker = on`, una celda que la política oculta hace que el
+`left join` devuelva `null`, y el `coalesce` lo convierte en `0`: apoyarse
+solo en RLS produce justamente el error B → A. Se comprobó quitando el
+filtro: la vista pasó a mostrar `Bodega=0`, `Camión 02=0` y `Store=0` a un
+vendedor que solo debía ver su camión, cuando en la bodega había quince
+unidades y en el otro camión doce. Además de mentir, delataba que esas
+ubicaciones existen.
+
+### Lo que la vista no dice
+
+No expone costo, ni margen, ni utilidad, ni precio. Saber cuántas unidades
+lleva un camión no es saber cuánto costaron.
+
+Conviene ser exacto sobre el alcance de eso: **el costo sigue sin
+protección propia en el resto del esquema.** `productos_con_stock` incluye
+`p.costo`, la vista es `security_invoker` y la política de `productos` es
+`ALL` para toda la empresa sin filtro de administrador, así que hoy
+cualquier usuario autenticado puede leerlo. Esta vista no empeora ese
+problema, pero tampoco lo resuelve: es un asunto aparte, con su propia
+fase.
+
 ## La otra cara: lo que sí se duplica
 
 Un documento emitido guarda copia de datos que ya viven en otra tabla, y eso

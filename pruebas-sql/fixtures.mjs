@@ -132,3 +132,44 @@ export async function contar(conexion, tabla, donde = "true", valores = []) {
 
   return r.rows[0].n
 }
+
+/*
+  Un vendedor de una empresa que ya existe, con los permisos que pida el
+  caso y, si se le da, una ubicación operativa.
+
+  crearEmpresa() solo sabe hacer administradores, y un administrador tiene
+  todos los permisos por definición: con él no se puede comprobar que
+  `inventory-own` limite nada. La visibilidad por ubicación solo se puede
+  probar con alguien que NO sea administrador.
+*/
+export async function crearVendedor(
+  conexion,
+  { empresa, ubicacion = null, permisos = [], activo = true } = {}
+) {
+  const n = siguiente()
+
+  const authId = (
+    await conexion.query(
+      "insert into auth.users (email) values ($1) returning id",
+      [`vendedor${n}@prueba.local`]
+    )
+  ).rows[0].id
+
+  const usuario = (
+    await conexion.query(
+      `insert into usuarios (empresa_id, auth_id, email, nombre, rol, activo, ubicacion_id)
+       values ($1, $2, $3, $4, 'vendedor', $5, $6) returning id`,
+      [empresa, authId, `vendedor${n}@prueba.local`, `Vendedor ${n}`, activo, ubicacion]
+    )
+  ).rows[0].id
+
+  for (const seccion of permisos) {
+    await conexion.query(
+      `insert into permisos_usuario (usuario_id, empresa_id, seccion)
+       values ($1, $2, $3)`,
+      [usuario, empresa, seccion]
+    )
+  }
+
+  return { usuario, authId }
+}
