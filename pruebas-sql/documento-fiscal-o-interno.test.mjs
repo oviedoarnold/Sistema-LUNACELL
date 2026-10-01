@@ -17,8 +17,35 @@
 
 import { describe, it, expect, beforeAll, afterAll } from "vitest"
 
+import { readFile } from "node:fs/promises"
+import path from "node:path"
+import { fileURLToPath } from "node:url"
+
 import { levantarBase, comoUsuario, comoDueno } from "./arnes.mjs"
 import { crearEmpresa, contar } from "./fixtures.mjs"
+
+const AQUI = path.dirname(fileURLToPath(import.meta.url))
+
+/*
+  La sentencia de arranque del contador interno, leída de la migración.
+
+  Se extrae del archivo en vez de copiarla aquí porque una copia solo
+  demuestra que la copia funciona: si mañana alguien tocara la migración,
+  la prueba seguiría verde sobre un texto que ya no se despliega.
+*/
+async function sentenciaDeArranque() {
+  const sql = await readFile(
+    path.join(AQUI, "..", "supabase", "migrations", "0017_documento_fiscal_o_interno.sql"),
+    "utf8"
+  )
+
+  const trozo = sql.split("-- «arranque-contador-interno» inicio")[1]
+  const cuerpo = trozo?.split("-- «arranque-contador-interno» fin")[0]?.trim()
+
+  if (!cuerpo) throw new Error("no se encontró la sentencia marcada en la migración")
+
+  return cuerpo
+}
 
 let base
 let db
@@ -625,5 +652,111 @@ describe("compatibilidad con lo que ya existía", () => {
       expect(u.vende).toBe(true)
       expect(u.emite_fiscal).toBe(false)
     }
+  })
+})
+
+// ── EL ARRANQUE DEL CONTADOR INTERNO ──────────────────────
+
+/*
+  La sentencia que coloca el contador interno detrás de las ventas que ya
+  existían. En las demás pruebas nunca se dispara, porque sus empresas
+  nacen después de las migraciones y no tienen ventas viejas: aquí se
+  ejecuta a mano, con el estado que tendría una base de verdad.
+
+  Importa porque toca `empresas`, que es multiempresa: lo que se comprueba
+  no es solo que la empresa con ventas avance, sino que las demás filas
+  queden intactas.
+*/
+describe("arranque del contador interno", () => {
+  const ventaVieja = (empresa, correlativo) =>
+    db.query(
+      `insert into ventas (
+         empresa_id, numero_factura, correlativo, nombre_cliente,
+         subtotal, isv, tasa_isv, total, forma_pago, estado
+       ) values ($1, $2, $3, 'Consumidor Final', 100, 15, 15, 115, 'contado', 'pagada')`,
+      [empresa, `FAC-${String(correlativo).padStart(5, "0")}`, correlativo]
+    )
+
+  const atras = (empresa) =>
+    db.query("update empresas set proximo_correlativo_interno = 1 where id = $1", [
+      empresa,
+    ])
+
+  const interno = async (empresa) =>
+    Number((await contadores(empresa)).interno)
+
+  it("30. arranca detrás de la última venta que ya existía", async () => {
+    const { empresa } = await crearEmpresa(db)
+    await ventaVieja(empresa, 8)
+    await atras(empresa)
+
+    await db.query(await sentenciaDeArranque())
+
+    expect(await interno(empresa)).toBe(9)
+  })
+
+  it("31. no toca la empresa que no tiene ventas", async () => {
+    const { empresa } = await crearEmpresa(db)
+
+    const antes = await db.query("select xmin from empresas where id = $1", [empresa])
+
+    await db.query(await sentenciaDeArranque())
+
+    const despues = await db.query("select xmin, proximo_correlativo_interno as i from empresas where id = $1", [empresa])
+
+    expect(Number(despues.rows[0].i)).toBe(1)
+    expect(despues.rows[0].xmin).toBe(antes.rows[0].xmin)
+  })
+
+  /*
+    Que no vaya hacia atrás. El `greatest` desapareció al añadir el
+    `where`, así que esto comprueba que la condición hace su trabajo.
+  */
+  it("32. no retrocede un contador que ya iba por delante", async () => {
+    const { empresa } = await crearEmpresa(db)
+    await ventaVieja(empresa, 3)
+    await db.query(
+      "update empresas set proximo_correlativo_interno = 50 where id = $1",
+      [empresa]
+    )
+
+    await db.query(await sentenciaDeArranque())
+
+    expect(await interno(empresa)).toBe(50)
+  })
+
+  /*
+    La razón de ser del `where`. Dos empresas, una que debe moverse y otra
+    que no: la segunda no puede quedar reescrita de rebote.
+  */
+  it("33. cada empresa arranca con sus propias ventas", async () => {
+    const a = await crearEmpresa(db)
+    const b = await crearEmpresa(db)
+
+    await ventaVieja(a.empresa, 12)
+    await atras(a.empresa)
+    await atras(b.empresa)
+
+    await db.query(await sentenciaDeArranque())
+
+    expect(await interno(a.empresa)).toBe(13)
+    expect(await interno(b.empresa)).toBe(1)
+  })
+
+  /*
+    Después del arranque, la numeración sigue por donde quedó: ni repite
+    un número viejo ni salta.
+  */
+  it("34. el primer documento interno nuevo continúa la serie", async () => {
+    const e = await escenario()
+    await ventaVieja(e.empresa, 8)
+    await atras(e.empresa)
+    await db.query(await sentenciaDeArranque())
+    await operarDesde(e.usuario, e.camion1)
+
+    const r = await vender(e.authId, e.producto)
+
+    expect(r.numero_factura).toBe("VTA-000009")
+    expect(r.es_fiscal).toBe(false)
   })
 })

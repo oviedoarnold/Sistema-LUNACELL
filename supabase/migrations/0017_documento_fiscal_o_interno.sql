@@ -111,15 +111,30 @@ alter table empresas
   hizo la 0005 con el correlativo fiscal.
 
   No renumera nada: las ventas viejas se quedan como están.
+
+  El `where` no es decorativo y no es solo para contentar a un analizador:
+  `empresas` es multiempresa, y sin él esta sentencia reescribiría la fila
+  de cada empresa del sistema, incluidas las que no tienen ventas y las que
+  ya están donde deben. Esas escrituras no cambiarían ningún valor, pero sí
+  toman el candado de la fila y gastan WAL. Así solo se toca la fila que de
+  verdad se mueve, y el `greatest` sobra porque la condición ya garantiza
+  que el contador nunca va hacia atrás.
+
+  La marca de abajo la lee la prueba «arranque del contador interno», que
+  extrae esta sentencia del archivo y la ejecuta: así comprueba el SQL que
+  se despliega y no una copia suya.
 */
+-- «arranque-contador-interno» inicio
 update empresas e
-   set proximo_correlativo_interno = greatest(
-         e.proximo_correlativo_interno,
-         coalesce(
-           (select max(v.correlativo) + 1 from ventas v where v.empresa_id = e.id),
-           1
-         )
-       );
+   set proximo_correlativo_interno = ultima.siguiente
+  from (
+         select v.empresa_id, max(v.correlativo) + 1 as siguiente
+           from ventas v
+          group by v.empresa_id
+       ) as ultima
+ where ultima.empresa_id = e.id
+   and ultima.siguiente > e.proximo_correlativo_interno;
+-- «arranque-contador-interno» fin
 
 /*
   El reparto de correlativos aprende el tercer tipo.
