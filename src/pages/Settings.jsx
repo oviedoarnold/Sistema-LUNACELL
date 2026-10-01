@@ -5,6 +5,7 @@ import {
 
 import Swal from "sweetalert2"
 
+import { LocationsContext } from "../context/contexts"
 import { ProductContext } from "../context/contexts"
 import { SalesContext } from "../context/contexts"
 import { useAuth } from "../hooks/useAuth"
@@ -13,6 +14,11 @@ import { FaPlus } from "react-icons/fa"
 
 import PageHeader from "../components/crud/PageHeader"
 import ModalShell from "../components/forms/ModalShell"
+
+import {
+  ADMIN_PERMISSIONS,
+  PERMISSIONS,
+} from "../context/permissions"
 
 import {
   FISCAL_VACIO,
@@ -26,7 +32,73 @@ const EMPTY_USER_FORM = {
   password: "",
   role: "vendedor",
   active: true,
+  locationId: "",
   permissions: [],
+}
+
+/*
+  Qué inventario puede consultar un usuario, en las palabras que usa quien
+  reparte los permisos.
+
+  Son tres niveles excluyentes y no dos casillas sueltas porque es una sola
+  pregunta —«¿cuánto inventario ve?»— y porque dos casillas obligarían a
+  explicar qué significa marcar «todas» sin marcar «la suya». Debajo siguen
+  siendo los permisos que la base ya conoce.
+*/
+const NIVEL_INVENTARIO = {
+  NINGUNO: "ninguno",
+  PROPIA: "propia",
+  TODAS: "todas",
+}
+
+const OPCIONES_DE_INVENTARIO = [
+  {
+    id: NIVEL_INVENTARIO.NINGUNO,
+    label: "No puede consultar existencias",
+  },
+  {
+    id: NIVEL_INVENTARIO.PROPIA,
+    label: "Solo el inventario de su ubicación",
+  },
+  {
+    id: NIVEL_INVENTARIO.TODAS,
+    label: "El inventario de todas las ubicaciones",
+  },
+]
+
+/* De los permisos guardados al nivel que muestra el selector. */
+function nivelDeInventario(permisos = []) {
+  if (permisos.includes(PERMISSIONS.INVENTORY_ALL)) {
+    return NIVEL_INVENTARIO.TODAS
+  }
+
+  if (permisos.includes(PERMISSIONS.INVENTORY_OWN)) {
+    return NIVEL_INVENTARIO.PROPIA
+  }
+
+  return NIVEL_INVENTARIO.NINGUNO
+}
+
+/*
+  Y al revés. «Todas» no guarda también «la suya»: la implicación la deriva
+  concedePermiso(), igual que la deriva la base. Guardarla aquí sería
+  dejar escrito dos veces algo que puede separarse.
+*/
+function permisosDelNivel(permisos = [], nivel) {
+  const resto = permisos.filter(
+    (p) =>
+      p !== PERMISSIONS.INVENTORY_OWN && p !== PERMISSIONS.INVENTORY_ALL
+  )
+
+  if (nivel === NIVEL_INVENTARIO.TODAS) {
+    return [...resto, PERMISSIONS.INVENTORY_ALL]
+  }
+
+  if (nivel === NIVEL_INVENTARIO.PROPIA) {
+    return [...resto, PERMISSIONS.INVENTORY_OWN]
+  }
+
+  return resto
 }
 
 function buildCompanyForm(company) {
@@ -61,6 +133,12 @@ function Settings() {
   const {
     counters,
   } = useContext(SalesContext)
+
+  /*
+    Solo las activas: una ubicación retirada no es un sitio desde el que
+    nadie trabaje, y la base rechaza asignarla.
+  */
+  const { ubicacionesActivas = [] } = useContext(LocationsContext)
 
   const [
     companyForm,
@@ -334,12 +412,14 @@ function Settings() {
         selectedUser.active !==
         false,
 
+      locationId:
+        selectedUser.locationId ||
+        "",
+
       permissions:
         selectedUser.role ===
         "admin"
-          ? permissionOptions.map(
-              (item) => item.id
-            )
+          ? ADMIN_PERMISSIONS
           : Array.isArray(
                 selectedUser.permissions
               )
@@ -402,9 +482,7 @@ function Settings() {
          */
         permissions:
           role === "admin"
-            ? permissionOptions.map(
-                (item) => item.id
-              )
+            ? ADMIN_PERMISSIONS
             : current.role ===
                 "admin"
               ? [
@@ -413,6 +491,19 @@ function Settings() {
               : current.permissions,
       })
     )
+  }
+
+  /*
+    El nivel de inventario reemplaza los dos permisos a la vez, no los
+    acumula: son excluyentes de cara a quien los reparte.
+  */
+  const handleInventoryLevelChange = (event) => {
+    const nivel = event.target.value
+
+    setUserForm((current) => ({
+      ...current,
+      permissions: permisosDelNivel(current.permissions, nivel),
+    }))
   }
 
   const togglePermission = (
@@ -470,13 +561,13 @@ function Settings() {
           active:
             userForm.active,
 
+          locationId:
+            userForm.locationId,
+
           permissions:
             userForm.role ===
             "admin"
-              ? permissionOptions.map(
-                  (item) =>
-                    item.id
-                )
+              ? ADMIN_PERMISSIONS
               : userForm.permissions,
         }
 
@@ -520,13 +611,13 @@ function Settings() {
           active:
             userForm.active,
 
+          locationId:
+            userForm.locationId,
+
           permissions:
             userForm.role ===
             "admin"
-              ? permissionOptions.map(
-                  (item) =>
-                    item.id
-                )
+              ? ADMIN_PERMISSIONS
               : userForm.permissions,
         })
 
@@ -1459,6 +1550,97 @@ function Settings() {
                       </div>
                     </>
                   )}
+
+                </div>
+
+                <hr className="divider" />
+
+                {/* INVENTARIO Y UBICACIÓN OPERATIVA */}
+                <div>
+
+                  <h4 className="config-subtitulo">
+                    Inventario y ubicación
+                  </h4>
+
+                  <div className="form-grid">
+
+                    {/*
+                      Desde dónde trabaja, que no es lo mismo que qué puede
+                      consultar: un administrador puede estar en un camión y
+                      seguir viendo la bodega entera.
+                    */}
+                    <div className="field">
+                      <label htmlFor="settings-ubicacion">
+                        Ubicación operativa
+                      </label>
+
+                      <select
+                        id="settings-ubicacion"
+                        name="locationId"
+                        value={userForm.locationId}
+                        onChange={handleUserChange}
+                        aria-describedby="settings-ubicacion-ayuda"
+                      >
+                        <option value="">Sin asignar</option>
+
+                        {ubicacionesActivas.map((ubicacion) => (
+                          <option
+                            key={ubicacion.id}
+                            value={ubicacion.id}
+                          >
+                            {ubicacion.name}
+                          </option>
+                        ))}
+                      </select>
+
+                      <p
+                        className="config-descripcion"
+                        id="settings-ubicacion-ayuda"
+                      >
+                        Desde dónde trabaja esta persona. Solo aparecen las
+                        ubicaciones activas.
+                      </p>
+                    </div>
+
+                    {/*
+                      Y cuánto inventario alcanza a ver. Tres niveles
+                      excluyentes en vez de dos casillas: es una sola
+                      pregunta.
+                    */}
+                    <div className="field">
+                      <label htmlFor="settings-inventario">
+                        Inventario que puede consultar
+                      </label>
+
+                      <select
+                        id="settings-inventario"
+                        value={
+                          userForm.role === "admin"
+                            ? NIVEL_INVENTARIO.TODAS
+                            : nivelDeInventario(userForm.permissions)
+                        }
+                        onChange={handleInventoryLevelChange}
+                        disabled={userForm.role === "admin"}
+                        aria-describedby="settings-inventario-ayuda"
+                      >
+                        {OPCIONES_DE_INVENTARIO.map((opcion) => (
+                          <option key={opcion.id} value={opcion.id}>
+                            {opcion.label}
+                          </option>
+                        ))}
+                      </select>
+
+                      <p
+                        className="config-descripcion"
+                        id="settings-inventario-ayuda"
+                      >
+                        {userForm.role === "admin"
+                          ? "Los administradores consultan el inventario de todas las ubicaciones."
+                          : "«Solo su ubicación» muestra únicamente lo que hay donde trabaja."}
+                      </p>
+                    </div>
+
+                  </div>
 
                 </div>
 
