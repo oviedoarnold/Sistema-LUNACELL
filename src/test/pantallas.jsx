@@ -140,6 +140,21 @@ const aFilaDeUbicacion = (ubicacion) => ({
   creada_en: "2026-01-01",
 })
 
+/*
+  Una celda de existencia: un producto en una ubicación con su cantidad.
+
+  Se siembran las celdas que existen y nada más. El cero NO se siembra,
+  igual que en la base: la vista lo produce por ausencia de celda, y una
+  prueba que escribiera filas en cero estaría comprobando otra cosa.
+*/
+const aFilaDeExistencia = (celda) => ({
+  empresa_id: EMPRESA,
+  ubicacion_id: celda.locationId,
+  producto_id: celda.productId,
+  cantidad: Number(celda.quantity) || 0,
+  actualizado_en: "2026-01-01",
+})
+
 const aFilaDeVenta = (venta) => ({
   id: venta.id,
   empresa_id: EMPRESA,
@@ -238,10 +253,12 @@ export function montarDatos({
   clientes = [],
   proveedores = [],
   ubicaciones = [],
+  existencias = [],
   ventas = [],
   cotizaciones = [],
   empresa = EMPRESA_PRUEBA,
   conSesion = true,
+  fallarEn = {},
 } = {}) {
   const falso = crearSupabaseFalso({
     tablas: {
@@ -255,6 +272,7 @@ export function montarDatos({
       clientes: clientes.map(aFilaDeCliente),
       proveedores: proveedores.map(aFilaDeProveedor),
       ubicaciones: ubicaciones.map(aFilaDeUbicacion),
+      inventario_ubicacion: existencias.map(aFilaDeExistencia),
       ventas: ventas.map(aFilaDeVenta),
       detalle_venta: aplanar(ventas.map(renglonesDe)),
       abonos: aplanar(ventas.map(abonosDe)),
@@ -262,6 +280,7 @@ export function montarDatos({
       detalle_cotizacion: aplanar(cotizaciones.map(renglonesDeCotizacion)),
     },
     sesionInicial: conSesion ? { user: { id: AUTH_ID } } : null,
+    fallarEn,
   })
 
   globalThis.__supabaseFalso = falso

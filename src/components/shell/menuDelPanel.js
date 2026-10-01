@@ -1,5 +1,6 @@
 import {
   FaBox,
+  FaBoxes,
   FaCashRegister,
   FaCog,
   FaFileAlt,
@@ -68,6 +69,19 @@ export const GRUPOS_DEL_MENU = [
         to: "/products",
         label: "Inventario",
         Icono: FaBox,
+        permiso: PERMISSIONS.PRODUCTS,
+      },
+      /*
+        Existencias comparte el permiso de Inventario y no estrena uno
+        propio: quien administra el catálogo ya ve el stock de cada
+        producto, así que separarlos no protegería nada. Cuánto hay en
+        cada ubicación lo sigue decidiendo la base, con inventory-own e
+        inventory-all, que es otro eje: éste solo abre la pantalla.
+      */
+      {
+        to: "/inventory",
+        label: "Existencias",
+        Icono: FaBoxes,
         permiso: PERMISSIONS.PRODUCTS,
       },
       {

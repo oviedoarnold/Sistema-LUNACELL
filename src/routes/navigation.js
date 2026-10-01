@@ -27,6 +27,10 @@ export const NAV_ROUTES = [
     permission: PERMISSIONS.PRODUCTS,
   },
   {
+    path: "/inventory",
+    permission: PERMISSIONS.PRODUCTS,
+  },
+  {
     path: "/clients",
     permission: PERMISSIONS.CLIENTS,
   },

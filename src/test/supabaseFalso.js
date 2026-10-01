@@ -99,6 +99,47 @@ const VISTAS = {
       stock_minimo: p.stock_minimo,
       stock: p.stock,
     })),
+
+  /*
+    La existencia por ubicación, igual que en la base: parte de las
+    UBICACIONES activas y no de las celdas, así que una ubicación sin celda
+    para un producto sale con 0.
+
+    Lo que este doble NO reproduce es la visibilidad: en PostgreSQL la vista
+    filtra por usuario_ve_ubicacion(), y eso se prueba contra el motor real
+    en pruebas-sql, donde se puede autenticar a alguien. Aquí las filas que
+    se siembran SON las que el usuario vería, que es precisamente lo que la
+    pantalla tiene que respetar sin añadir ni quitar.
+  */
+  existencias_por_ubicacion: (datos) => {
+    const filas = []
+
+    for (const u of datos.ubicaciones || []) {
+      if (u.activa === false) continue
+
+      for (const p of datos.productos || []) {
+        if (p.activo === false) continue
+        if (p.empresa_id !== u.empresa_id) continue
+
+        const celda = (datos.inventario_ubicacion || []).find(
+          (c) => c.ubicacion_id === u.id && c.producto_id === p.id
+        )
+
+        filas.push({
+          empresa_id: u.empresa_id,
+          ubicacion_id: u.id,
+          ubicacion: u.nombre,
+          ubicacion_tipo: u.tipo,
+          producto_id: p.id,
+          codigo: p.codigo,
+          producto: p.nombre,
+          cantidad: celda ? Number(celda.cantidad) : 0,
+        })
+      }
+    }
+
+    return filas
+  },
 }
 
 /*

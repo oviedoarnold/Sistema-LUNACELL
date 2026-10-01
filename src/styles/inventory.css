@@ -1,0 +1,204 @@
+/*
+  La consulta de existencias por ubicación.
+
+  Acotado bajo `.inventory` por lo mismo que el punto de venta bajo `.pos`
+  y cotizar bajo `.quotes`: esta pantalla reutiliza `.table-wrap`,
+  `.product-name`, `.toolbar` y `.num` de crud.css, y escribir esas clases
+  sueltas rediseñaría de paso Productos, Clientes y Proveedores.
+
+  Hereda la tabla de las pantallas administrativas porque es lo que es: una
+  lista de filas comparables. Lo que no hereda es la forma de una sola
+  tabla larga. Aquí cada producto es su propio bloque, porque la pregunta
+  no es «dame la lista» sino «dónde está esto»: una tabla de
+  producto × ubicación con cientos de productos obliga a leer la columna
+  del nombre repetida en cada línea para no perderse.
+
+  Los colores salen de los tokens. Aquí no se define ninguno.
+*/
+
+/* ── LISTA DE PRODUCTOS ───────────────────────────────────── */
+
+.inventory .inventory-lista {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.inventory .inventory-producto {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  overflow: hidden;
+}
+
+/* ── CABECERA DE CADA PRODUCTO ────────────────────────────── */
+
+.inventory .inventory-cabecera {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--border);
+  background: var(--surface-secondary);
+}
+
+.inventory .inventory-nombre {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+/*
+  El código va en monoespaciada y en el tono secundario: es el dato que se
+  compara carácter por carácter contra una caja, y una tipografía de ancho
+  fijo es lo que permite hacerlo sin contar letras.
+*/
+.inventory .inventory-codigo {
+  display: inline-block;
+  margin-top: 2px;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  letter-spacing: 0.3px;
+  color: var(--text-muted);
+}
+
+/*
+  El total, alineado a la derecha y con su explicación debajo. La cifra
+  manda; la frase dice de qué es, que en esta pantalla no es obvio: puede
+  ser el total de la empresa o solo el de lo que este usuario alcanza a
+  ver.
+*/
+.inventory .inventory-total {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  flex-shrink: 0;
+  line-height: 1.15;
+}
+
+.inventory .inventory-total strong {
+  font-size: 21px;
+  font-weight: 600;
+  color: var(--primary-text);
+}
+
+.inventory .inventory-total span {
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-muted);
+}
+
+/* ── LA TABLA DE UBICACIONES ──────────────────────────────── */
+
+/*
+  Sin borde ni redondeo propios: ya está dentro del bloque del producto, y
+  dos marcos concéntricos solo añaden ruido.
+*/
+.inventory .inventory-producto .table-wrap {
+  border: 0;
+  border-radius: 0;
+}
+
+/*
+  Y sin la anchura mínima que crud.css le pone a las tablas.
+
+  Esos 720 px están escritos para las ocho columnas de Productos, donde
+  sin ellos los importes se parten en dos líneas. Aquí hay tres columnas,
+  y en móvil dos: heredar el mínimo dejaba la tabla en 720 px dentro de un
+  contenedor de 356, así que la columna de la cantidad quedaba fuera de la
+  pantalla y había que arrastrar la tabla de lado para ver el número que
+  se vino a buscar. Se midió a 390 px.
+*/
+.inventory .inventory-producto table {
+  min-width: 0;
+}
+
+.inventory .inventory-producto tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+/*
+  La cantidad es el dato que se viene a buscar, así que se lee de un
+  vistazo: tamaño mayor y tono principal.
+*/
+.inventory .inventory-cantidad {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+/*
+  El cero no se pinta igual que una cantidad, y lleva la palabra además del
+  número. «0» y «10» se distinguen mal leídos de reojo en una columna, y
+  aquí la diferencia entre tener y no tener es la que decide si se promete
+  una venta. El color no es lo único que lo separa: va el texto.
+*/
+.inventory .inventory-cero {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+/* ── TABLET ───────────────────────────────────────────────── */
+
+@media (max-width: 834px) {
+  .inventory .inventory-cabecera {
+    padding: var(--space-3);
+  }
+
+  .inventory .inventory-total strong {
+    font-size: 19px;
+  }
+}
+
+/* ── MÓVIL ────────────────────────────────────────────────── */
+
+@media (max-width: 560px) {
+  /*
+    La cabecera se apila: el total debajo del nombre y alineado a la
+    izquierda. Con 390 px de ancho, mantenerlo a la derecha dejaba el
+    nombre de un producto largo partido en tres líneas contra una cifra de
+    dos dígitos.
+  */
+  .inventory .inventory-cabecera {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--space-2);
+  }
+
+  .inventory .inventory-total {
+    align-items: flex-start;
+  }
+
+  .inventory .inventory-total span {
+    font-size: 10px;
+  }
+
+  /*
+    La columna del tipo se va. Con tres columnas en 390 px, o se parte el
+    nombre de la ubicación o se corta la cantidad, y entre las tres cosas
+    el tipo es la que menos se necesita: «Camión 01» ya dice que es un
+    camión. El distintivo sigue existiendo en pantallas mayores y el dato
+    no se pierde, solo deja de competir por el ancho.
+  */
+  .inventory .inventory-producto thead th:nth-child(2),
+  .inventory .inventory-producto tbody td:nth-child(2) {
+    display: none;
+  }
+
+  .inventory .inventory-producto tbody td,
+  .inventory .inventory-producto thead th {
+    padding-left: var(--space-3);
+    padding-right: var(--space-3);
+  }
+
+  .inventory .inventory-cero {
+    font-size: 11px;
+  }
+}

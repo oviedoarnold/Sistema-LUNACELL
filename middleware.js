@@ -19,6 +19,7 @@ export const config = {
     "/dashboard",
     "/pos",
     "/products",
+    "/inventory",
     "/clients",
     "/suppliers",
     "/sales-history",
