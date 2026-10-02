@@ -74,6 +74,19 @@ describe("InvoiceTemplate · documento interno", () => {
     expect(screen.getAllByText("VTA-000001").length).toBeGreaterThan(0)
     expect(screen.getByText("Cargador")).toBeInTheDocument()
   })
+
+  /*
+    La cabecera no es el único sitio donde el documento se nombra. El
+    encabezado del bloque de datos decía «Detalle de factura» en todos los
+    casos, así que un documento interno seguía llamándose factura un par de
+    centímetros más abajo de donde dice que no lo es.
+  */
+  it("tampoco llama factura al bloque de detalle", () => {
+    interno()
+
+    expect(screen.getByText(/detalle del documento/i)).toBeInTheDocument()
+    expect(screen.queryByText(/detalle de factura/i)).not.toBeInTheDocument()
+  })
 })
 
 describe("InvoiceTemplate · factura fiscal", () => {
@@ -108,5 +121,11 @@ describe("InvoiceTemplate · factura fiscal", () => {
     fiscal()
 
     expect(screen.getByText(/rtn del emisor/i)).toBeInTheDocument()
+  })
+
+  it("sí llama factura a su bloque de detalle", () => {
+    fiscal()
+
+    expect(screen.getByText(/detalle de factura/i)).toBeInTheDocument()
   })
 })

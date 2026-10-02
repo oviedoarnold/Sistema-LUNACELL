@@ -16,6 +16,7 @@ import {
 import { ProductContext } from "../context/contexts"
 
 import InvoiceTemplate from "../components/InvoiceTemplate"
+import { nombreDelDocumento } from "../lib/nombreDelDocumento"
 import DocumentPreviewModal from "../components/documents/DocumentPreviewModal"
 
 import EmptyState from "../components/crud/EmptyState"
@@ -542,24 +543,32 @@ function SalesHistory() {
         </div>
       )}
 
-      {/* FACTURA */}
+      {/*
+        FACTURA O DOCUMENTO INTERNO
+
+        El título de la ventana, el del trabajo de impresión y el nombre del
+        PDF siguen la misma regla que la cabecera del documento: un archivo
+        llamado «Factura-VTA-000009.pdf» afirma por sí solo algo que no es
+        cierto, y el nombre del archivo sobrevive a la pantalla.
+      */}
       <DocumentPreviewModal
         open={
           !!selectedSale
         }
         title={
           selectedSale
-            ? `Factura ${selectedSale.invoiceNumber}`
-            : "Factura"
+            ? `${nombreDelDocumento(selectedSale)} ${selectedSale.invoiceNumber}`
+            : "Documento"
         }
-        fileName={`Factura-${
-          selectedSale?.invoiceNumber ||
-          "documento"
-        }.pdf`}
+        fileName={`${
+          selectedSale
+            ? nombreDelDocumento(selectedSale)
+            : "Documento"
+        }-${selectedSale?.invoiceNumber || "documento"}.pdf`}
         printTitle={
           selectedSale
-            ? `Factura ${selectedSale.invoiceNumber}`
-            : "Factura"
+            ? `${nombreDelDocumento(selectedSale)} ${selectedSale.invoiceNumber}`
+            : "Documento"
         }
         canExport
         onClose={() =>

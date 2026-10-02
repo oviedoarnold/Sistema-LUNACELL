@@ -117,7 +117,9 @@ function InvoiceTemplate({
       <div className="inv-meta">
         <div className="inv-meta-block">
           <div className="inv-meta-label">
-            Detalle de factura
+            {sale.fiscal
+              ? "Detalle de factura"
+              : "Detalle del documento"}
           </div>
 
           <div className="inv-meta-row">
