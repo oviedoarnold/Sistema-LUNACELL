@@ -7,6 +7,7 @@ import {
   traerProductos,
   crearProducto,
   actualizarProducto,
+  exigirUbicacion,
   desactivarProducto,
   subirImagenDeProducto,
   borrarImagenDeProducto,
@@ -28,7 +29,6 @@ function ProductProvider({ children }) {
   const [error, setError] = useState("")
 
   const empresaId = user?.empresa_id
-  const usuarioId = user?.id
 
   /*
     Se deriva en lugar de encenderse dentro del efecto: mientras la empresa
@@ -83,27 +83,40 @@ function ProductProvider({ children }) {
     id, y ese id lo asigna la base.
   */
   const agregarProducto = useCallback(
-    async (producto, imagen) => {
-      const id = await crearProducto(producto, empresaId, usuarioId)
+    async (producto, imagen, { ubicacionId } = {}) => {
+      const id = await crearProducto(producto, empresaId, { ubicacionId })
 
       if (imagen) {
         const url = await subirImagenDeProducto(imagen, id, empresaId)
 
+        // La existencia ya entró al crear: aquí solo se guarda la foto.
         await actualizarProducto(
           id,
           { ...producto, imageUrl: url },
-          { empresaId, usuarioId, stockAnterior: producto.stock }
+          { empresaId, stockAnterior: producto.stock }
         )
       }
 
       await refrescarProductos()
     },
-    [empresaId, usuarioId, refrescarProductos]
+    [empresaId, refrescarProductos]
   )
 
+  /*
+    La existencia solo se ajusta si la pantalla da la referencia: cuánto
+    hay en la ubicación elegida. Sin ella, editar es cambiar los datos del
+    producto y nada más. Antes se tomaba el total global como referencia, y
+    la diferencia acababa en una ubicación que no tenía ese total.
+  */
   const editarProducto = useCallback(
-    async (id, producto, imagen) => {
+    async (id, producto, imagen, { ubicacionId, existenciaAnterior } = {}) => {
       const anterior = products.find((p) => String(p.id) === String(id))
+      const stockAnterior = existenciaAnterior ?? producto.stock
+
+      // Antes de subir la foto: un rechazo después la dejaría huérfana.
+      if (Number(producto.stock) !== Number(stockAnterior)) {
+        exigirUbicacion(ubicacionId)
+      }
 
       const conImagen = imagen
         ? { ...producto, imageUrl: await subirImagenDeProducto(imagen, id, empresaId) }
@@ -111,8 +124,8 @@ function ProductProvider({ children }) {
 
       await actualizarProducto(id, conImagen, {
         empresaId,
-        usuarioId,
-        stockAnterior: anterior?.stock ?? 0,
+        stockAnterior,
+        ubicacionId,
       })
 
       /*
@@ -127,7 +140,7 @@ function ProductProvider({ children }) {
 
       await refrescarProductos()
     },
-    [products, empresaId, usuarioId, refrescarProductos]
+    [products, empresaId, refrescarProductos]
   )
 
   const quitarProducto = useCallback(

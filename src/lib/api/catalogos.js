@@ -88,11 +88,87 @@ export async function traerProductos() {
 }
 
 /*
+  Los códigos con los que registrar_movimiento_ubicacion() distingue sus
+  rechazos. Se traducen aquí para que la pantalla no tenga que leer
+  SQLSTATE, igual que hace cobros.js con los del pago.
+*/
+const MOTIVOS_DE_INVENTARIO = {
+  LI001: "ubicacion-inactiva",
+  LI002: "dato-invalido",
+  LI003: "existencia-insuficiente",
+  LI004: "producto-invalido",
+  42501: "sin-permiso",
+}
+
+export class ErrorDeInventario extends Error {
+  constructor(mensaje, motivo) {
+    super(mensaje)
+
+    this.name = "ErrorDeInventario"
+    this.motivo = motivo
+  }
+}
+
+/*
+  Toda entrada o ajuste de existencia pasa por aquí, y siempre en una
+  ubicación.
+
+  Antes se insertaba el movimiento directamente en movimientos_inventario,
+  sin ubicación: el stock global cambiaba y la existencia por ubicación
+  no. El RPC mueve las dos cosas en una sola transacción, y es el único
+  que puede: la escritura de inventario_ubicacion está cerrada para el
+  navegador desde la 0014.
+*/
+async function moverExistencia({ productoId, ubicacionId, tipo, cantidad, motivo }) {
+  const { error } = await supabase.rpc("registrar_movimiento_ubicacion", {
+    p_producto_id: productoId,
+    p_ubicacion_id: ubicacionId,
+    p_tipo: tipo,
+    p_cantidad: cantidad,
+    p_motivo: motivo,
+  })
+
+  if (error) {
+    const motivoDelRechazo = MOTIVOS_DE_INVENTARIO[error.code]
+
+    /*
+      Los rechazos de negocio llevan el mensaje del motor, que ya dice
+      cuánto hay y en qué ubicación. Envolverlo en un "no se pudo"
+      escondería justo el dato que hace falta para corregir el ajuste.
+    */
+    if (motivoDelRechazo) {
+      throw new ErrorDeInventario(error.message, motivoDelRechazo)
+    }
+
+    fallo(error, "registrar el movimiento de inventario")
+  }
+}
+
+/*
+  Se comprueba antes de escribir nada. Crear el producto o guardar su
+  nombre y fallar después por falta de ubicación dejaría la mitad de lo
+  que el usuario pidió. Se exporta para que quien sube antes una imagen
+  pueda comprobarlo también antes de subirla.
+*/
+export function exigirUbicacion(ubicacionId) {
+  if (!ubicacionId) {
+    throw new Error(
+      "Elige en qué ubicación se registra la existencia antes de guardar."
+    )
+  }
+}
+
+/*
   Las existencias iniciales entran como movimiento y no como columna: el
   stock es la suma del libro, para que siempre haya rastro de cómo llegó
-  a su valor actual.
+  a su valor actual. Y entran en una ubicación, que es la que las podrá
+  vender.
 */
-export async function crearProducto(producto, empresaId, usuarioId) {
+export async function crearProducto(producto, empresaId, { ubicacionId } = {}) {
+  const existenciaInicial = Number(producto.stock) || 0
+
+  if (existenciaInicial > 0) exigirUbicacion(ubicacionId)
+
   const { data, error } = await supabase
     .from("productos")
     .insert(aProductoDeBase(producto, empresaId))
@@ -107,13 +183,10 @@ export async function crearProducto(producto, empresaId, usuarioId) {
     fallo(error, "crear el producto")
   }
 
-  const existenciaInicial = Number(producto.stock) || 0
-
   if (existenciaInicial > 0) {
-    await registrarMovimiento({
-      empresaId,
+    await moverExistencia({
       productoId: data.id,
-      usuarioId,
+      ubicacionId,
       tipo: "entrada",
       cantidad: existenciaInicial,
       motivo: "Existencia inicial",
@@ -127,12 +200,20 @@ export async function crearProducto(producto, empresaId, usuarioId) {
   Editar un producto no reescribe su stock: si el usuario cambia la
   cantidad, se registra el ajuste por la diferencia. Sobrescribir el
   número borraría el rastro de por qué cambió.
+
+  `stockAnterior` es la existencia de la UBICACIÓN elegida, no el total
+  del producto: el ajuste corrige esa ubicación y no reparte nada entre
+  las demás.
 */
 export async function actualizarProducto(
   id,
   producto,
-  { empresaId, usuarioId, stockAnterior }
+  { empresaId, stockAnterior, ubicacionId }
 ) {
+  const diferencia = (Number(producto.stock) || 0) - (Number(stockAnterior) || 0)
+
+  if (diferencia !== 0) exigirUbicacion(ubicacionId)
+
   const { error } = await supabase
     .from("productos")
     .update(aProductoDeBase(producto, empresaId))
@@ -146,13 +227,10 @@ export async function actualizarProducto(
     fallo(error, "actualizar el producto")
   }
 
-  const diferencia = (Number(producto.stock) || 0) - (Number(stockAnterior) || 0)
-
   if (diferencia !== 0) {
-    await registrarMovimiento({
-      empresaId,
+    await moverExistencia({
       productoId: id,
-      usuarioId,
+      ubicacionId,
       tipo: "ajuste",
       cantidad: diferencia,
       motivo: "Ajuste manual desde inventario",
@@ -173,27 +251,12 @@ export async function desactivarProducto(id) {
   if (error) fallo(error, "eliminar el producto")
 }
 
-export async function registrarMovimiento({
-  empresaId,
-  productoId,
-  usuarioId,
-  ventaId = null,
-  tipo,
-  cantidad,
-  motivo = "",
-}) {
-  const { error } = await supabase.from("movimientos_inventario").insert({
-    empresa_id: empresaId,
-    producto_id: productoId,
-    usuario_id: usuarioId || null,
-    venta_id: ventaId,
-    tipo,
-    cantidad,
-    motivo,
-  })
-
-  if (error) fallo(error, "registrar el movimiento de inventario")
-}
+/*
+  Aquí había registrarMovimiento(), que insertaba en movimientos_inventario
+  sin ubicación. Se retira y no se deja por si acaso: sin consumidores
+  seguía siendo llamable, y llamarla es exactamente cómo el stock global y
+  la existencia por ubicación se separan en silencio.
+*/
 
 // ── CLIENTES ───────────────────────────────────────────────
 
