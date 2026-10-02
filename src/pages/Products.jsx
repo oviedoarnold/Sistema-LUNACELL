@@ -1,4 +1,4 @@
-import { useContext, useMemo, useState } from "react"
+import { useContext, useMemo, useRef, useState } from "react"
 import {
   FaBoxOpen,
   FaExclamationTriangle,
@@ -8,7 +8,9 @@ import {
   FaTrash,
 } from "react-icons/fa"
 import Swal from "sweetalert2"
-import { ProductContext } from "../context/contexts"
+import { LocationsContext, ProductContext } from "../context/contexts"
+import { useAuth } from "../hooks/useAuth"
+import { useExistencias } from "../hooks/useExistencias"
 import {
   MiniaturaDeProducto,
   SelectorDeImagen,
@@ -38,6 +40,30 @@ function Products() {
   const [modalOpen, setModalOpen] = useState(false)
   const [guardando, setGuardando] = useState(false)
 
+  /*
+    El estado se pinta en el siguiente render; dos clics dentro del mismo
+    turno verían los dos `guardando` en falso. La referencia se apaga y se
+    enciende en el acto, y es la que impide registrar la misma entrada dos
+    veces.
+  */
+  const enviando = useRef(false)
+
+  const { user } = useAuth()
+  const { ubicacionesActivas = [] } = useContext(LocationsContext)
+
+  /*
+    La existencia se carga y se corrige en UNA ubicación, no en el total.
+    La de la ubicación elegida es la referencia del ajuste: el formulario
+    la muestra para que quede claro qué número se está cambiando.
+  */
+  const {
+    existencias,
+    cargando: cargandoExistencias,
+    recargar: recargarExistencias,
+  } = useExistencias()
+
+  const [ubicacionId, setUbicacionId] = useState("")
+
   // La imagen elegida se sube al guardar, no al seleccionarla: cancelar el
   // formulario no debe dejar archivos sueltos en el almacenamiento.
   const [imagenElegida, setImagenElegida] = useState(null)
@@ -54,27 +80,99 @@ function Products() {
     el nombre del color con el que se pinta.
   */
   const status = (p) => Number(p.stock) <= 0 ? ["Agotado", "out"] : Number(p.stock) <= Number(p.minStock ?? 5) ? ["Stock bajo", "low"] : ["Disponible", "ok"]
-  const openNew = () => { setForm(emptyForm); setImagenElegida(null); setModalOpen(true) }
-  const openEdit = (p) => { setForm({ ...emptyForm, ...p }); setImagenElegida(null); setModalOpen(true) }
+  // La ubicación operativa del usuario, si sigue activa; si no, que elija.
+  const ubicacionPorOmision = () =>
+    ubicacionesActivas.some((u) => u.id === user?.locationId) ? user.locationId : ""
+
+  const ubicacionElegida = ubicacionesActivas.find((u) => u.id === ubicacionId)
+
+  /*
+    Cuánto hay de este producto en la ubicación elegida. Null cuando no se
+    sabe: todavía cargando, o una ubicación que este usuario no puede
+    consultar. Sin referencia no se ofrece ajustar, porque la diferencia
+    se calcularía contra un número inventado.
+  */
+  const referencia = useMemo(() => {
+    if (!form.id || !ubicacionId) return null
+
+    const fila = existencias.find(
+      (e) => String(e.productId) === String(form.id) && e.locationId === ubicacionId
+    )
+
+    return fila ? fila.quantity : null
+  }, [existencias, form.id, ubicacionId])
+
+  const openNew = () => { setForm(emptyForm); setUbicacionId(ubicacionPorOmision()); setImagenElegida(null); setModalOpen(true) }
+
+  /*
+    Al editar, el campo de existencia arranca vacío: vacío es «no cambiar».
+    No se precarga con el total, que es justo el número que no se corrige
+    aquí, y se pide la existencia fresca porque desde la última carga pudo
+    haber ventas.
+  */
+  const openEdit = (p) => {
+    setForm({ ...emptyForm, ...p, stock: "" })
+    setUbicacionId(ubicacionPorOmision())
+    setImagenElegida(null)
+    setModalOpen(true)
+    recargarExistencias()
+  }
+
   const cerrarModal = () => { setModalOpen(false); setImagenElegida(null) }
 
+  // Otra ubicación es otra referencia: lo escrito para la anterior no vale.
+  const cambiarUbicacion = (e) => {
+    setUbicacionId(e.target.value)
+    if (form.id) setForm((actual) => ({ ...actual, stock: "" }))
+  }
+
   const save = async () => {
+    if (enviando.current) return
     const code = form.code.trim()
     if (!code || !form.name.trim() || !form.category.trim()) { Swal.fire({ icon: "warning", title: "Faltan datos", text: "Código, nombre y categoría son obligatorios" }); return }
     if (products.some((p) => String(p.code || "").toLowerCase() === code.toLowerCase() && p.id !== form.id)) { Swal.fire({ icon: "error", title: "Producto ya existente", text: `El código ${code} ya está registrado` }); return }
     if (Number(form.stock) < 0) { Swal.fire({ icon: "warning", title: "Stock inválido" }); return }
-    const data = { ...form, code, name: form.name.trim(), category: form.category.trim(), price: Math.max(0, Number(form.price) || 0), costPrice: Math.max(0, Number(form.costPrice) || 0), stock: Math.max(0, Number.parseInt(form.stock || 0)), minStock: Math.max(0, Number.parseInt(form.minStock || 0)) }
+
+    const existencia = Math.max(0, Number.parseInt(form.stock || 0))
+    const cambiaExistencia = form.id ? String(form.stock).trim() !== "" : existencia > 0
+
+    if (cambiaExistencia && !ubicacionId) { Swal.fire({ icon: "warning", title: "Falta la ubicación", text: "Elige en qué ubicación se registra la existencia." }); return }
+    if (form.id && cambiaExistencia && referencia === null) { Swal.fire({ icon: "warning", title: "Sin existencia de referencia", text: "No se pudo leer la existencia de esa ubicación, así que no se puede ajustar desde aquí." }); return }
+
+    const data = { ...form, code, name: form.name.trim(), category: form.category.trim(), price: Math.max(0, Number(form.price) || 0), costPrice: Math.max(0, Number(form.costPrice) || 0), stock: existencia, minStock: Math.max(0, Number.parseInt(form.minStock || 0)) }
+
+    enviando.current = true
     setGuardando(true)
     try {
-      if (form.id) await editarProducto(form.id, data, imagenElegida)
-      else await agregarProducto(data, imagenElegida)
+      if (form.id) {
+        await editarProducto(form.id, data, imagenElegida, cambiaExistencia ? { ubicacionId, existenciaAnterior: referencia } : {})
+      } else {
+        await agregarProducto(data, imagenElegida, { ubicacionId })
+      }
       setModalOpen(false); setForm(emptyForm); setImagenElegida(null)
+      recargarExistencias()
       Swal.fire({ icon: "success", title: form.id ? "Producto actualizado" : "Producto agregado" })
     } catch (e) {
       Swal.fire({ icon: "error", title: "No se pudo guardar", text: e.message })
     } finally {
+      enviando.current = false
       setGuardando(false)
     }
+  }
+
+  /*
+    Lo que se le dice al usuario bajo el campo de existencia. Al editar
+    nombra la ubicación y el número de partida, y aparte el total, para que
+    no se confunda uno con otro.
+  */
+  const nombreUbicacion = ubicacionElegida?.name || "la ubicación elegida"
+
+  let ayudaExistencia = `Entra como existencia de ${nombreUbicacion}.`
+
+  if (form.id) {
+    if (!ubicacionId) ayudaExistencia = "Elige primero la ubicación que vas a ajustar."
+    else if (referencia === null) ayudaExistencia = cargandoExistencias ? "Cargando la existencia de esta ubicación…" : `No se puede leer la existencia de ${nombreUbicacion}, así que no se puede ajustar desde aquí.`
+    else ayudaExistencia = `Hoy hay ${referencia} en ${nombreUbicacion} (${products.find((p) => p.id === form.id)?.stock ?? 0} en todas las ubicaciones). Déjalo vacío para no cambiarla; el cambio se registra como ajuste solo en ${nombreUbicacion}.`
   }
 
   const remove = async (id) => {
@@ -201,8 +299,23 @@ function Products() {
             <input id="products-costo" type="number" min="0" step="0.01" value={form.costPrice} onChange={(e) => setForm({ ...form, costPrice: e.target.value })} />
           </FormField>
 
-          <FormField etiqueta="Stock">
-            <input id="products-stock" type="number" min="0" value={form.stock} onChange={(e) => setForm({ ...form, stock: e.target.value })} />
+          <FormField etiqueta={form.id ? "Ubicación del ajuste" : "Ubicación de la existencia"}>
+            <select id="products-ubicacion" value={ubicacionId} onChange={cambiarUbicacion}>
+              <option value="">— Elige una ubicación —</option>
+              {ubicacionesActivas.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
+            </select>
+          </FormField>
+
+          <FormField etiqueta={form.id ? "Nueva existencia en esta ubicación" : "Existencia inicial"} ayuda={ayudaExistencia}>
+            <input
+              id="products-stock"
+              type="number"
+              min="0"
+              value={form.stock}
+              placeholder={referencia === null ? "" : String(referencia)}
+              disabled={Boolean(form.id) && referencia === null}
+              onChange={(e) => setForm({ ...form, stock: e.target.value })}
+            />
           </FormField>
 
           <FormField etiqueta="Stock mínimo" ayuda="Por debajo de esta cantidad el producto se marca como escaso.">

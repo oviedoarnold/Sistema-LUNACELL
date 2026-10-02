@@ -1,8 +1,9 @@
 import { describe, it, expect, vi } from "vitest"
-import { screen, fireEvent, act } from "@testing-library/react"
+import { screen, fireEvent, act, within } from "@testing-library/react"
 
 import { AuthProvider } from "../context/AuthContext"
 import ProductProvider from "../context/ProductContext"
+import LocationsProvider from "../context/LocationsContext"
 import { renderizarPantalla } from "../test/pantallas"
 import Products from "./Products"
 
@@ -19,14 +20,20 @@ const PRODUCTOS = [
   { id: "p3", code: "P-001", name: "Brocha 3 pulgadas", category: "Pinturas", price: 45, costPrice: 26, stock: 0, minStock: 5, supplierId: "" },
 ]
 
-function renderProducts(productos = PRODUCTOS) {
+function renderProducts(productos = PRODUCTOS, extra = {}) {
   return renderizarPantalla(
     <AuthProvider>
       <ProductProvider>
-        <Products />
+        <LocationsProvider>
+          <Products />
+        </LocationsProvider>
       </ProductProvider>
     </AuthProvider>,
-    { productos, esperar: ["productos_con_stock"] }
+    {
+      productos,
+      esperar: ["productos_con_stock", "ubicaciones", "existencias_por_ubicacion"],
+      ...extra,
+    }
   )
 }
 
@@ -176,5 +183,153 @@ describe("Products: imagen del producto", () => {
 
     expect(falso.archivos.size).toBe(0)
     expect(falso.datos.productos.map((p) => p.nombre)).toContain("Serrucho")
+  })
+})
+
+describe("Products: existencia por ubicación", () => {
+  const UBICACIONES = [
+    { id: "bodega", name: "Lunacell Bodega", type: "bodega" },
+    { id: "tienda", name: "Lunacell Store", type: "tienda" },
+  ]
+
+  // El Martillo tiene 20 en total; 15 están en la bodega y 5 en la tienda.
+  const EXISTENCIAS = [
+    { locationId: "bodega", productId: "p1", quantity: 15 },
+    { locationId: "tienda", productId: "p1", quantity: 5 },
+  ]
+
+  const renderConUbicaciones = () =>
+    renderProducts(PRODUCTOS, { ubicaciones: UBICACIONES, existencias: EXISTENCIAS })
+
+  const escribir = (etiqueta, valor) =>
+    fireEvent.change(screen.getByLabelText(etiqueta), { target: { value: valor } })
+
+  const guardar = () =>
+    act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /guardar producto/i }))
+    })
+
+  const llamadasAlRpc = (falso) =>
+    falso.rpc.mock.calls.filter(([nombre]) => nombre === "registrar_movimiento_ubicacion")
+
+  const editar = async (nombre) => {
+    const fila = screen.getByText(nombre).closest("tr")
+
+    await act(async () => {
+      fireEvent.click(within(fila).getByRole("button", { name: /editar/i }))
+    })
+  }
+
+  const nuevo = (codigo, nombre) => {
+    fireEvent.click(screen.getByRole("button", { name: /nuevo producto/i }))
+    escribir(/^código$/i, codigo)
+    escribir(/^nombre$/i, nombre)
+    escribir(/^categoría$/i, "Herramientas")
+  }
+
+  it("un producto nuevo con existencia la registra en la ubicación elegida", async () => {
+    const { falso } = await renderConUbicaciones()
+
+    nuevo("T-010", "Taladro")
+    escribir(/^existencia inicial$/i, "8")
+    escribir(/^ubicación de la existencia$/i, "bodega")
+    await guardar()
+
+    const [[, argumentos]] = llamadasAlRpc(falso)
+
+    expect(argumentos).toMatchObject({
+      p_ubicacion_id: "bodega",
+      p_tipo: "entrada",
+      p_cantidad: 8,
+    })
+  })
+
+  it("sin ubicación, una existencia inicial no crea el producto", async () => {
+    const { falso } = await renderConUbicaciones()
+
+    nuevo("T-011", "Lijadora")
+    escribir(/^existencia inicial$/i, "3")
+    await guardar()
+
+    expect(falso.datos.productos.map((p) => p.nombre)).not.toContain("Lijadora")
+    expect(llamadasAlRpc(falso)).toHaveLength(0)
+  })
+
+  it("un producto nuevo sin existencia no llama al RPC", async () => {
+    const { falso } = await renderConUbicaciones()
+
+    nuevo("T-012", "Cincel")
+    await guardar()
+
+    expect(falso.datos.productos.map((p) => p.nombre)).toContain("Cincel")
+    expect(llamadasAlRpc(falso)).toHaveLength(0)
+  })
+
+  /*
+    G2: al editar se ve la existencia de la ubicación elegida y, aparte,
+    el total. El usuario tiene que saber que corrige la bodega y no los 20.
+  */
+  it("al editar muestra la existencia de la ubicación elegida y el total aparte", async () => {
+    await renderConUbicaciones()
+    await editar("Martillo de uña")
+
+    escribir(/^ubicación del ajuste$/i, "bodega")
+
+    expect(
+      screen.getByText(/hoy hay 15 en lunacell bodega \(20 en todas las ubicaciones\)/i)
+    ).toBeInTheDocument()
+    expect(screen.getByLabelText(/^nueva existencia en esta ubicación$/i)).toHaveValue(null)
+  })
+
+  it("ajustar registra la diferencia contra la existencia de esa ubicación", async () => {
+    const { falso } = await renderConUbicaciones()
+    await editar("Martillo de uña")
+
+    escribir(/^ubicación del ajuste$/i, "tienda")
+    escribir(/^nueva existencia en esta ubicación$/i, "2")
+    await guardar()
+
+    const [[, argumentos]] = llamadasAlRpc(falso)
+
+    // En la tienda había 5: el ajuste es −3, no 2 − 20.
+    expect(argumentos).toMatchObject({
+      p_producto_id: "p1",
+      p_ubicacion_id: "tienda",
+      p_tipo: "ajuste",
+      p_cantidad: -3,
+    })
+  })
+
+  it("editar sin tocar la existencia no llama al RPC", async () => {
+    const { falso } = await renderConUbicaciones()
+    await editar("Martillo de uña")
+
+    escribir(/^ubicación del ajuste$/i, "bodega")
+    escribir(/^nombre$/i, "Martillo de carpintero")
+    await guardar()
+
+    expect(falso.datos.productos.find((p) => p.id === "p1").nombre).toBe(
+      "Martillo de carpintero"
+    )
+    expect(llamadasAlRpc(falso)).toHaveLength(0)
+  })
+
+  it("dos clics seguidos en guardar registran la entrada una sola vez", async () => {
+    const { falso } = await renderConUbicaciones()
+
+    nuevo("T-013", "Esmeril")
+    escribir(/^existencia inicial$/i, "4")
+    escribir(/^ubicación de la existencia$/i, "bodega")
+
+    await act(async () => {
+      const boton = screen.getByRole("button", { name: /guardar producto/i })
+      fireEvent.click(boton)
+      fireEvent.click(boton)
+    })
+
+    expect(llamadasAlRpc(falso)).toHaveLength(1)
+    expect(
+      falso.datos.productos.filter((p) => p.nombre === "Esmeril")
+    ).toHaveLength(1)
   })
 })

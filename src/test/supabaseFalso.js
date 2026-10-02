@@ -376,6 +376,89 @@ export function crearSupabaseFalso({
   }
 
   /*
+    Entradas y ajustes por ubicación, como registrar_movimiento_ubicacion():
+    mueve la celda y escribe el movimiento con su ubicación, y rechaza con
+    LI003 lo que dejaría la celda en negativo.
+
+    No reproduce permisos, empresa ni candados: eso se prueba contra el
+    motor real en pruebas-sql. Aquí basta con que la pantalla vea lo mismo
+    que vería después de la llamada.
+  */
+  const moverInventario = ({
+    p_producto_id,
+    p_ubicacion_id,
+    p_tipo,
+    p_cantidad,
+    p_motivo,
+  }) => {
+    const celdas = datos.inventario_ubicacion || []
+    const celda = celdas.find(
+      (c) => c.ubicacion_id === p_ubicacion_id && c.producto_id === p_producto_id
+    )
+
+    const anterior = celda ? Number(celda.cantidad) : 0
+    const nueva = anterior + Number(p_cantidad)
+
+    if (nueva < 0) {
+      return {
+        data: null,
+        error: {
+          code: "LI003",
+          message: `No hay suficiente existencia: hay ${anterior}, el ajuste quita ${Math.abs(p_cantidad)}`,
+        },
+      }
+    }
+
+    const empresaId =
+      (datos.productos || []).find((p) => p.id === p_producto_id)?.empresa_id ??
+      (datos.empresas || [])[0]?.id ??
+      null
+
+    datos.inventario_ubicacion = celda
+      ? celdas.map((c) => (c === celda ? { ...c, cantidad: nueva } : c))
+      : [
+          ...celdas,
+          {
+            empresa_id: empresaId,
+            ubicacion_id: p_ubicacion_id,
+            producto_id: p_producto_id,
+            cantidad: nueva,
+          },
+        ]
+
+    const movimiento = {
+      id: siguienteId(),
+      ...valoresPorOmision("movimientos_inventario"),
+      empresa_id: empresaId,
+      producto_id: p_producto_id,
+      usuario_id: null,
+      venta_id: null,
+      ubicacion_id: p_ubicacion_id,
+      tipo: p_tipo,
+      cantidad: Number(p_cantidad),
+      motivo: p_motivo || "",
+    }
+
+    datos.movimientos_inventario = [
+      ...(datos.movimientos_inventario || []),
+      movimiento,
+    ]
+
+    return {
+      data: {
+        movimiento_id: movimiento.id,
+        producto_id: p_producto_id,
+        ubicacion_id: p_ubicacion_id,
+        tipo: p_tipo,
+        cantidad: Number(p_cantidad),
+        existencia_anterior: anterior,
+        existencia_nueva: nueva,
+      },
+      error: null,
+    }
+  }
+
+  /*
     Almacenamiento en memoria. Guarda las rutas subidas para poder
     comprobar que la imagen queda en la carpeta de su empresa, que es de
     donde sale el aislamiento entre ferreterías.
@@ -420,6 +503,14 @@ export function crearSupabaseFalso({
     rpc: vi.fn((nombre, argumentos = {}) => {
       if (nombre === "siguiente_correlativo") {
         return Promise.resolve(siguienteCorrelativo(argumentos.p_tipo))
+      }
+
+      if (nombre === "registrar_movimiento_ubicacion") {
+        const falla = fallaDe(nombre, "rpc")
+
+        return Promise.resolve(
+          falla ? { data: null, error: falla } : moverInventario(argumentos)
+        )
       }
 
       return Promise.resolve({

@@ -60,7 +60,9 @@ const nuevo = {
   category: "Herramientas",
   price: 1200,
   costPrice: 900,
-  stock: 4,
+  // Sin existencia: estas pruebas son de la foto, y una existencia inicial
+  // exigiría elegir ubicación, que se prueba en catalogos.test.js.
+  stock: 0,
   minStock: 1,
 }
 
@@ -172,5 +174,63 @@ describe("imágenes de producto", () => {
     const [ruta] = [...falso.archivos.keys()]
 
     expect(ruta).toMatch(/-\d{10,}\.jpg$/)
+  })
+})
+
+describe("existencia al editar", () => {
+  /*
+    Sin la referencia de una ubicación no hay ajuste: cambiar el nombre o
+    la foto no debe mover inventario, aunque el número que viaja en el
+    producto no coincida con nada.
+  */
+  it("editar sin referencia de ubicación no ajusta existencia", async () => {
+    const { result, falso } = await montarInventario([CON_FOTO])
+
+    await act(async () => {
+      await result.current.editarProducto("p1", { ...CON_FOTO, name: "Martillo de uña" })
+    })
+
+    expect(falso.rpc).not.toHaveBeenCalledWith(
+      "registrar_movimiento_ubicacion",
+      expect.anything()
+    )
+  })
+
+  it("un ajuste sin ubicación se rechaza antes de subir la foto", async () => {
+    const { result, falso } = await montarInventario([CON_FOTO])
+
+    await expect(
+      act(async () => {
+        await result.current.editarProducto(
+          "p1",
+          { ...CON_FOTO, stock: 9 },
+          imagen(),
+          { existenciaAnterior: 5 }
+        )
+      })
+    ).rejects.toThrow(/ubicación/i)
+
+    expect(falso.archivos.size).toBe(0)
+  })
+
+  it("con referencia y ubicación registra el ajuste en esa ubicación", async () => {
+    const { result, falso } = await montarInventario([CON_FOTO])
+
+    await act(async () => {
+      await result.current.editarProducto("p1", { ...CON_FOTO, stock: 8 }, null, {
+        ubicacionId: "bodega",
+        existenciaAnterior: 5,
+      })
+    })
+
+    expect(falso.rpc).toHaveBeenCalledWith(
+      "registrar_movimiento_ubicacion",
+      expect.objectContaining({
+        p_producto_id: "p1",
+        p_ubicacion_id: "bodega",
+        p_tipo: "ajuste",
+        p_cantidad: 3,
+      })
+    )
   })
 })
