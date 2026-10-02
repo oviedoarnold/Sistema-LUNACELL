@@ -177,6 +177,12 @@ durante la transición conviven dos caminos: el RPC escribe `es_fiscal` y el
 camino anterior —que el punto de venta sigue usando hasta INV-3.3— sella
 `cai_emision` sin escribir la marca.
 
+Y el documento se nombra en más de un sitio que la cabecera. El encabezado
+del bloque de datos y el título, el trabajo de impresión y el nombre del PDF
+siguen ahora la misma regla, porque mirar `fiscal` en un sitio y decir
+«factura» en los otros deja al lector sin saber a cuál creer; y de todo el
+documento, **el nombre del archivo es lo único que sobrevive a la pantalla**.
+
 **El contrato de numeración cambió**, y tres pruebas SQL y una de
 JavaScript se actualizaron para describir el nuevo. No se debilitaron: antes
 afirmaban `FAC-\d{5}` y `fiscal.cai === ""`, ahora afirman `VTA-\d{6}`,
