@@ -69,6 +69,18 @@ const montar = ({ existenciaInicial = 10, fallarEn = {} } = {}) => {
       ],
       productos: [CARGADOR],
       movimientos_inventario: [entradaInicial(existenciaInicial)],
+      /*
+        La misma existencia vista desde la ubicación. Desde INV-3.2.1 un
+        ajuste corrige la celda de una ubicación, así que tiene que haberla.
+      */
+      inventario_ubicacion: [
+        {
+          empresa_id: EMPRESA,
+          ubicacion_id: "bodega",
+          producto_id: CARGADOR.id,
+          cantidad: existenciaInicial,
+        },
+      ],
       ventas: [],
       detalle_venta: [],
       abonos: [],
@@ -189,7 +201,7 @@ describe("el ajuste manual registra únicamente la diferencia", () => {
         minStock: 5,
         stock,
       },
-      { empresaId: EMPRESA, usuarioId: USUARIO, stockAnterior }
+      { empresaId: EMPRESA, stockAnterior, ubicacionId: "bodega" }
     )
 
   it("bajar de 10 a 7 anota un movimiento de -3", async () => {
@@ -202,6 +214,8 @@ describe("el ajuste manual registra únicamente la diferencia", () => {
     // Assert
     expect(ajustes(falso)).toHaveLength(1)
     expect(ajustes(falso)[0].cantidad).toBe(-3)
+    expect(ajustes(falso)[0].ubicacion_id).toBe("bodega")
+    expect(falso.datos.inventario_ubicacion[0].cantidad).toBe(7)
   })
 
   it("la existencia resultante es la que el usuario escribió", async () => {
