@@ -115,6 +115,17 @@ interna llama a `siguiente_correlativo('interno')`, que toca otra columna.
 No existe ningún camino por el que una venta no fiscal avance el contador
 autorizado, porque no lo nombra.
 
+El contador nace detrás de las ventas que ya existían, para que un documento
+interno nuevo no choque visualmente con un `FAC-` viejo. Ese arranque se une
+**solo** a las empresas que tienen ventas y **solo** avanza cuando hay que
+avanzar: `empresas` es multiempresa, y un `UPDATE` sin condición reescribiría
+la fila de cada empresa del sistema sin cambiarle ningún valor, tomando su
+candado y gastando WAL por nada.
+
+La prueba de ese arranque **extrae la sentencia del propio archivo de
+migración** por una marca, en vez de copiarla: una copia solo demostraría que
+la copia funciona, y seguiría verde el día que la migración cambiara.
+
 ### 6. El número interno se llama VTA, no FAC
 
 ```

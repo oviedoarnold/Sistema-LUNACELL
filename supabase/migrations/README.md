@@ -47,7 +47,7 @@ LUNACELL.
 | 0014 | **Correr.** Inventario por ubicación. En una base vacía no hay stock que abrir, así que la apertura no hace nada y la tabla queda lista |
 | 0015 | **Correr.** Visibilidad por ubicación. Sin usuarios ni ubicaciones no cambia ningún dato; deja las funciones, la política estrecha y la vista |
 | 0016 | **Correr.** Solo crea funciones; no toca ningún dato. Nadie la llama todavía: el punto de venta sigue usando el camino anterior hasta INV-3.3 |
-| 0017 | **Correr.** Añade dos marcas a las ubicaciones —todas venden, ninguna es fiscal— y el contador interno. No marca ninguna ubicación como fiscal: eso lo decide el dueño |
+| 0017 | **Correr.** Añade dos marcas a las ubicaciones —todas venden, ninguna es fiscal— y el contador interno, que arranca detrás de las ventas que ya existan. No marca ninguna ubicación como fiscal: eso lo decide el dueño |
 
 Ninguna de las que se corren borra datos: solo la 0010 tiene un `delete`,
 y es de las que se omiten. Lo que sí hacen varias es recrear vistas y
