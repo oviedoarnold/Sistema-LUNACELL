@@ -38,40 +38,46 @@ afterAll(async () => {
 async function escenario() {
   const { empresa, usuario, authId } = await crearEmpresa(db)
 
-  const ubicacion = async (nombre, tipo, activa = true) =>
-    (
-      await db.query(
-        `insert into ubicaciones (empresa_id, nombre, tipo, activa)
-         values ($1, $2, $3, $4) returning id`,
-        [empresa, nombre, tipo, activa]
-      )
-    ).rows[0].id
+  /*
+    Todo en dos sentencias y no fila por fila. Se devuelve el nombre junto
+    al id porque el orden del RETURNING no está garantizado.
+  */
+  const idPorNombre = ({ rows }) =>
+    Object.fromEntries(rows.map((fila) => [fila.nombre, fila.id]))
 
-  const bodega = await ubicacion("Bodega Principal", "bodega")
-  const tienda = await ubicacion("Lunacell Store", "tienda")
-  const cerrada = await ubicacion("Camión fuera de servicio", "camion", false)
+  const ubicaciones = idPorNombre(
+    await db.query(
+      `insert into ubicaciones (empresa_id, nombre, tipo, activa)
+       select $1, u.nombre, u.tipo, u.activa
+         from (values ('Bodega Principal', 'bodega', true),
+                      ('Lunacell Store', 'tienda', true),
+                      ('Camión fuera de servicio', 'camion', false))
+              as u (nombre, tipo, activa)
+       returning id, nombre`,
+      [empresa]
+    )
+  )
 
-  const producto = async (nombre, activo = true) =>
-    (
-      await db.query(
-        `insert into productos (empresa_id, codigo, nombre, precio, costo, activo)
-         values ($1, $2, $3, 100, 10, $4) returning id`,
-        [empresa, `C-${Math.random().toString(36).slice(2, 10)}`, nombre, activo]
-      )
-    ).rows[0].id
-
-  const cargador = await producto("Cargador")
-  const descontinuado = await producto("Descontinuado", false)
+  const productos = idPorNombre(
+    await db.query(
+      `insert into productos (empresa_id, codigo, nombre, precio, costo, activo)
+       select $1, 'C-' || substr(md5(random()::text), 1, 8), p.nombre, 100, 10, p.activo
+         from (values ('Cargador', true), ('Descontinuado', false))
+              as p (nombre, activo)
+       returning id, nombre`,
+      [empresa]
+    )
+  )
 
   return {
     empresa,
     usuario,
     authId,
-    bodega,
-    tienda,
-    cerrada,
-    cargador,
-    descontinuado,
+    bodega: ubicaciones["Bodega Principal"],
+    tienda: ubicaciones["Lunacell Store"],
+    cerrada: ubicaciones["Camión fuera de servicio"],
+    cargador: productos.Cargador,
+    descontinuado: productos.Descontinuado,
   }
 }
 
@@ -396,29 +402,37 @@ describe("aislamiento entre empresas", () => {
 // ── PERMISOS ──────────────────────────────────────────────
 
 describe("quién puede ejecutarla", () => {
-  it("19. anon no tiene permiso de ejecución", async () => {
+  it("19. la ejecutan authenticated y service_role; anon no", async () => {
     const r = await db.query(
-      `select has_function_privilege('anon',
-         'registrar_movimiento_ubicacion(uuid,uuid,text,integer,text)',
-         'EXECUTE') as puede`
+      `select rol, has_function_privilege(
+                rol,
+                'registrar_movimiento_ubicacion(uuid,uuid,text,integer,text)',
+                'EXECUTE'
+              ) as puede
+         from unnest(array['anon', 'authenticated', 'service_role']) as rol`
     )
 
-    expect(r.rows[0].puede).toBe(false)
+    expect(Object.fromEntries(r.rows.map((f) => [f.rol, f.puede]))).toEqual({
+      anon: false,
+      authenticated: true,
+      service_role: true,
+    })
   })
 
-  it("20. authenticated y service_role sí", async () => {
+  /*
+    PostgreSQL concede EXECUTE a PUBLIC al crear la función, y cualquier
+    rol nuevo lo heredaría. El ACL no debe conservar esa concesión.
+  */
+  it("20. PUBLIC no conserva el EXECUTE que PostgreSQL da por omisión", async () => {
     const r = await db.query(
-      `select
-         has_function_privilege('authenticated',
-           'registrar_movimiento_ubicacion(uuid,uuid,text,integer,text)',
-           'EXECUTE') as autenticado,
-         has_function_privilege('service_role',
-           'registrar_movimiento_ubicacion(uuid,uuid,text,integer,text)',
-           'EXECUTE') as servicio`
+      `select exists (
+                select 1 from aclexplode(p.proacl) a where a.grantee = 0
+              ) as publico
+         from pg_proc p
+        where p.oid = 'registrar_movimiento_ubicacion(uuid,uuid,text,integer,text)'::regprocedure`
     )
 
-    expect(r.rows[0].autenticado).toBe(true)
-    expect(r.rows[0].servicio).toBe(true)
+    expect(r.rows[0].publico).toBe(false)
   })
 
   it("21. un usuario sin el permiso products se rechaza con 42501", async () => {
@@ -577,53 +591,74 @@ describe("o entra todo o no entra nada", () => {
 
 // ── CONCURRENCIA REAL ─────────────────────────────────────
 
+/*
+  Dos sesiones del mismo usuario, cada una en su transacción.
+
+  A hace su parte y se queda sin confirmar. B sale después, y la prueba no
+  sigue hasta que PostgreSQL confirme, en pg_stat_activity, que B está
+  DETENIDA esperando el candado de A: si la función no serializara, esa
+  espera agotaría su tiempo y el caso fallaría. Después A confirma y se
+  devuelve lo que respondió B, que confirma si entró y deshace si no.
+*/
+async function mientrasLaOtraEspera(authId, { primera, segunda }) {
+  const a = await base.conectar()
+  const b = await base.conectar()
+
+  try {
+    await comoUsuario(a, authId)
+    await comoUsuario(b, authId)
+
+    const pidB = (await b.query("select pg_backend_pid() as pid")).rows[0].pid
+
+    await a.query("begin")
+    await b.query("begin")
+
+    await primera(a)
+
+    // El rechazo de B se recoge aquí mismo para que no quede suelto.
+    const deB = segunda(b).then(
+      (respuesta) => ({ respuesta }),
+      (error) => ({ error })
+    )
+
+    /* La observadora es `db`: un rol sin privilegios no ve la espera ajena. */
+    expect(await esperarBloqueo(db, pidB)).toMatch(/^Lock\//)
+
+    await a.query("commit")
+
+    const resultado = await deB
+
+    await b.query(resultado.error ? "rollback" : "commit")
+
+    return resultado
+  } finally {
+    await a.end()
+    await b.end()
+  }
+}
+
+const ajustar = (cantidad, e) => (sesion) =>
+  sesion.query(
+    "select registrar_movimiento_ubicacion($1, $2, 'ajuste', $3)",
+    [e.cargador, e.bodega, cantidad]
+  )
+
 describe("concurrencia", () => {
   /*
-    Dos ajustes de −7 sobre 10, a la vez. La prueba espera a que
-    PostgreSQL confirme que la segunda sesión está DETENIDA esperando el
-    candado; si la función no serializara, esa espera agotaría su tiempo.
+    Dos ajustes de −7 sobre 10, a la vez. Al soltarse el candado, B relee
+    la celda —ahora 3— y rechaza. Si leyera el valor viejo, dejaría −4.
   */
   it("28. dos ajustes de −7 sobre 10: solo uno entra", async () => {
     const e = await escenario()
 
     await mover(e.authId, { producto: e.cargador, ubicacion: e.bodega, tipo: "entrada", cantidad: 10 })
 
-    const a = await base.conectar()
-    const b = await base.conectar()
+    const { error } = await mientrasLaOtraEspera(e.authId, {
+      primera: ajustar(-7, e),
+      segunda: ajustar(-7, e),
+    })
 
-    try {
-      await comoUsuario(a, e.authId)
-      await comoUsuario(b, e.authId)
-
-      const pidB = (await b.query("select pg_backend_pid() as pid")).rows[0].pid
-
-      await a.query("begin")
-      await b.query("begin")
-
-      await a.query(
-        "select registrar_movimiento_ubicacion($1, $2, 'ajuste', -7)",
-        [e.cargador, e.bodega]
-      )
-
-      const pb = b.query(
-        "select registrar_movimiento_ubicacion($1, $2, 'ajuste', -7)",
-        [e.cargador, e.bodega]
-      )
-
-      /* La observadora es `db`: un rol sin privilegios no ve la espera ajena. */
-      expect(await esperarBloqueo(db, pidB)).toMatch(/^Lock\//)
-
-      await a.query("commit")
-
-      /* Al soltarse el candado, B relee la celda —ahora 3— y rechaza. */
-      await expect(pb).rejects.toThrow(/hay 3, el ajuste quita 7/i)
-
-      await b.query("rollback")
-    } finally {
-      await a.end()
-      await b.end()
-    }
-
+    expect(error?.message).toMatch(/hay 3, el ajuste quita 7/i)
     expect(await existencia(e.bodega, e.cargador)).toBe(3)
     expect(await libro(e.cargador)).toBe(3)
   })
@@ -642,40 +677,15 @@ describe("concurrencia", () => {
     ])
     await mover(e.authId, { producto: e.cargador, ubicacion: e.bodega, tipo: "entrada", cantidad: 10 })
 
-    const a = await base.conectar()
-    const b = await base.conectar()
+    const { error } = await mientrasLaOtraEspera(e.authId, {
+      primera: ajustar(-7, e),
+      segunda: (sesion) =>
+        sesion.query("select registrar_venta_ubicacion($1::jsonb) as res", [
+          JSON.stringify([{ producto_id: e.cargador, cantidad: 7 }]),
+        ]),
+    })
 
-    try {
-      await comoUsuario(a, e.authId)
-      await comoUsuario(b, e.authId)
-
-      const pidB = (await b.query("select pg_backend_pid() as pid")).rows[0].pid
-
-      await a.query("begin")
-      await b.query("begin")
-
-      await a.query(
-        "select registrar_movimiento_ubicacion($1, $2, 'ajuste', -7)",
-        [e.cargador, e.bodega]
-      )
-
-      const pb = b.query(
-        "select registrar_venta_ubicacion($1::jsonb) as res",
-        [JSON.stringify([{ producto_id: e.cargador, cantidad: 7 }])]
-      )
-
-      expect(await esperarBloqueo(db, pidB)).toMatch(/^Lock\//)
-
-      await a.query("commit")
-
-      await expect(pb).rejects.toThrow(/hay 3, se piden 7/i)
-
-      await b.query("rollback")
-    } finally {
-      await a.end()
-      await b.end()
-    }
-
+    expect(error?.message).toMatch(/hay 3, se piden 7/i)
     expect(await existencia(e.bodega, e.cargador)).toBe(3)
   })
 
@@ -687,38 +697,18 @@ describe("concurrencia", () => {
   it("30. dos entradas simultáneas a una celda nueva suman las dos", async () => {
     const e = await escenario()
 
-    const a = await base.conectar()
-    const b = await base.conectar()
-
-    try {
-      await comoUsuario(a, e.authId)
-      await comoUsuario(b, e.authId)
-
-      const pidB = (await b.query("select pg_backend_pid() as pid")).rows[0].pid
-
-      await a.query("begin")
-      await b.query("begin")
-
-      await a.query(
-        "select registrar_movimiento_ubicacion($1, $2, 'entrada', 4)",
-        [e.cargador, e.tienda]
+    const entrar = (cantidad) => (sesion) =>
+      sesion.query(
+        "select registrar_movimiento_ubicacion($1, $2, 'entrada', $3)",
+        [e.cargador, e.tienda, cantidad]
       )
 
-      const pb = b.query(
-        "select registrar_movimiento_ubicacion($1, $2, 'entrada', 6)",
-        [e.cargador, e.tienda]
-      )
+    const { error } = await mientrasLaOtraEspera(e.authId, {
+      primera: entrar(4),
+      segunda: entrar(6),
+    })
 
-      expect(await esperarBloqueo(db, pidB)).toMatch(/^Lock\//)
-
-      await a.query("commit")
-      await pb
-      await b.query("commit")
-    } finally {
-      await a.end()
-      await b.end()
-    }
-
+    expect(error).toBeUndefined()
     expect(await existencia(e.tienda, e.cargador)).toBe(10)
   })
 })
