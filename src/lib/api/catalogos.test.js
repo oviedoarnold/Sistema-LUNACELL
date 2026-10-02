@@ -9,7 +9,7 @@ import {
   crearProducto,
   actualizarProducto,
   desactivarProducto,
-  registrarMovimiento,
+  ErrorDeInventario,
   traerClientes,
   crearCliente,
   actualizarCliente,
@@ -39,6 +39,7 @@ const montar = ({ tablas = {}, fallarEn = {} } = {}) => {
       productos: [],
       productos_con_stock: [],
       movimientos_inventario: [],
+      inventario_ubicacion: [],
       clientes: [],
       proveedores: [],
       empresas: [],
@@ -202,27 +203,82 @@ describe("productos", () => {
   })
 
   /*
-    Las existencias iniciales entran como movimiento y no como columna: el
-    stock es la suma del libro, para que siempre haya rastro.
+    La existencia inicial entra por el RPC y en una ubicación: es lo que
+    mueve a la vez la celda de esa ubicación y el libro. Antes se insertaba
+    el movimiento suelto, sin ubicación, y la celda no se enteraba.
   */
-  it("la existencia inicial entra como movimiento de entrada", async () => {
+  it("la existencia inicial entra como entrada en la ubicación elegida", async () => {
     const falso = montar()
 
-    await crearProducto({ code: "M-1", name: "Martillo", stock: 12 }, EMPRESA, USUARIO)
+    await crearProducto(
+      { code: "M-1", name: "Martillo", stock: 12 },
+      EMPRESA,
+      { ubicacionId: "bodega" }
+    )
+
+    const [producto] = falso.datos.productos
+
+    expect(falso.rpc).toHaveBeenCalledWith("registrar_movimiento_ubicacion", {
+      p_producto_id: producto.id,
+      p_ubicacion_id: "bodega",
+      p_tipo: "entrada",
+      p_cantidad: 12,
+      p_motivo: "Existencia inicial",
+    })
 
     const [movimiento] = falso.datos.movimientos_inventario
 
-    expect(movimiento.tipo).toBe("entrada")
-    expect(movimiento.cantidad).toBe(12)
-    expect(movimiento.motivo).toBe("Existencia inicial")
+    expect(movimiento.ubicacion_id).toBe("bodega")
+    expect(falso.datos.inventario_ubicacion[0].cantidad).toBe(12)
   })
 
-  it("un producto que nace sin existencias no registra movimiento", async () => {
+  it("un producto que nace sin existencias no llama al RPC", async () => {
     const falso = montar()
 
-    await crearProducto({ code: "M-1", name: "Martillo", stock: 0 }, EMPRESA, USUARIO)
+    await crearProducto({ code: "M-1", name: "Martillo", stock: 0 }, EMPRESA, {})
 
+    expect(falso.rpc).not.toHaveBeenCalled()
     expect(falso.datos.movimientos_inventario).toHaveLength(0)
+  })
+
+  /*
+    Sin ubicación no hay dónde poner la existencia. Se rechaza ANTES de
+    crear el producto: crearlo y fallar después lo dejaría en cero sin que
+    el usuario lo hubiera pedido.
+  */
+  it("una existencia inicial sin ubicación no crea el producto", async () => {
+    const falso = montar()
+
+    await expect(
+      crearProducto({ code: "M-1", name: "Martillo", stock: 5 }, EMPRESA, {})
+    ).rejects.toThrow(/ubicación/i)
+
+    expect(falso.datos.productos).toHaveLength(0)
+    expect(falso.rpc).not.toHaveBeenCalled()
+  })
+
+  /*
+    La regresión que esta fase cierra: ningún camino de Productos escribe
+    en movimientos_inventario por su cuenta.
+  */
+  it("crear y ajustar no escriben movimientos directamente", async () => {
+    const falso = montar({
+      tablas: {
+        productos: [{ id: "p1", nombre: "Martillo", empresa_id: EMPRESA }],
+        inventario_ubicacion: [{ ubicacion_id: "bodega", producto_id: "p1", cantidad: 10 }],
+      },
+    })
+
+    await crearProducto({ code: "M-2", name: "Serrucho", stock: 3 }, EMPRESA, { ubicacionId: "bodega" })
+    await actualizarProducto("p1", { name: "Martillo", stock: 8 }, {
+      empresaId: EMPRESA,
+      stockAnterior: 10,
+      ubicacionId: "bodega",
+    })
+
+    expect(falso.from).not.toHaveBeenCalledWith("movimientos_inventario")
+    expect(falso.datos.movimientos_inventario).toHaveLength(2)
+    expect(falso.datos.movimientos_inventario.every((m) => m.ubicacion_id)).toBe(true)
   })
 
   it("avisa cuando el código ya está registrado", async () => {
@@ -242,46 +298,129 @@ describe("productos", () => {
   })
 
   /*
-    Editar no reescribe el stock: registra el ajuste por la diferencia.
-    Sobrescribir el número borraría el rastro de por qué cambió.
+    Editar no reescribe el stock: registra el ajuste por la diferencia, en
+    la ubicación elegida. stockAnterior es la existencia de ESA ubicación,
+    no el total: la pantalla la muestra como referencia del ajuste.
   */
-  it("cambiar la cantidad registra el ajuste por la diferencia", async () => {
-    const falso = montar({ tablas: { productos: [{ id: "p1", nombre: "Martillo" }] } })
+  const conCelda = (cantidad) =>
+    montar({
+      tablas: {
+        productos: [{ id: "p1", nombre: "Martillo", empresa_id: EMPRESA }],
+        inventario_ubicacion: [{ ubicacion_id: "bodega", producto_id: "p1", cantidad }],
+      },
+    })
+
+  it("cambiar la existencia registra el ajuste por la diferencia en esa ubicación", async () => {
+    const falso = conCelda(10)
 
     await actualizarProducto("p1", { name: "Martillo", stock: 15 }, {
       empresaId: EMPRESA,
-      usuarioId: USUARIO,
       stockAnterior: 10,
+      ubicacionId: "bodega",
     })
 
-    const [movimiento] = falso.datos.movimientos_inventario
-
-    expect(movimiento.tipo).toBe("ajuste")
-    expect(movimiento.cantidad).toBe(5)
+    expect(falso.rpc).toHaveBeenCalledWith("registrar_movimiento_ubicacion", {
+      p_producto_id: "p1",
+      p_ubicacion_id: "bodega",
+      p_tipo: "ajuste",
+      p_cantidad: 5,
+      p_motivo: "Ajuste manual desde inventario",
+    })
+    expect(falso.datos.inventario_ubicacion[0].cantidad).toBe(15)
   })
 
   it("un ajuste hacia abajo queda como cantidad negativa", async () => {
-    const falso = montar({ tablas: { productos: [{ id: "p1", nombre: "Martillo" }] } })
+    const falso = conCelda(10)
 
     await actualizarProducto("p1", { name: "Martillo", stock: 4 }, {
       empresaId: EMPRESA,
-      usuarioId: USUARIO,
       stockAnterior: 10,
+      ubicacionId: "bodega",
     })
 
     expect(falso.datos.movimientos_inventario[0].cantidad).toBe(-6)
+    expect(falso.datos.inventario_ubicacion[0].cantidad).toBe(4)
   })
 
-  it("editar sin tocar la cantidad no registra movimiento", async () => {
-    const falso = montar({ tablas: { productos: [{ id: "p1", nombre: "Martillo" }] } })
+  it("editar sin tocar la existencia no llama al RPC", async () => {
+    const falso = conCelda(10)
 
     await actualizarProducto("p1", { name: "Martillo de uña", stock: 10 }, {
       empresaId: EMPRESA,
-      usuarioId: USUARIO,
       stockAnterior: 10,
+      ubicacionId: "bodega",
     })
 
-    expect(falso.datos.movimientos_inventario).toHaveLength(0)
+    expect(falso.rpc).not.toHaveBeenCalled()
+    expect(falso.datos.productos[0].nombre).toBe("Martillo de uña")
+  })
+
+  it("un ajuste sin ubicación no toca el producto", async () => {
+    const falso = conCelda(10)
+
+    await expect(
+      actualizarProducto("p1", { name: "Otro nombre", stock: 12 }, {
+        empresaId: EMPRESA,
+        stockAnterior: 10,
+      })
+    ).rejects.toThrow(/ubicación/i)
+
+    expect(falso.datos.productos[0].nombre).toBe("Martillo")
+    expect(falso.rpc).not.toHaveBeenCalled()
+  })
+
+  /*
+    Los rechazos del motor llevan su propio mensaje —cuánto hay y dónde—, y
+    se entregan tal cual: envolverlos en un «no se pudo» escondería justo
+    el dato que hace falta para corregir el ajuste.
+  */
+  it("el rechazo por existencia insuficiente llega con el mensaje del motor", async () => {
+    montar({
+      tablas: { productos: [{ id: "p1", nombre: "Martillo" }] },
+      fallarEn: {
+        registrar_movimiento_ubicacion: {
+          code: "LI003",
+          message: "No hay suficiente «Martillo» en Bodega: hay 2, el ajuste quita 5",
+        },
+      },
+    })
+
+    const intento = actualizarProducto("p1", { name: "Martillo", stock: 0 }, {
+      empresaId: EMPRESA,
+      stockAnterior: 5,
+      ubicacionId: "bodega",
+    })
+
+    await expect(intento).rejects.toBeInstanceOf(ErrorDeInventario)
+    await expect(intento).rejects.toMatchObject({
+      motivo: "existencia-insuficiente",
+      message: "No hay suficiente «Martillo» en Bodega: hay 2, el ajuste quita 5",
+    })
+  })
+
+  it.each([
+    ["LI001", "ubicacion-inactiva"],
+    ["LI002", "dato-invalido"],
+    ["LI004", "producto-invalido"],
+    ["42501", "sin-permiso"],
+  ])("el código %s se traduce como %s", async (code, motivo) => {
+    montar({
+      fallarEn: { registrar_movimiento_ubicacion: { code, message: "motivo del motor" } },
+    })
+
+    await expect(
+      crearProducto({ code: "M-1", name: "Martillo", stock: 1 }, EMPRESA, { ubicacionId: "bodega" })
+    ).rejects.toMatchObject({ motivo, message: "motivo del motor" })
+  })
+
+  it("un fallo desconocido del RPC se informa sin detalles internos", async () => {
+    montar({
+      fallarEn: { registrar_movimiento_ubicacion: { message: "connection reset" } },
+    })
+
+    await expect(
+      crearProducto({ code: "M-1", name: "Martillo", stock: 1 }, EMPRESA, { ubicacionId: "bodega" })
+    ).rejects.toThrow(/No se pudo registrar el movimiento de inventario/i)
   })
 
   it("avisa si no puede actualizar", async () => {
@@ -305,19 +444,6 @@ describe("productos", () => {
 
     expect(falso.datos.productos).toHaveLength(1)
     expect(falso.datos.productos[0].activo).toBe(false)
-  })
-
-  it("avisa si no puede registrar un movimiento", async () => {
-    montar({ fallarEn: { movimientos_inventario: { message: "sin permiso" } } })
-
-    await expect(
-      registrarMovimiento({
-        empresaId: EMPRESA,
-        productoId: "p1",
-        tipo: "entrada",
-        cantidad: 1,
-      })
-    ).rejects.toThrow(/No se pudo registrar el movimiento/i)
   })
 })
 
