@@ -119,6 +119,35 @@ async function escenario({
 
 const renglon = (id, cantidad) => ({ producto_id: id, cantidad })
 
+/*
+  Marca una ubicación como emisora de factura fiscal. Desde INV-3.2 ser
+  fiscal es una marca de la ubicación, no una propiedad de la empresa:
+  configurar el CAI ya no basta.
+*/
+const marcarFiscal = (ubicacion) =>
+  db.query("update ubicaciones set emite_fiscal = true where id = $1", [
+    ubicacion,
+  ])
+
+/* Configura la numeración autorizada de la empresa. */
+const configurarCai = (empresa, extra = {}) =>
+  db.query(
+    `update empresas
+        set cai = $2, rango_desde = 1, rango_hasta = 5000,
+            fecha_limite_emision = '2027-12-31',
+            establecimiento = coalesce($3, establecimiento),
+            punto_emision = coalesce($4, punto_emision),
+            tipo_documento = coalesce($5, tipo_documento)
+      where id = $1`,
+    [
+      empresa,
+      extra.cai || "CAI-PRUEBA",
+      extra.establecimiento || null,
+      extra.punto || null,
+      extra.tipo || null,
+    ]
+  )
+
 /* Llama al RPC haciéndose pasar por ese usuario y devuelve lo que responde. */
 async function vender(authId, items, extra = {}) {
   await comoUsuario(db, authId)
@@ -663,7 +692,12 @@ describe("de dónde salió la mercadería", () => {
 // ── EL NÚMERO DE FACTURA ──────────────────────────────────
 
 describe("el número de factura", () => {
-  it("37. sin numeración autorizada sale como FAC-00001", async () => {
+  /*
+    INV-3.2 cambió este contrato a propósito: sin numeración autorizada el
+    documento ya no se llama FAC —que se lee como «factura»— sino VTA, y
+    la venta queda marcada como no fiscal.
+  */
+  it("37. sin numeración autorizada sale como documento interno", async () => {
     const e = await escenario()
 
     await db.query(
@@ -673,7 +707,8 @@ describe("el número de factura", () => {
 
     const res = await vender(e.authId, [renglon(e.cargador, 1)])
 
-    expect(res.numero_factura).toMatch(/^FAC-\d{5}$/)
+    expect(res.numero_factura).toMatch(/^VTA-\d{6}$/)
+    expect(res.es_fiscal).toBe(false)
   })
 
   /*
@@ -681,35 +716,29 @@ describe("el número de factura", () => {
     establecimiento-punto-tipo-correlativo, con el correlativo a ocho
     dígitos. Es el mismo formato que arma utils/fiscal.js.
   */
-  it("38. con numeración autorizada toma la forma fiscal", async () => {
+  it("38. la ubicación fiscal con CAI toma la forma autorizada", async () => {
     const e = await escenario()
 
-    await db.query(
-      `update empresas
-          set cai = 'A1B2C3-D4E5F6-A1B2C3-D4E5F6-A1B2C3-12',
-              rango_desde = 1, rango_hasta = 5000,
-              fecha_limite_emision = '2027-12-31',
-              establecimiento = '7', punto_emision = '25',
-              tipo_documento = '1'
-        where id = $1`,
-      [e.empresa]
-    )
+    await configurarCai(e.empresa, {
+      cai: "A1B2C3-D4E5F6-A1B2C3-D4E5F6-A1B2C3-12",
+      establecimiento: "7",
+      punto: "25",
+      tipo: "1",
+    })
+    await marcarFiscal(e.camion1)
 
     const res = await vender(e.authId, [renglon(e.cargador, 1)])
 
     /* soloDigitos rellena con ceros a la izquierda: 7 → 007, 25 → 025. */
     expect(res.numero_factura).toMatch(/^007-025-01-\d{8}$/)
+    expect(res.es_fiscal).toBe(true)
   })
 
-  it("39. la factura guarda el CAI y el rango vigentes", async () => {
+  it("39. la factura fiscal guarda el CAI y el rango vigentes", async () => {
     const e = await escenario()
 
-    await db.query(
-      `update empresas set cai = 'CAI-PRUEBA', rango_desde = 1,
-              rango_hasta = 5000, fecha_limite_emision = '2027-12-31'
-        where id = $1`,
-      [e.empresa]
-    )
+    await configurarCai(e.empresa)
+    await marcarFiscal(e.camion1)
 
     const res = await vender(e.authId, [renglon(e.cargador, 1)])
     const v = await db.query(

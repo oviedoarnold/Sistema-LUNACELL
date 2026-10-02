@@ -181,13 +181,20 @@ describe("addSale: factura generada", () => {
     expect(factura.dueDate).toBe("2027-01-31")
   })
 
-  it("usa numeración interna sin datos fiscales", async () => {
+  /*
+    INV-3.2 cambió este contrato: una venta sin datos fiscales ya no trae
+    un bloque fiscal con el CAI vacío, sino ninguno. Ese bloque a medias
+    es lo que hacía que la plantilla imprimiera «CAI» en blanco en un
+    documento que no es una factura autorizada.
+  */
+  it("sin datos fiscales no trae bloque fiscal", async () => {
     const { result } = await montarVentas()
 
     const factura = await facturar(result, ventaContado())
 
     expect(factura.invoiceNumber).toBe("FAC-01000")
-    expect(factura.fiscal.cai).toBe("")
+    expect(factura.fiscal).toBeNull()
+    expect(factura.isFiscal).toBe(false)
   })
 
   it("incrementa el correlativo entre facturas", async () => {

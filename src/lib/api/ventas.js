@@ -84,14 +84,36 @@ export function aVentaDeApp(fila, empresa) {
     status: fila.estado,
     note: fila.nota || "",
 
-    fiscal: {
-      cai: fila.cai_emision || "",
-      rangoDesde: fila.rango_desde_emision ?? "",
-      rangoHasta: fila.rango_hasta_emision ?? "",
-      fechaLimiteEmision: fila.fecha_limite_emision_emision || "",
-      correlativo: Number(fila.correlativo),
-      numero: fila.numero_factura,
-    },
+    /*
+      Si la venta no es fiscal, NO lleva bloque fiscal.
+
+      Antes se construía siempre, aunque cai_emision viniera vacío, y la
+      plantilla lo pintaba con `{sale.fiscal && …}`: un documento que no es
+      una factura autorizada acababa imprimiendo un «CAI» en blanco, que es
+      peor que no imprimir nada porque aparenta serlo.
+
+      Se mira la marca Y el CAI, no solo la marca, porque durante la
+      transición conviven dos caminos: el RPC de INV-3.2 escribe es_fiscal,
+      y el camino anterior —que el punto de venta sigue usando hasta
+      INV-3.3— sella cai_emision sin escribir la marca. Mirar solo una de
+      las dos dejaría fuera las facturas del otro.
+    */
+    isFiscal:
+      Boolean(fila.es_fiscal) ||
+      Boolean(String(fila.cai_emision || "").trim()),
+
+    fiscal:
+      Boolean(fila.es_fiscal) ||
+      Boolean(String(fila.cai_emision || "").trim())
+        ? {
+            cai: fila.cai_emision || "",
+            rangoDesde: fila.rango_desde_emision ?? "",
+            rangoHasta: fila.rango_hasta_emision ?? "",
+            fechaLimiteEmision: fila.fecha_limite_emision_emision || "",
+            correlativo: Number(fila.correlativo),
+            numero: fila.numero_factura,
+          }
+        : null,
 
     company: {
       name: empresa?.name || "",
