@@ -194,3 +194,53 @@ export async function esperarBloqueo(observador, pid, milisegundos = 5000) {
       `podrían gastar el mismo saldo.`
   )
 }
+
+/*
+  Dos operaciones de dos usuarios, cada una en su propia sesión y su
+  propia transacción, con la segunda obligada a esperar a la primera.
+
+  La primera hace su parte y se queda sin confirmar. La segunda sale
+  después, y no se sigue hasta que PostgreSQL confirme que está DETENIDA
+  esperando un candado: si la operación no serializara, esa espera
+  agotaría su tiempo y la prueba fallaría. Después la primera confirma y
+  se devuelve lo que respondió la segunda, que confirma si entró y deshace
+  si no.
+
+  `observador` es la conexión del dueño: un rol sin privilegios no ve la
+  espera de las sesiones ajenas en pg_stat_activity.
+*/
+export async function enDosSesiones(base, observador, { primera, segunda }) {
+  const a = await base.conectar()
+  const b = await base.conectar()
+
+  try {
+    await comoUsuario(a, primera.authId)
+    await comoUsuario(b, segunda.authId)
+
+    const pidB = (await b.query("select pg_backend_pid() as pid")).rows[0].pid
+
+    await a.query("begin")
+    await b.query("begin")
+
+    await primera.hacer(a)
+
+    // El rechazo de la segunda se recoge aquí mismo para que no quede suelto.
+    const deB = segunda.hacer(b).then(
+      (respuesta) => ({ respuesta }),
+      (error) => ({ error })
+    )
+
+    const espera = await esperarBloqueo(observador, pidB)
+
+    await a.query("commit")
+
+    const resultado = await deB
+
+    await b.query(resultado.error ? "rollback" : "commit")
+
+    return { ...resultado, espera }
+  } finally {
+    await a.end()
+    await b.end()
+  }
+}
