@@ -40,11 +40,20 @@ function Envoltura({ children }) {
   )
 }
 
-async function montarVentas(empresa = SIN_DATOS_FISCALES) {
+/*
+  Desde INV-3.3 la venta descuenta de la ubicación operativa del usuario:
+  la bodega tiene lo mismo que el catálogo, y se puede marcar como la
+  ubicación que emite factura fiscal.
+*/
+async function montarVentas(empresa = SIN_DATOS_FISCALES, { fiscal = false, fallarEn = {} } = {}) {
   const falso = montarDatos({
     productos: PRODUCTOS,
     clientes: CLIENTES,
     empresa,
+    ubicaciones: [{ id: "bodega", name: "Lunacell Bodega", type: "bodega", fiscal }],
+    existencias: PRODUCTOS.map((p) => ({ locationId: "bodega", productId: p.id, quantity: p.stock })),
+    ubicacionOperativa: "bodega",
+    fallarEn,
   })
 
   const vista = renderHook(() => useContext(SalesContext), {
@@ -192,7 +201,7 @@ describe("addSale: factura generada", () => {
 
     const factura = await facturar(result, ventaContado())
 
-    expect(factura.invoiceNumber).toBe("FAC-01000")
+    expect(factura.invoiceNumber).toBe("VTA-003000")
     expect(factura.fiscal).toBeNull()
     expect(factura.isFiscal).toBe(false)
   })
@@ -256,8 +265,21 @@ describe("addSale: factura generada", () => {
 })
 
 describe("addSale con datos fiscales", () => {
-  it("usa la numeración autorizada", async () => {
+  /*
+    Desde INV-3.2 el CAI no basta: la ubicación que vende tiene que estar
+    marcada como la que emite. Sin la marca, la venta sale interna.
+  */
+  it("con CAI pero sin ubicación fiscal sale como documento interno", async () => {
     const { result } = await montarVentas(EMPRESA_PRUEBA)
+
+    const factura = await facturar(result, ventaContado())
+
+    expect(factura.invoiceNumber).toMatch(/^VTA-d{6}$/)
+    expect(factura.isFiscal).toBe(false)
+  })
+
+  it("usa la numeración autorizada", async () => {
+    const { result } = await montarVentas(EMPRESA_PRUEBA, { fiscal: true })
 
     const factura = await facturar(result, ventaContado())
 
@@ -265,11 +287,93 @@ describe("addSale con datos fiscales", () => {
   })
 
   it("guarda una copia del CAI dentro de la factura", async () => {
-    const { result } = await montarVentas(EMPRESA_PRUEBA)
+    const { result } = await montarVentas(EMPRESA_PRUEBA, { fiscal: true })
 
     const factura = await facturar(result, ventaContado())
 
     expect(factura.fiscal.cai).toBe(EMPRESA_PRUEBA.cai)
+  })
+})
+
+describe("addSale con registrar_venta_ubicacion", () => {
+  const llamadasAlRpc = (falso) =>
+    falso.rpc.mock.calls.filter(([nombre]) => nombre === "registrar_venta_ubicacion")
+
+  it("manda una sola llamada con producto y cantidad, sin importes", async () => {
+    const { result, falso } = await montarVentas()
+
+    await act(async () => {
+      await result.current.addSale(ventaContado(), "clave-1")
+    })
+
+    const llamadas = llamadasAlRpc(falso)
+
+    expect(llamadas).toHaveLength(1)
+    expect(llamadas[0][1]).toMatchObject({
+      p_items: [{ producto_id: "p1", cantidad: 2 }],
+      p_forma_pago: "contado",
+      p_clave_idempotencia: "clave-1",
+    })
+    expect(llamadas[0][1]).not.toHaveProperty("p_subtotal")
+  })
+
+  it("descuenta la celda de la ubicación operativa", async () => {
+    const { result, falso } = await montarVentas()
+
+    await facturar(result, ventaContado())
+
+    const celda = falso.datos.inventario_ubicacion.find((c) => c.producto_id === "p1")
+
+    expect(celda.cantidad).toBe(8)
+  })
+
+  /*
+    El historial se recarga de la base después de vender: la factura que
+    devuelve addSale es la que quedó guardada, con sus renglones.
+  */
+  it("recarga el historial con la venta guardada y sus renglones", async () => {
+    const { result } = await montarVentas()
+
+    await facturar(result, ventaContado())
+
+    expect(result.current.sales[0].items[0].qty).toBe(2)
+  })
+
+  it("el mismo intento con la misma clave devuelve la misma factura", async () => {
+    const { result, falso } = await montarVentas()
+
+    let primera
+    let segunda
+
+    await act(async () => {
+      primera = await result.current.addSale(ventaContado(), "clave-2")
+      segunda = await result.current.addSale(ventaContado(), "clave-2")
+    })
+
+    expect(segunda.id).toBe(primera.id)
+    expect(falso.datos.ventas).toHaveLength(1)
+  })
+
+  it("un rechazo del servidor llega al POS con su mensaje y motivo", async () => {
+    const { result } = await montarVentas(SIN_DATOS_FISCALES, {
+      fallarEn: {
+        registrar_venta_ubicacion: {
+          code: "LV007",
+          message: "No hay suficiente «Martillo» en Lunacell Bodega: hay 1, se piden 2",
+        },
+      },
+    })
+
+    await expect(
+      act(async () => {
+        await result.current.addSale(ventaContado())
+      })
+    ).rejects.toMatchObject({
+      motivo: "existencia-insuficiente",
+      message: "No hay suficiente «Martillo» en Lunacell Bodega: hay 1, se piden 2",
+    })
+
+    expect(result.current.sales).toHaveLength(0)
   })
 })
 
