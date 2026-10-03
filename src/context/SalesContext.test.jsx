@@ -274,7 +274,7 @@ describe("addSale con datos fiscales", () => {
 
     const factura = await facturar(result, ventaContado())
 
-    expect(factura.invoiceNumber).toMatch(/^VTA-d{6}$/)
+    expect(factura.invoiceNumber).toMatch(/^VTA-\d{6}$/)
     expect(factura.isFiscal).toBe(false)
   })
 

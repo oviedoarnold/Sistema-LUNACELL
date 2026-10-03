@@ -442,7 +442,7 @@ describe("POS: venta registrada por el servidor", () => {
 
     await waitFor(() => expect(falso.datos.ventas).toHaveLength(1))
 
-    expect(falso.datos.ventas[0].numero_factura).toMatch(/^VTA-d{6}$/)
+    expect(falso.datos.ventas[0].numero_factura).toMatch(/^VTA-\d{6}$/)
     expect(falso.datos.ventas[0].ubicacion_id).toBe("bodega")
   })
 
