@@ -559,9 +559,10 @@ describe("o entra todo o no entra nada", () => {
     const cabeceras = await contar(db, "traslados")
     const movimientos = await contar(db, "movimientos_inventario")
 
+    // NOT VALID: las entradas de las pruebas anteriores no cuentan, solo las nuevas.
     await db.query(
       `alter table movimientos_inventario
-         add constraint prueba_sin_entradas check (tipo <> 'traslado_entrada')`
+         add constraint prueba_sin_entradas check (tipo <> 'traslado_entrada') not valid`
     )
 
     try {
