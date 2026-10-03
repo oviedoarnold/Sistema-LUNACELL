@@ -1,7 +1,5 @@
 import { supabase } from "../supabase"
 
-import { formatDocumentNumber, isFiscalConfigured } from "../../utils/fiscal"
-
 /*
   Acceso a facturas y abonos.
 
@@ -147,6 +145,10 @@ export const conFormaDeApp = (filas, empresa) =>
     .map((fila) => aVentaDeApp(fila, empresa))
     .sort((a, b) => b.timestamp - a.timestamp)
 
+/*
+  El número de las COTIZACIONES. Las ventas ya no lo piden: lo asigna
+  registrar_venta_ubicacion() dentro de su transacción.
+*/
 export async function pedirCorrelativo(tipo) {
   const { data, error } = await supabase.rpc("siguiente_correlativo", {
     p_tipo: tipo,
@@ -157,144 +159,93 @@ export async function pedirCorrelativo(tipo) {
   return Number(data)
 }
 
-const numeroDeFactura = (correlativo, fiscal) =>
-  isFiscalConfigured(fiscal)
-    ? formatDocumentNumber(correlativo, fiscal)
-    : `FAC-${String(correlativo).padStart(5, "0")}`
-
 /*
-  Guarda la factura, sus renglones y la salida de inventario. Si algo
-  falla después de crear la cabecera se borra: una factura sin renglones
-  descuadraría el reporte de ventas.
+  Los códigos con los que registrar_venta_ubicacion() distingue sus
+  rechazos. Se traducen aquí para que la pantalla no tenga que leer
+  SQLSTATE, igual que cobros.js con los del pago.
 */
-/*
-  Devuelve el documento que ya se emitio con esa clave, si lo hay.
-
-  Es lo que convierte a la operacion en idempotente: el segundo intento no
-  crea nada, encuentra el primero.
-*/
-async function ventaConClave(clave, empresaId) {
-  if (!clave) return null
-
-  const { data } = await supabase
-    .from("ventas")
-    .select("id")
-    .eq("empresa_id", empresaId)
-    .eq("clave_idempotencia", clave)
-    .maybeSingle()
-
-  return data?.id || null
+const MOTIVOS_DE_VENTA = {
+  LV001: "sin-ubicacion",
+  LV002: "ubicacion-inactiva",
+  LV003: "venta-invalida",
+  LV004: "credito-sin-cliente",
+  LV005: "clave-reusada",
+  LV006: "producto-invalido",
+  LV007: "existencia-insuficiente",
+  LV008: "ubicacion-no-vende",
+  42501: "sin-permiso",
 }
 
-export async function crearVenta(
-  venta,
-  { empresaId, usuarioId, empresa, clave = null }
-) {
-  /*
-    Antes de pedir correlativo: si esta venta ya se emitio, pedir otro
-    numero quemaria un correlativo de la numeracion autorizada para nada.
-  */
-  const yaEmitida = await ventaConClave(clave, empresaId)
+export class ErrorDeVenta extends Error {
+  constructor(mensaje, motivo, codigo) {
+    super(mensaje)
 
-  if (yaEmitida) return yaEmitida
+    this.name = "ErrorDeVenta"
+    this.motivo = motivo
+    this.codigo = codigo
+  }
+}
 
-  const fiscal = empresa?.fiscal
-  const correlativo = await pedirCorrelativo("factura")
+/*
+  Registra la venta y devuelve su id.
+
+  Es UNA llamada a registrar_venta_ubicacion(), que hace en una sola
+  transacción lo que antes orquestaba el navegador en cuatro pasos: pide
+  el número, guarda la cabecera y los renglones, descuenta la existencia
+  de la ubicación del usuario y anota la salida en el libro. Si algo falla
+  no queda nada, y no hay cabecera que borrar a mano.
+
+  Solo viaja lo que eligió el cajero: qué productos y cuántos, cómo paga y
+  a quién. Empresa, usuario, ubicación, precios, importes, número y si el
+  documento es fiscal los decide la base; mandarlos sería invitar a
+  manipularlos.
+
+  La clave identifica el intento de cobro. Si la red se cae sin respuesta
+  y el cajero reintenta con la misma, el servidor devuelve la venta que ya
+  existía —con `repetida`— en vez de emitir otra.
+*/
+export async function crearVenta(venta, { clave = null } = {}) {
   const esCredito = venta.paymentType === "credito"
 
-  const { data: cabecera, error } = await supabase
-    .from("ventas")
-    .insert({
-      empresa_id: empresaId,
-      cliente_id: venta.clientId || null,
-      usuario_id: usuarioId || null,
+  const { data, error } = await supabase.rpc("registrar_venta_ubicacion", {
+    p_items: (venta.items || []).map((item) => ({
+      producto_id: item.productId ?? item.id,
+      cantidad: Number(item.qty ?? item.quantity),
+    })),
+    p_forma_pago: venta.paymentType,
+    p_cliente_id: venta.clientId || null,
+    p_nombre_cliente: venta.customerName || null,
+    p_rtn_comprador: venta.rtn || "",
+    p_fecha_vencimiento: esCredito ? venta.dueDate || null : null,
+    p_nota: venta.note || "",
+    p_clave_idempotencia: clave,
+  })
 
-      numero_factura: numeroDeFactura(correlativo, fiscal),
-      correlativo,
+  if (error) {
+    const motivo = MOTIVOS_DE_VENTA[error.code]
 
-      nombre_cliente: venta.customerName || "Consumidor Final",
-      rtn_comprador: venta.rtn || "",
+    /*
+      Los rechazos de negocio llevan el mensaje del motor, que ya dice qué
+      hacer: cuánto hay y en qué ubicación, o que falta asignarla. El
+      código viaja también, para poder diagnosticar sin adivinar.
+    */
+    if (motivo) {
+      throw new ErrorDeVenta(error.message, motivo, error.code)
+    }
 
-      subtotal: venta.subtotal,
-      isv: venta.tax,
-      tasa_isv: venta.taxRate,
-      total: venta.total,
-
-      forma_pago: venta.paymentType,
-      fecha_vencimiento: esCredito ? venta.dueDate || null : null,
-      estado: esCredito ? "pendiente" : "pagada",
-
-      cai_emision: fiscal?.cai || "",
-      rango_desde_emision: fiscal?.rangoDesde || null,
-      rango_hasta_emision: fiscal?.rangoHasta || null,
-      fecha_limite_emision_emision: fiscal?.fechaLimiteEmision || null,
-
-      nota: venta.note || "",
-      clave_idempotencia: clave,
-    })
-    .select("id")
-    .single()
-
-  /*
-    23505 es la violacion de unicidad. Con clave, significa que otro
-    intento de esta misma venta gano la carrera: se devuelve el suyo.
-  */
-  if (error?.code === "23505" && clave) {
-    const emitidaPorOtroIntento = await ventaConClave(clave, empresaId)
-
-    if (emitidaPorOtroIntento) return emitidaPorOtroIntento
+    fallo(error, "registrar la venta")
   }
 
-  if (error) fallo(error, "registrar la venta")
-
-  try {
-    await guardarRenglones(cabecera.id, venta.items, empresaId)
-    await descargarInventario(cabecera.id, venta.items, empresaId, usuarioId)
-  } catch (problema) {
-    await supabase.from("ventas").delete().eq("id", cabecera.id)
-
-    throw problema
-  }
-
-  return cabecera.id
-}
-
-async function guardarRenglones(ventaId, items, empresaId) {
-  const { error } = await supabase.from("detalle_venta").insert(
-    items.map((item) => ({
-      empresa_id: empresaId,
-      venta_id: ventaId,
-      producto_id: item.productId,
-      nombre: item.name,
-      codigo: item.code || "",
-      cantidad: item.qty,
-      precio: item.price,
-      subtotal: item.subtotal,
-    }))
-  )
-
-  if (error) fallo(error, "guardar el detalle de la venta")
+  return data.venta_id
 }
 
 /*
-  La salida se anota como movimiento negativo: el stock es la suma del
-  libro, nunca una columna que se sobrescribe.
+  Aquí estaban ventaConClave(), guardarRenglones() y descargarInventario(),
+  y el borrado de compensación de crearVenta(). Se retiran y no se dejan
+  por si acaso: escribir la venta por partes desde el navegador es lo que
+  permitía una factura sin renglones, una salida sin ubicación o un número
+  gastado en una venta que no llegó a existir.
 */
-async function descargarInventario(ventaId, items, empresaId, usuarioId) {
-  const { error } = await supabase.from("movimientos_inventario").insert(
-    items.map((item) => ({
-      empresa_id: empresaId,
-      producto_id: item.productId,
-      usuario_id: usuarioId || null,
-      venta_id: ventaId,
-      tipo: "salida",
-      cantidad: -Math.abs(item.qty),
-      motivo: "Venta",
-    }))
-  )
-
-  if (error) fallo(error, "descargar el inventario de la venta")
-}
 
 /*
   Escribir un abono ya no se hace desde aquí.

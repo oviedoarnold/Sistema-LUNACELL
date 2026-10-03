@@ -9,12 +9,8 @@ import {
   crearVenta,
 } from "../lib/api/ventas"
 
-import { roundMoney } from "../utils/salesUtils"
-
 import { hasEnoughStock } from "../utils/cart"
 import { existenciaEnCatalogo } from "../utils/existencias"
-
-const ISV_POR_OMISION = 15
 
 function SalesProvider({ children }) {
   const { user } = useAuth()
@@ -30,7 +26,6 @@ function SalesProvider({ children }) {
   const [error, setError] = useState("")
 
   const empresaId = user?.empresa_id
-  const usuarioId = user?.id
 
   const cargando = Boolean(empresaId) && empresaCargada !== empresaId
 
@@ -121,46 +116,29 @@ function SalesProvider({ children }) {
     [buscarProducto]
   )
 
+  /*
+    Qué se lleva el cliente, y nada más: producto y cantidad. El precio, el
+    subtotal y el impuesto que muestra la pantalla son una vista previa;
+    los que quedan en la factura los calcula registrar_venta_ubicacion()
+    con el catálogo y la tasa de la empresa.
+  */
   const armarRenglones = useCallback(
     (items = []) =>
-      items.map((item) => {
-        const productId = item.productId ?? item.id
-        const producto = buscarProducto(productId)
-        const cantidad = Number(item.qty ?? item.quantity ?? 1)
-        const precio = Number(item.price ?? producto?.price ?? 0)
-
-        return {
-          productId,
-          id: productId,
-          code: producto?.code || "",
-          name: producto?.name || item.name || "Producto",
-          category: producto?.category || item.category || "",
-          qty: cantidad,
-          quantity: cantidad,
-          price: precio,
-          subtotal: roundMoney(precio * cantidad),
-        }
-      }),
-    [buscarProducto]
-  )
-
-  const calcularTotales = useCallback(
-    (renglones) => {
-      const subtotal = roundMoney(
-        renglones.reduce((suma, item) => suma + item.subtotal, 0)
-      )
-
-      const taxRate = Number(company?.taxRate ?? ISV_POR_OMISION)
-      const tax = roundMoney(subtotal * (taxRate / 100))
-
-      return { subtotal, tax, taxRate, total: roundMoney(subtotal + tax) }
-    },
-    [company]
+      items.map((item) => ({
+        productId: item.productId ?? item.id,
+        qty: Number(item.qty ?? item.quantity ?? 1),
+      })),
+    []
   )
 
   /*
-    El número de factura, el estado y la descarga de inventario los decide
-    la base. La pantalla solo manda lo que el cajero eligió.
+    El número de factura, los importes, el estado y la descarga de
+    inventario los decide la base. La pantalla solo manda lo que el cajero
+    eligió.
+
+    Las validaciones de aquí arriba son para avisar antes, no para
+    decidir: el servidor vuelve a comprobarlo todo, y el stock que manda
+    es el de la ubicación que vende, no el total del catálogo.
   */
   const addSale = useCallback(
     async (venta, clave = null) => {
@@ -171,7 +149,6 @@ function SalesProvider({ children }) {
       validarRenglones(venta.items)
 
       const renglones = armarRenglones(venta.items)
-      const totales = calcularTotales(renglones)
       const formaPago = venta.paymentType || venta.type || "contado"
 
       if (formaPago === "credito" && !venta.clientId) {
@@ -185,13 +162,15 @@ function SalesProvider({ children }) {
 
       const ventaId = await crearVenta(
         {
-          ...venta,
-          ...totales,
           items: renglones,
           paymentType: formaPago,
+          clientId: venta.clientId || null,
           customerName: nombreCliente,
+          rtn: venta.rtn || "",
+          dueDate: venta.dueDate || null,
+          note: venta.note || "",
         },
-        { empresaId, usuarioId, empresa: company, clave }
+        { clave }
       )
 
       const [listaVentas] = await Promise.all([
@@ -203,15 +182,7 @@ function SalesProvider({ children }) {
 
       return conFormaDeApp(listaVentas, company).find((v) => v.id === ventaId)
     },
-    [
-      validarRenglones,
-      armarRenglones,
-      calcularTotales,
-      empresaId,
-      usuarioId,
-      company,
-      refrescarProductos,
-    ]
+    [validarRenglones, armarRenglones, company, refrescarProductos]
   )
 
   const buscarVenta = useCallback(
