@@ -20,6 +20,7 @@ export const config = {
     "/pos",
     "/products",
     "/inventory",
+    "/inventory/transfers",
     "/clients",
     "/suppliers",
     "/sales-history",

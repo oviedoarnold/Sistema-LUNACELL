@@ -6,6 +6,10 @@
       "destination": "/login.html"
     },
     {
+      "source": "/inventory/transfers",
+      "destination": "/index.html"
+    },
+    {
       "source": "/(demo|dashboard|pos|products|inventory|clients|suppliers|sales-history|receivables|quotes|locations|settings)",
       "destination": "/index.html"
     },
