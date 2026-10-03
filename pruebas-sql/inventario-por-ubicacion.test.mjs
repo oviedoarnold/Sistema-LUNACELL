@@ -41,6 +41,26 @@ afterAll(async () => {
 })
 
 /* Una empresa con su bodega, su camión y un producto. */
+/*
+  Siembra un movimiento como los que existían ANTES de la 0019: sin
+  ubicación, que es justo lo que esta migración describe como historia.
+
+  Desde la 0019 un disparador rechaza todo movimiento nuevo sin ubicación,
+  así que la siembra lo salta poniendo la sesión en modo réplica, que
+  desactiva los disparadores solo para esta conexión de dueño. Es la única
+  forma honesta de fabricar historia: el esquema de hoy no deja crearla, y
+  no debe dejar.
+*/
+async function sembrarHistorico(sql, valores) {
+  await db.query("set session_replication_role = replica")
+
+  try {
+    await db.query(sql, valores)
+  } finally {
+    await db.query("set session_replication_role = origin")
+  }
+}
+
 async function escenario({ conBodega = true, stock = 0 } = {}) {
   const { empresa, usuario, authId } = await crearEmpresa(db)
 
@@ -71,7 +91,7 @@ async function escenario({ conBodega = true, stock = 0 } = {}) {
   ).rows[0].id
 
   if (stock !== 0) {
-    await db.query(
+    await sembrarHistorico(
       `insert into movimientos_inventario (empresa_id, producto_id, tipo, cantidad, motivo)
        values ($1, $2, 'entrada', $3, 'Existencia inicial')`,
       [empresa, producto, stock]
@@ -448,7 +468,7 @@ describe("la apertura", () => {
   it("18. aborta si el stock histórico es negativo", async () => {
     const e = await escenario({ stock: 5 })
 
-    await db.query(
+    await sembrarHistorico(
       `insert into movimientos_inventario (empresa_id, producto_id, tipo, cantidad, motivo)
        values ($1,$2,'salida',-9,'prueba')`,
       [e.empresa, e.producto]
