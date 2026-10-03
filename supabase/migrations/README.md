@@ -24,6 +24,7 @@ duda de si ya se aplicó, correrla de nuevo es seguro.
 | 0017 | Qué ubicaciones venden y cuál emite factura fiscal: `vende`, `emite_fiscal`, contador interno aparte y numeración `VTA-` para el documento no fiscal |
 | 0018 | `registrar_movimiento_ubicacion()`: las entradas y ajustes de existencia pasan a hacerse siempre en una ubicación, moviendo la celda y el libro en una sola transacción |
 | 0019 | El libro de inventario solo se escribe por las funciones: se retiran insert, update y delete a `authenticated` y `anon`, y un disparador exige ubicación en todo movimiento nuevo sin tocar los históricos |
+| 0020 | Traslados entre ubicaciones: `traslados`, `traslado_detalle`, `movimientos_inventario.traslado_id`, los tipos `traslado_salida` y `traslado_entrada`, y `registrar_traslado()`, que descuenta el origen y suma al destino en una sola transacción |
 
 ## Instalación en una base vacía
 
@@ -52,6 +53,7 @@ LUNACELL.
 | 0017 | **Correr.** Añade dos marcas a las ubicaciones —todas venden, ninguna es fiscal— y el contador interno, que arranca detrás de las ventas que ya existan. No marca ninguna ubicación como fiscal: eso lo decide el dueño |
 | 0018 | **Correr.** Solo crea una función; no toca ningún dato. Revoca su ejecución a `anon` |
 | 0019 | **Correr, después de desplegar el frontend de INV-3.3.** Con el punto de venta anterior en producción dejaría de facturar. No toca ningún dato |
+| 0020 | **Correr, antes de desplegar el frontend de INV-4.** Solo agrega: tablas nuevas sin datos, una columna nula, dos tipos de movimiento y una función. No toca ningún dato |
 
 Ninguna de las que se corren borra datos: solo la 0010 tiene un `delete`,
 y es de las que se omiten. Lo que sí hacen varias es recrear vistas y
