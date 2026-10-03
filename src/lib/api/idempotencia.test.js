@@ -19,12 +19,33 @@ const EMPRESA_FILA = {
   nombre: "Ferretería",
   proximo_correlativo_factura: 1000,
   proximo_correlativo_cotizacion: 2000,
+  proximo_correlativo_interno: 3000,
 }
+
+/*
+  Desde INV-3.3 la venta la registra registrar_venta_ubicacion(), que
+  descuenta de la ubicación del usuario en sesión: hace falta un usuario
+  con ubicación y existencia en ella.
+*/
+const AUTH = "auth-1"
 
 const montar = () => {
   const falso = crearSupabaseFalso({
+    sesionInicial: { user: { id: AUTH } },
     tablas: {
       empresas: [EMPRESA_FILA],
+      usuarios: [
+        { id: USUARIO, auth_id: AUTH, empresa_id: EMPRESA, activo: true, ubicacion_id: "bodega" },
+      ],
+      ubicaciones: [
+        { id: "bodega", empresa_id: EMPRESA, nombre: "Bodega", tipo: "bodega", activa: true, vende: true },
+      ],
+      productos: [
+        { id: "p1", empresa_id: EMPRESA, codigo: "M-001", nombre: "Martillo", precio: 100, activo: true },
+      ],
+      inventario_ubicacion: [
+        { empresa_id: EMPRESA, ubicacion_id: "bodega", producto_id: "p1", cantidad: 50 },
+      ],
       ventas: [],
       detalle_venta: [],
       abonos: [],
@@ -69,7 +90,7 @@ const cotizacion = () => ({
   items: [RENGLON],
 })
 
-const contexto = { empresaId: EMPRESA, usuarioId: USUARIO, empresa: {} }
+const contexto = {}
 
 beforeEach(() => {
   vi.spyOn(console, "error").mockImplementation(() => {})
@@ -99,9 +120,10 @@ describe("facturar dos veces con la misma clave", () => {
   })
 
   /*
-    El correlativo pertenece a la numeración autorizada por el SAR. Gastar
-    uno en un reintento dejaría un hueco en la secuencia, que es justo lo
-    que esa numeración no admite.
+    Un número gastado en un reintento deja un hueco en la secuencia. En la
+    numeración autorizada por el SAR eso no se admite, y en la interna
+    tampoco se quiere. Sin ubicación fiscal la venta usa la interna, y la
+    autorizada no se toca.
   */
   it("no quema un correlativo en el reintento", async () => {
     const falso = montar()
@@ -109,7 +131,35 @@ describe("facturar dos veces con la misma clave", () => {
     await crearVenta(venta(), { ...contexto, clave: "intento-1" })
     await crearVenta(venta(), { ...contexto, clave: "intento-1" })
 
-    expect(falso.datos.empresas[0].proximo_correlativo_factura).toBe(1001)
+    expect(falso.datos.empresas[0].proximo_correlativo_interno).toBe(3001)
+    expect(falso.datos.empresas[0].proximo_correlativo_factura).toBe(1000)
+  })
+
+  it("no descuenta la existencia de la ubicación dos veces", async () => {
+    const falso = montar()
+
+    await crearVenta(venta(), { ...contexto, clave: "intento-1" })
+    await crearVenta(venta(), { ...contexto, clave: "intento-1" })
+
+    expect(falso.datos.inventario_ubicacion[0].cantidad).toBe(48)
+  })
+
+  /*
+    Reutilizar la clave para otra venta no es un reintento: el motor lo
+    rechaza en vez de devolver la venta vieja como si fuera la nueva.
+  */
+  it("la misma clave con otros productos se rechaza", async () => {
+    const falso = montar()
+
+    await crearVenta(venta(), { ...contexto, clave: "intento-1" })
+
+    const otra = { ...venta(), items: [{ ...RENGLON, qty: 5 }] }
+
+    await expect(
+      crearVenta(otra, { ...contexto, clave: "intento-1" })
+    ).rejects.toMatchObject({ motivo: "clave-reusada" })
+
+    expect(falso.datos.ventas).toHaveLength(1)
   })
 
   it("no descarga el inventario dos veces", async () => {

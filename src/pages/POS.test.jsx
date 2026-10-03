@@ -37,7 +37,19 @@ const CLIENTES = [
   { id: "c1", name: "Ferremax", rtn: "0801199912345", phone: "9999-0000", address: "SPS", email: "" },
 ]
 
-function renderPOS({ saleDraft = null } = {}) {
+/*
+  Desde INV-3.3 la venta descuenta de la ubicación operativa del usuario.
+  Por omisión la bodega tiene lo mismo que el catálogo; un caso puede
+  dejarle menos para ver el rechazo del servidor.
+*/
+const existenciasEnBodega = (cambios = {}) =>
+  PRODUCTOS.map((p) => ({
+    locationId: "bodega",
+    productId: p.id,
+    quantity: cambios[p.id] ?? p.stock,
+  }))
+
+function renderPOS({ saleDraft = null, existencias = existenciasEnBodega() } = {}) {
   const entrada = saleDraft
     ? [{ pathname: "/pos", state: { saleDraft } }]
     : ["/pos"]
@@ -54,7 +66,14 @@ function renderPOS({ saleDraft = null } = {}) {
         </ClientsProvider>
       </ProductProvider>
     </AuthProvider>,
-    { productos: PRODUCTOS, clientes: CLIENTES, esperar: ["ventas"] }
+    {
+      productos: PRODUCTOS,
+      clientes: CLIENTES,
+      ubicaciones: [{ id: "bodega", name: "Lunacell Bodega", type: "bodega" }],
+      existencias,
+      ubicacionOperativa: "bodega",
+      esperar: ["ventas"],
+    }
   )
 }
 
@@ -400,5 +419,43 @@ describe("POS: validación previa a facturar", () => {
       expect(screen.getByText(/vista previa de factura/i)).toBeInTheDocument()
     )
     expect(avisoDeExistencias()).toBeUndefined()
+  })
+})
+
+/*
+  El catálogo todavía muestra el stock global, pero quien decide es la
+  existencia de la ubicación que vende. Si el servidor rechaza, el cajero
+  ve el motivo tal cual —cuánto hay y dónde— y no se emite nada.
+*/
+describe("POS: venta registrada por el servidor", () => {
+  const generarFactura = () =>
+    fireEvent.click(screen.getByRole("button", { name: /generar factura/i }))
+
+  const avisoDeError = () =>
+    Swal.fire.mock.calls.find(([opciones]) => opciones?.icon === "error")
+
+  it("emite la factura con el número que devuelve el servidor", async () => {
+    const { falso } = await renderPOS()
+
+    agregar("Martillo de uña")
+    generarFactura()
+
+    await waitFor(() => expect(falso.datos.ventas).toHaveLength(1))
+
+    expect(falso.datos.ventas[0].numero_factura).toMatch(/^VTA-\d{6}$/)
+    expect(falso.datos.ventas[0].ubicacion_id).toBe("bodega")
+  })
+
+  it("si la ubicación no alcanza, muestra el motivo del servidor y no emite", async () => {
+    const { falso } = await renderPOS({ existencias: existenciasEnBodega({ p1: 0 }) })
+    Swal.fire.mockClear()
+
+    agregar("Martillo de uña")
+    generarFactura()
+
+    await waitFor(() => expect(avisoDeError()).toBeTruthy())
+
+    expect(avisoDeError()[0].text).toMatch(/no hay suficiente «martillo de uña» en lunacell bodega/i)
+    expect(falso.datos.ventas).toHaveLength(0)
   })
 })

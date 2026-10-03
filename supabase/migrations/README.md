@@ -23,6 +23,7 @@ duda de si ya se aplicó, correrla de nuevo es seguro.
 | 0016 | `registrar_venta_ubicacion()`: la venta pasa a ser una operación atómica que descuenta de la ubicación operativa, con candado y sin aceptar empresa, usuario, ubicación ni importes del navegador |
 | 0017 | Qué ubicaciones venden y cuál emite factura fiscal: `vende`, `emite_fiscal`, contador interno aparte y numeración `VTA-` para el documento no fiscal |
 | 0018 | `registrar_movimiento_ubicacion()`: las entradas y ajustes de existencia pasan a hacerse siempre en una ubicación, moviendo la celda y el libro en una sola transacción |
+| 0019 | El libro de inventario solo se escribe por las funciones: se retiran insert, update y delete a `authenticated` y `anon`, y un disparador exige ubicación en todo movimiento nuevo sin tocar los históricos |
 
 ## Instalación en una base vacía
 
@@ -50,6 +51,7 @@ LUNACELL.
 | 0016 | **Correr.** Solo crea funciones; no toca ningún dato. Nadie la llama todavía: el punto de venta sigue usando el camino anterior hasta INV-3.3 |
 | 0017 | **Correr.** Añade dos marcas a las ubicaciones —todas venden, ninguna es fiscal— y el contador interno, que arranca detrás de las ventas que ya existan. No marca ninguna ubicación como fiscal: eso lo decide el dueño |
 | 0018 | **Correr.** Solo crea una función; no toca ningún dato. Revoca su ejecución a `anon` |
+| 0019 | **Correr, después de desplegar el frontend de INV-3.3.** Con el punto de venta anterior en producción dejaría de facturar. No toca ningún dato |
 
 Ninguna de las que se corren borra datos: solo la 0010 tiene un `delete`,
 y es de las que se omiten. Lo que sí hacen varias es recrear vistas y

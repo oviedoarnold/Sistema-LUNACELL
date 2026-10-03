@@ -65,7 +65,18 @@ const montar = ({ existenciaInicial = 10, fallarEn = {} } = {}) => {
           nombre: "LUNACELL",
           proximo_correlativo_factura: 1000,
           proximo_correlativo_cotizacion: 2000,
+          proximo_correlativo_interno: 3000,
         },
+      ],
+      /*
+        Desde INV-3.3 la venta descuenta de la ubicación del usuario en
+        sesión, así que hace falta uno con ubicación.
+      */
+      usuarios: [
+        { id: USUARIO, auth_id: "auth-1", empresa_id: EMPRESA, activo: true, ubicacion_id: "bodega" },
+      ],
+      ubicaciones: [
+        { id: "bodega", empresa_id: EMPRESA, nombre: "Lunacell Bodega", tipo: "bodega", activa: true, vende: true },
       ],
       productos: [CARGADOR],
       movimientos_inventario: [entradaInicial(existenciaInicial)],
@@ -85,6 +96,7 @@ const montar = ({ existenciaInicial = 10, fallarEn = {} } = {}) => {
       detalle_venta: [],
       abonos: [],
     },
+    sesionInicial: { user: { id: "auth-1" } },
     fallarEn,
   })
 
@@ -93,7 +105,7 @@ const montar = ({ existenciaInicial = 10, fallarEn = {} } = {}) => {
   return falso
 }
 
-const contexto = { empresaId: EMPRESA, usuarioId: USUARIO, empresa: {} }
+const contexto = {}
 
 const ventaDe = (cantidad) => ({
   items: [
@@ -174,17 +186,29 @@ describe("una venta descuenta exactamente lo vendido", () => {
   })
 
   /*
-    Nada en la base impide vender más de lo que hay: la única defensa
-    contra la sobreventa vive hoy en el navegador. Se fija aquí porque es
-    justo lo que el inventario por ubicación va a cerrar en PostgreSQL, y
-    entonces esta prueba tendrá que cambiar a propósito.
+    Esta prueba decía «hoy nada impide que la existencia quede negativa»,
+    y anunciaba que cambiaría a propósito cuando el inventario por
+    ubicación lo cerrara en PostgreSQL. INV-3.3 es ese cambio: el RPC
+    rechaza la venta y no toca nada.
   */
-  it("hoy nada impide que la existencia quede negativa", async () => {
-    montar({ existenciaInicial: 2 })
+  it("vender más de lo que hay en la ubicación se rechaza y no toca nada", async () => {
+    const falso = montar({ existenciaInicial: 2 })
 
-    await crearVenta(ventaDe(5), contexto)
+    await expect(crearVenta(ventaDe(5), contexto)).rejects.toMatchObject({
+      motivo: "existencia-insuficiente",
+    })
 
-    expect(await existenciaDelCargador()).toBe(-3)
+    expect(await existenciaDelCargador()).toBe(2)
+    expect(falso.datos.inventario_ubicacion[0].cantidad).toBe(2)
+  })
+
+  it("la salida queda en la ubicación de quien vende y descuenta su celda", async () => {
+    const falso = montar({ existenciaInicial: 10 })
+
+    await crearVenta(ventaDe(3), contexto)
+
+    expect(salidas(falso)[0].ubicacion_id).toBe("bodega")
+    expect(falso.datos.inventario_ubicacion[0].cantidad).toBe(7)
   })
 })
 
@@ -250,110 +274,71 @@ describe("el ajuste manual registra únicamente la diferencia", () => {
 })
 
 /*
-  crearVenta escribe en tres pasos —cabecera, renglones y movimientos— y
-  los orquesta el navegador. Cuando uno de los dos últimos falla, borra la
-  cabecera a mano para no dejar una factura a medias.
+  Hasta INV-3.3, crearVenta escribía en tres pasos —cabecera, renglones y
+  movimientos— y, si uno fallaba, borraba la cabecera a mano. Esa
+  compensación era frágil por diseño: una segunda llamada que podía fallar
+  a su vez, y el número ya pedido no se devolvía.
 
-  Esa compensación es frágil por diseño: es una segunda llamada que puede
-  fallar a su vez. Una fase posterior la reemplaza por una transacción en
-  PostgreSQL. Estas pruebas fijan lo que hace hoy para que el cambio se
-  pueda comparar contra algo.
+  Ahora la venta es una sola llamada a registrar_venta_ubicacion(), que es
+  una transacción: o entra todo o no entra nada, y el navegador no tiene
+  nada que deshacer.
 */
-describe("cuando falla una parte de la venta", () => {
-  const errorDeBase = { message: "sin permiso", code: "42501" }
+describe("cuando la venta falla", () => {
+  const errorDeBase = { message: "connection reset" }
 
-  /*
-    Los dos pasos que pueden fallar despues de insertar la cabecera —el
-    detalle y la descarga— se deshacen igual: propagan el fallo, borran la
-    cabecera y dejan la existencia como estaba. Ese contrato compartido se
-    describe una sola vez, parametrizado por que se rompe y con que mensaje.
+  const montarConFalla = () =>
+    montar({ fallarEn: { registrar_venta_ubicacion: errorDeBase } })
 
-    `casosPropios` recibe el montaje para lo que cada paso tiene de suyo,
-    que es lo unico que los distingue.
-  */
-  const describeVentaQueSeDeshace = (
-    nombre,
-    { fallarEn, mensaje },
-    casosPropios = () => {}
-  ) =>
-    describe(nombre, () => {
-      const montarConFalla = () => montar({ fallarEn })
+  it("propaga el fallo en lugar de devolver una factura", async () => {
+    montarConFalla()
 
-      it("propaga el fallo en lugar de devolver una factura", async () => {
-        montarConFalla()
+    await expect(crearVenta(ventaDe(3), contexto)).rejects.toThrow(
+      "No se pudo registrar la venta."
+    )
+  })
 
-        await expect(crearVenta(ventaDe(3), contexto)).rejects.toThrow(mensaje)
-      })
-
-      it("borra la cabecera que ya había insertado", async () => {
-        const falso = montarConFalla()
-
-        await expect(crearVenta(ventaDe(3), contexto)).rejects.toThrow()
-
-        expect(falso.datos.ventas).toHaveLength(0)
-      })
-
-      it("deja la existencia como estaba", async () => {
-        montarConFalla()
-
-        await expect(crearVenta(ventaDe(3), contexto)).rejects.toThrow()
-
-        expect(await existenciaDelCargador()).toBe(10)
-      })
-
-      casosPropios(montarConFalla)
-    })
-
-  describeVentaQueSeDeshace(
-    "falla el detalle de la factura",
-    {
-      fallarEn: { detalle_venta: errorDeBase },
-      mensaje: "No se pudo guardar el detalle de la venta.",
-    },
-    (montarConFalla) => {
-      it("no descarga el inventario", async () => {
-        const falso = montarConFalla()
-
-        await expect(crearVenta(ventaDe(3), contexto)).rejects.toThrow()
-
-        expect(salidas(falso)).toHaveLength(0)
-      })
-    }
-  )
-
-  describeVentaQueSeDeshace(
-    "falla la descarga de inventario",
-    {
-      fallarEn: { movimientos_inventario: { insert: errorDeBase } },
-      mensaje: "No se pudo descargar el inventario de la venta.",
-    },
-    (montarConFalla) => {
-      /*
-        El detalle sí alcanzó a guardarse y la compensación no lo borra: se
-        apoya en el borrado en cascada de PostgreSQL, que el doble no imita.
-        Queda anotado porque es exactamente la clase de suposición que una
-        transacción de verdad vuelve innecesaria.
-      */
-      it("no borra por su cuenta los renglones ya guardados", async () => {
-        const falso = montarConFalla()
-
-        await expect(crearVenta(ventaDe(3), contexto)).rejects.toThrow()
-
-        expect(falso.datos.detalle_venta).toHaveLength(1)
-      })
-    }
-  )
-
-  /*
-    El correlativo se pide antes de insertar. Si la venta se deshace, ese
-    número ya se gastó y la siguiente factura salta. Es comportamiento
-    actual, no un defecto que esta fase venga a corregir.
-  */
-  it("el correlativo ya pedido no se devuelve", async () => {
-    const falso = montar({ fallarEn: { detalle_venta: errorDeBase } })
+  it("no deja cabecera, renglones ni salidas", async () => {
+    const falso = montarConFalla()
 
     await expect(crearVenta(ventaDe(3), contexto)).rejects.toThrow()
 
-    expect(falso.datos.empresas[0].proximo_correlativo_factura).toBe(1001)
+    expect(falso.datos.ventas).toHaveLength(0)
+    expect(falso.datos.detalle_venta).toHaveLength(0)
+    expect(salidas(falso)).toHaveLength(0)
+  })
+
+  it("deja la existencia como estaba", async () => {
+    const falso = montarConFalla()
+
+    await expect(crearVenta(ventaDe(3), contexto)).rejects.toThrow()
+
+    expect(await existenciaDelCargador()).toBe(10)
+    expect(falso.datos.inventario_ubicacion[0].cantidad).toBe(10)
+  })
+
+  /*
+    El navegador ya no borra nada: no hay cabecera suya que deshacer. Es
+    la prueba de que la compensación desapareció, no solo de que no hizo
+    falta esta vez.
+  */
+  it("no intenta borrar nada por su cuenta", async () => {
+    const falso = montarConFalla()
+
+    await expect(crearVenta(ventaDe(3), contexto)).rejects.toThrow()
+
+    expect(falso.from).not.toHaveBeenCalledWith("ventas")
+  })
+
+  /*
+    Antes el correlativo se pedía antes de insertar y una venta deshecha
+    lo dejaba gastado. Ahora se pide dentro de la transacción.
+  */
+  it("una venta rechazada no consume número", async () => {
+    const falso = montar({ existenciaInicial: 1 })
+
+    await expect(crearVenta(ventaDe(3), contexto)).rejects.toThrow()
+
+    expect(falso.datos.empresas[0].proximo_correlativo_interno).toBe(3000)
+    expect(falso.datos.empresas[0].proximo_correlativo_factura).toBe(1000)
   })
 })

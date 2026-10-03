@@ -39,6 +39,7 @@ export const EMPRESA_PRUEBA = {
   fecha_limite_emision: "2027-12-31",
   proximo_correlativo_factura: 1000,
   proximo_correlativo_cotizacion: 2000,
+  proximo_correlativo_interno: 3000,
 }
 
 const USUARIO_PRUEBA = {
@@ -76,6 +77,7 @@ export function aFilaDeEmpresa(empresa, { correlativoFactura = 1000 } = {}) {
     fecha_limite_emision: fiscal.fechaLimiteEmision || null,
     proximo_correlativo_factura: correlativoFactura,
     proximo_correlativo_cotizacion: 2000,
+    proximo_correlativo_interno: 3000,
   }
 }
 
@@ -137,6 +139,8 @@ const aFilaDeUbicacion = (ubicacion) => ({
   nombre: ubicacion.name,
   tipo: ubicacion.type || "bodega",
   activa: ubicacion.active !== false,
+  vende: ubicacion.sells !== false,
+  emite_fiscal: ubicacion.fiscal === true,
   creada_en: "2026-01-01",
 })
 
@@ -259,11 +263,17 @@ export function montarDatos({
   empresa = EMPRESA_PRUEBA,
   conSesion = true,
   fallarEn = {},
+  /*
+    Desde dónde vende el usuario de prueba. Sin ella, registrar una venta
+    se rechaza igual que en la base (LV001): el punto de venta descuenta de
+    la existencia de esa ubicación.
+  */
+  ubicacionOperativa = null,
 } = {}) {
   const falso = crearSupabaseFalso({
     tablas: {
       empresas: empresa ? [empresa] : [],
-      usuarios: [USUARIO_PRUEBA],
+      usuarios: [{ ...USUARIO_PRUEBA, ubicacion_id: ubicacionOperativa }],
       permisos_usuario: [],
       productos: productos.map(aFilaDeProducto),
       movimientos_inventario: productos
