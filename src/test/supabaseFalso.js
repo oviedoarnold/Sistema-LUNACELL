@@ -376,6 +376,282 @@ export function crearSupabaseFalso({
   }
 
   /*
+    La venta por ubicación, como registrar_venta_ubicacion() desde la 0017:
+    la ubicación sale del usuario de la sesión, los importes del catálogo y
+    de la empresa, y el número del contador que corresponde. Escribe la
+    venta, su detalle, la salida en el libro y el descuento de la celda, o
+    nada.
+
+    No reproduce candados ni RLS: eso se prueba contra el motor real en
+    pruebas-sql. Sí reproduce los rechazos con sus códigos, porque son lo
+    que la pantalla tiene que traducir.
+  */
+  const rechazo = (code, message) => ({ data: null, error: { code, message } })
+
+  const redondear = (n) => Math.round(Number(n) * 100) / 100
+
+  const soloDigitos = (valor, ancho) =>
+    String(valor ?? "").replace(/\D/g, "").padStart(ancho, "0").slice(-ancho)
+
+  const huellaDe = (forma, cliente, renglones) =>
+    `${forma}|${cliente || "-"}|` +
+    renglones
+      .map((r) => `${r.producto_id}x${r.cantidad}`)
+      .sort()
+      .join(",")
+
+  const venderEnUbicacion = ({
+    p_items,
+    p_forma_pago,
+    p_cliente_id = null,
+    p_nombre_cliente = null,
+    p_rtn_comprador = "",
+    p_fecha_vencimiento = null,
+    p_nota = "",
+    p_clave_idempotencia = null,
+  }) => {
+    const usuario = (datos.usuarios || []).find(
+      (u) => u.auth_id === sesion?.user?.id && u.activo !== false
+    )
+
+    if (!usuario) {
+      return rechazo("42501", "Solo un usuario activo de una empresa puede registrar ventas")
+    }
+
+    if (!usuario.ubicacion_id) {
+      return rechazo(
+        "LV001",
+        "No tienes una ubicación operativa asignada. Pide que te asignen desde dónde trabajas antes de facturar."
+      )
+    }
+
+    const empresa = (datos.empresas || []).find((e) => e.id === usuario.empresa_id)
+    const ubicacion = (datos.ubicaciones || []).find(
+      (u) => u.id === usuario.ubicacion_id && u.empresa_id === usuario.empresa_id
+    )
+
+    if (!empresa || !ubicacion) {
+      return rechazo("42501", "La ubicación operativa no pertenece a tu empresa")
+    }
+
+    if (ubicacion.activa === false) {
+      return rechazo("LV002", `La ubicación «${ubicacion.nombre}» está desactivada y no puede facturar.`)
+    }
+
+    if (ubicacion.vende === false) {
+      return rechazo("LV008", `La ubicación «${ubicacion.nombre}» no está habilitada para vender.`)
+    }
+
+    const forma = p_forma_pago || "contado"
+
+    if (!Array.isArray(p_items) || p_items.length === 0) {
+      return rechazo("LV003", "La venta no tiene renglones")
+    }
+
+    if (!["contado", "credito"].includes(forma)) {
+      return rechazo("LV003", `Forma de pago desconocida: ${forma}`)
+    }
+
+    if (forma === "credito" && !p_cliente_id) {
+      return rechazo("LV004", "Para una venta a crédito debes seleccionar un cliente registrado")
+    }
+
+    // Mismo producto en dos renglones: se suman antes de comprobar nada.
+    const agrupado = new Map()
+
+    for (const item of p_items) {
+      agrupado.set(
+        item.producto_id,
+        (agrupado.get(item.producto_id) || 0) + Number(item.cantidad)
+      )
+    }
+
+    const pedido = [...agrupado].map(([producto_id, cantidad]) => ({ producto_id, cantidad }))
+
+    if (pedido.some((r) => !(r.cantidad > 0))) {
+      return rechazo("LV003", "La cantidad de cada producto debe ser mayor que cero")
+    }
+
+    if (p_clave_idempotencia) {
+      const previa = (datos.ventas || []).find(
+        (v) => v.empresa_id === empresa.id && v.clave_idempotencia === p_clave_idempotencia
+      )
+
+      if (previa) {
+        const renglonesPrevios = (datos.detalle_venta || []).filter(
+          (d) => d.venta_id === previa.id
+        )
+
+        if (
+          huellaDe(previa.forma_pago, previa.cliente_id, renglonesPrevios) !==
+          huellaDe(forma, p_cliente_id, pedido)
+        ) {
+          return rechazo(
+            "LV005",
+            `La clave ${p_clave_idempotencia} ya se usó para una venta distinta de esta empresa`
+          )
+        }
+
+        return {
+          data: {
+            venta_id: previa.id,
+            numero_factura: previa.numero_factura,
+            correlativo: previa.correlativo,
+            ubicacion_id: previa.ubicacion_id,
+            es_fiscal: Boolean(previa.es_fiscal),
+            subtotal: previa.subtotal,
+            isv: previa.isv,
+            total: previa.total,
+            repetida: true,
+          },
+          error: null,
+        }
+      }
+    }
+
+    const celdas = datos.inventario_ubicacion || []
+    let subtotal = 0
+
+    for (const renglon of pedido) {
+      const producto = (datos.productos || []).find(
+        (p) => p.id === renglon.producto_id && p.empresa_id === empresa.id && p.activo !== false
+      )
+
+      if (!producto) {
+        return rechazo("LV006", "Uno de los productos no existe o está inactivo")
+      }
+
+      const celda = celdas.find(
+        (c) => c.ubicacion_id === ubicacion.id && c.producto_id === renglon.producto_id
+      )
+      const disponible = celda ? Number(celda.cantidad) : 0
+
+      if (disponible < renglon.cantidad) {
+        return rechazo(
+          "LV007",
+          `No hay suficiente «${producto.nombre}» en ${ubicacion.nombre}: hay ${disponible}, se piden ${renglon.cantidad}`
+        )
+      }
+
+      renglon.producto = producto
+      subtotal += redondear(Number(producto.precio) * renglon.cantidad)
+    }
+
+    const tasa = empresa.tasa_isv ?? 15
+    subtotal = redondear(subtotal)
+    const isv = redondear((subtotal * tasa) / 100)
+    const total = redondear(subtotal + isv)
+
+    const fiscal =
+      ubicacion.emite_fiscal === true &&
+      String(empresa.cai || "").trim() !== "" &&
+      Number(empresa.rango_hasta || 0) > 0 &&
+      Boolean(empresa.fecha_limite_emision)
+
+    // Cada documento consume su propio contador, y solo si la venta entra.
+    const columna = fiscal ? "proximo_correlativo_factura" : "proximo_correlativo_interno"
+    const correlativo = Number(empresa[columna] ?? 1)
+
+    empresa[columna] = correlativo + 1
+
+    const numero = fiscal
+      ? [
+          soloDigitos(empresa.establecimiento, 3),
+          soloDigitos(empresa.punto_emision, 3),
+          soloDigitos(empresa.tipo_documento, 2),
+          soloDigitos(correlativo, 8),
+        ].join("-")
+      : `VTA-${String(correlativo).padStart(6, "0")}`
+
+    const credito = forma === "credito"
+
+    const venta = {
+      id: siguienteId(),
+      ...valoresPorOmision("ventas"),
+      empresa_id: empresa.id,
+      cliente_id: p_cliente_id,
+      usuario_id: usuario.id,
+      ubicacion_id: ubicacion.id,
+      numero_factura: numero,
+      correlativo,
+      es_fiscal: fiscal,
+      nombre_cliente: String(p_nombre_cliente || "").trim() || "Consumidor Final",
+      rtn_comprador: p_rtn_comprador || "",
+      subtotal,
+      isv,
+      tasa_isv: tasa,
+      total,
+      forma_pago: forma,
+      fecha_vencimiento: credito ? p_fecha_vencimiento : null,
+      estado: credito ? "pendiente" : "pagada",
+      cai_emision: fiscal ? empresa.cai || "" : "",
+      rango_desde_emision: fiscal ? empresa.rango_desde : null,
+      rango_hasta_emision: fiscal ? empresa.rango_hasta : null,
+      fecha_limite_emision_emision: fiscal ? empresa.fecha_limite_emision : null,
+      nota: p_nota || "",
+      clave_idempotencia: p_clave_idempotencia,
+    }
+
+    datos.ventas = [...(datos.ventas || []), venta]
+
+    for (const renglon of pedido) {
+      const { producto, producto_id, cantidad } = renglon
+
+      datos.detalle_venta = [
+        ...(datos.detalle_venta || []),
+        {
+          id: siguienteId(),
+          empresa_id: empresa.id,
+          venta_id: venta.id,
+          producto_id,
+          nombre: producto.nombre,
+          codigo: producto.codigo || "",
+          cantidad,
+          precio: Number(producto.precio),
+          subtotal: redondear(Number(producto.precio) * cantidad),
+        },
+      ]
+
+      datos.inventario_ubicacion = (datos.inventario_ubicacion || []).map((c) =>
+        c.ubicacion_id === ubicacion.id && c.producto_id === producto_id
+          ? { ...c, cantidad: Number(c.cantidad) - cantidad }
+          : c
+      )
+
+      datos.movimientos_inventario = [
+        ...(datos.movimientos_inventario || []),
+        {
+          id: siguienteId(),
+          ...valoresPorOmision("movimientos_inventario"),
+          empresa_id: empresa.id,
+          producto_id,
+          usuario_id: usuario.id,
+          venta_id: venta.id,
+          ubicacion_id: ubicacion.id,
+          tipo: "salida",
+          cantidad: -cantidad,
+          motivo: "Venta",
+        },
+      ]
+    }
+
+    return {
+      data: {
+        venta_id: venta.id,
+        numero_factura: numero,
+        correlativo,
+        ubicacion_id: ubicacion.id,
+        es_fiscal: fiscal,
+        subtotal,
+        isv,
+        total,
+        repetida: false,
+      },
+      error: null,
+    }
+  }
+
+  /*
     Entradas y ajustes por ubicación, como registrar_movimiento_ubicacion():
     mueve la celda y escribe el movimiento con su ubicación, y rechaza con
     LI003 lo que dejaría la celda en negativo.
@@ -503,6 +779,14 @@ export function crearSupabaseFalso({
     rpc: vi.fn((nombre, argumentos = {}) => {
       if (nombre === "siguiente_correlativo") {
         return Promise.resolve(siguienteCorrelativo(argumentos.p_tipo))
+      }
+
+      if (nombre === "registrar_venta_ubicacion") {
+        const falla = fallaDe(nombre, "rpc")
+
+        return Promise.resolve(
+          falla ? { data: null, error: falla } : venderEnUbicacion(argumentos)
+        )
       }
 
       if (nombre === "registrar_movimiento_ubicacion") {
