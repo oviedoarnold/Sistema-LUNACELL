@@ -1,0 +1,279 @@
+import { describe, it, expect, vi } from "vitest"
+import { screen, fireEvent, act, waitFor, within } from "@testing-library/react"
+import Swal from "sweetalert2"
+
+import { AuthProvider } from "../context/AuthContext"
+import ProductProvider from "../context/ProductContext"
+import LocationsProvider from "../context/LocationsContext"
+import { renderizarPantalla } from "../test/pantallas"
+import Transfers from "./Transfers"
+
+vi.mock("../lib/supabase", () => ({
+  get supabase() {
+    return globalThis.__supabaseFalso
+  },
+  hayConexionConfigurada: true,
+}))
+
+/*
+  La pantalla de traslados. Quién puede trasladar desde dónde lo decide la
+  base y se prueba contra PostgreSQL real en
+  pruebas-sql/registrar-traslado.test.mjs; aquí se comprueba que la
+  pantalla mande exactamente lo que el usuario eligió, no ofrezca lo que
+  no puede pedir y muestre lo que la base respondió.
+*/
+
+const PRODUCTOS = [
+  { id: "p1", code: "C-1", name: "Cargador", category: "Accesorios", price: 120, stock: 10, minStock: 1 },
+  { id: "p2", code: "C-2", name: "Cubo Iphone", category: "Accesorios", price: 100, stock: 6, minStock: 1 },
+]
+
+const UBICACIONES = [
+  { id: "bodega", name: "Lunacell Bodega", type: "bodega" },
+  { id: "store", name: "Lunacell Store", type: "tienda" },
+  { id: "camion1", name: "Camión 01", type: "camion" },
+  { id: "retirado", name: "Camión retirado", type: "camion", active: false },
+]
+
+const EXISTENCIAS = [
+  { locationId: "bodega", productId: "p1", quantity: 10 },
+  { locationId: "bodega", productId: "p2", quantity: 6 },
+  { locationId: "camion1", productId: "p1", quantity: 2 },
+]
+
+function renderTransfers(extra = {}) {
+  return renderizarPantalla(
+    <AuthProvider>
+      <ProductProvider>
+        <LocationsProvider>
+          <Transfers />
+        </LocationsProvider>
+      </ProductProvider>
+    </AuthProvider>,
+    {
+      productos: PRODUCTOS,
+      ubicaciones: UBICACIONES,
+      existencias: EXISTENCIAS,
+      esperar: ["productos_con_stock", "ubicaciones", "existencias_por_ubicacion", "traslados"],
+      ...extra,
+    }
+  )
+}
+
+const elegir = (etiqueta, valor) =>
+  fireEvent.change(screen.getByLabelText(etiqueta), { target: { value: valor } })
+
+const opciones = (etiqueta) =>
+  within(screen.getByLabelText(etiqueta))
+    .getAllByRole("option")
+    .map((o) => o.textContent)
+
+const trasladar = () =>
+  act(async () => {
+    fireEvent.click(screen.getByRole("button", { name: /^trasladar$/i }))
+  })
+
+const llamadas = (falso) =>
+  falso.rpc.mock.calls.filter(([nombre]) => nombre === "registrar_traslado")
+
+const llenarTraslado = ({ origen = "bodega", destino = "store", producto = "p1", cantidad = "3" } = {}) => {
+  elegir(/^origen$/i, origen)
+  elegir(/^destino$/i, destino)
+  elegir(/producto del renglón 1/i, producto)
+  elegir(/cantidad del renglón 1/i, cantidad)
+}
+
+describe("Traslados: lo que se ofrece", () => {
+  it("el origen ofrece las ubicaciones activas y el destino excluye al origen", async () => {
+    await renderTransfers()
+
+    expect(opciones(/^origen$/i)).not.toContain("Camión retirado")
+
+    elegir(/^origen$/i, "bodega")
+
+    const destinos = opciones(/^destino$/i)
+
+    expect(destinos).toContain("Lunacell Store")
+    expect(destinos).toContain("Camión 01")
+    expect(destinos).not.toContain("Lunacell Bodega")
+    expect(destinos).not.toContain("Camión retirado")
+  })
+
+  it("muestra cuánto hay del producto en el origen elegido", async () => {
+    await renderTransfers()
+
+    elegir(/^origen$/i, "bodega")
+    elegir(/producto del renglón 1/i, "p2")
+
+    expect(screen.getByText(/disponible en origen: 6/i)).toBeInTheDocument()
+  })
+
+  /*
+    D1 y D3: con inventory-own solo se traslada desde la ubicación propia,
+    pero el destino puede ser cualquiera activa, también la bodega aunque
+    no se pueda consultar.
+  */
+  it("con inventory-own el origen es la ubicación propia y no se puede cambiar", async () => {
+    await renderTransfers({
+      rolDelUsuario: "vendedor",
+      permisosDelUsuario: ["inventory-own"],
+      ubicacionOperativa: "camion1",
+    })
+
+    const origen = screen.getByLabelText(/^origen$/i)
+
+    expect(origen).toBeDisabled()
+    expect(origen).toHaveValue("camion1")
+    expect(opciones(/^destino$/i)).toContain("Lunacell Bodega")
+  })
+
+  it("con inventory-own y sin ubicación operativa avisa que no puede trasladar", async () => {
+    await renderTransfers({
+      rolDelUsuario: "vendedor",
+      permisosDelUsuario: ["inventory-own"],
+    })
+
+    expect(screen.getByText(/no tienes una ubicación operativa/i)).toBeInTheDocument()
+    expect(screen.getByRole("button", { name: /^trasladar$/i })).toBeDisabled()
+  })
+
+  it("con inventory-all el origen puede ser cualquier ubicación activa", async () => {
+    await renderTransfers({
+      rolDelUsuario: "vendedor",
+      permisosDelUsuario: ["inventory-all"],
+      ubicacionOperativa: "store",
+    })
+
+    expect(screen.getByLabelText(/^origen$/i)).not.toBeDisabled()
+    expect(opciones(/^origen$/i)).toEqual(
+      expect.arrayContaining(["Lunacell Bodega", "Lunacell Store", "Camión 01"])
+    )
+  })
+})
+
+describe("Traslados: registrar", () => {
+  it("envía exactamente origen, destino, renglones, nota y clave", async () => {
+    const { falso } = await renderTransfers()
+
+    llenarTraslado()
+    fireEvent.change(screen.getByLabelText(/observación/i), { target: { value: "Vitrina" } })
+    await trasladar()
+
+    expect(llamadas(falso)).toHaveLength(1)
+    expect(llamadas(falso)[0][1]).toEqual({
+      p_origen: "bodega",
+      p_destino: "store",
+      p_items: [{ producto_id: "p1", cantidad: 3 }],
+      p_nota: "Vitrina",
+      p_clave_idempotencia: expect.any(String),
+    })
+  })
+
+  it("permite varios productos en un traslado", async () => {
+    const { falso } = await renderTransfers()
+
+    llenarTraslado()
+    fireEvent.click(screen.getByRole("button", { name: /agregar producto/i }))
+    elegir(/producto del renglón 2/i, "p2")
+    elegir(/cantidad del renglón 2/i, "2")
+    await trasladar()
+
+    expect(llamadas(falso)[0][1].p_items).toEqual([
+      { producto_id: "p1", cantidad: 3 },
+      { producto_id: "p2", cantidad: 2 },
+    ])
+  })
+
+  it("dos clics seguidos registran el traslado una sola vez", async () => {
+    const { falso } = await renderTransfers()
+
+    llenarTraslado()
+
+    await act(async () => {
+      const boton = screen.getByRole("button", { name: /^trasladar$/i })
+      fireEvent.click(boton)
+      fireEvent.click(boton)
+    })
+
+    expect(llamadas(falso)).toHaveLength(1)
+    expect(falso.datos.traslados).toHaveLength(1)
+  })
+
+  it("sin destino no envía nada y lo dice", async () => {
+    const { falso } = await renderTransfers()
+    Swal.fire.mockClear()
+
+    elegir(/^origen$/i, "bodega")
+    elegir(/producto del renglón 1/i, "p1")
+    elegir(/cantidad del renglón 1/i, "1")
+    await trasladar()
+
+    expect(llamadas(falso)).toHaveLength(0)
+    expect(Swal.fire).toHaveBeenCalledWith(expect.objectContaining({ icon: "warning" }))
+  })
+
+  it("después de trasladar recarga las existencias y lo muestra en el historial", async () => {
+    const { falso } = await renderTransfers()
+
+    const consultasDeExistencias = () =>
+      falso.from.mock.calls.filter(([t]) => t === "existencias_por_ubicacion").length
+
+    const antes = consultasDeExistencias()
+
+    llenarTraslado()
+    await trasladar()
+
+    await waitFor(() => expect(consultasDeExistencias()).toBeGreaterThan(antes))
+
+    const historial = screen.getByRole("table", { name: /historial de traslados/i })
+
+    expect(within(historial).getByText("Lunacell Bodega → Lunacell Store")).toBeInTheDocument()
+    expect(within(historial).getByText(/cargador × 3/i)).toBeInTheDocument()
+  })
+
+  it("un rechazo del servidor se muestra con su mensaje y no registra nada", async () => {
+    const { falso } = await renderTransfers()
+    Swal.fire.mockClear()
+
+    llenarTraslado({ cantidad: "11" })
+    await trasladar()
+
+    const aviso = Swal.fire.mock.calls.find(([o]) => o?.icon === "error")
+
+    expect(aviso[0].text).toMatch(/no hay suficiente «cargador» en lunacell bodega: hay 10, se trasladan 11/i)
+    expect(falso.datos.traslados).toHaveLength(0)
+  })
+})
+
+describe("Traslados: historial", () => {
+  it("muestra fecha, usuario, origen y destino, productos, nota y estado", async () => {
+    await renderTransfers({
+      traslados: [
+        {
+          id: "t1",
+          origen_id: "camion1",
+          destino_id: "bodega",
+          usuario_id: "u-prueba",
+          nota: "Devolución de fin de ruta",
+          creado_en: "2026-10-02T15:00:00Z",
+          renglones: [{ producto_id: "p1", cantidad: 2 }],
+        },
+      ],
+    })
+
+    const fila = within(screen.getByRole("table", { name: /historial de traslados/i }))
+      .getByText("Camión 01 → Lunacell Bodega")
+      .closest("tr")
+
+    expect(within(fila).getByText(/cargador × 2/i)).toBeInTheDocument()
+    expect(within(fila).getByText("Devolución de fin de ruta")).toBeInTheDocument()
+    expect(within(fila).getByText(/aplicado/i)).toBeInTheDocument()
+    expect(within(fila).getByText("Administradora")).toBeInTheDocument()
+  })
+
+  it("sin traslados muestra un estado vacío", async () => {
+    await renderTransfers()
+
+    expect(screen.getByText(/todavía no hay traslados/i)).toBeInTheDocument()
+  })
+})

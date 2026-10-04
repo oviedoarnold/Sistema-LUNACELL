@@ -28,6 +28,7 @@ const LLAVE_HACIA = {
   proveedores: "proveedor_id",
   ventas: "venta_id",
   cotizaciones: "cotizacion_id",
+  traslados: "traslado_id",
 }
 
 function llaveHacia(tablaPadre) {
@@ -652,6 +653,148 @@ export function crearSupabaseFalso({
   }
 
   /*
+    El traslado entre ubicaciones, como registrar_traslado() de la 0020:
+    descuenta el origen, suma al destino, guarda cabecera y detalle y anota
+    la salida y la entrada en el libro, o no hace nada.
+
+    Reproduce los rechazos que la pantalla tiene que traducir. Los permisos
+    y los candados se prueban contra el motor real en pruebas-sql.
+  */
+  const trasladarEntreUbicaciones = ({
+    p_origen,
+    p_destino,
+    p_items,
+    p_nota = "",
+    p_clave_idempotencia = null,
+  }) => {
+    const usuario = (datos.usuarios || []).find(
+      (u) => u.auth_id === sesion?.user?.id && u.activo !== false
+    )
+
+    if (!usuario) {
+      return rechazo("42501", "Solo un usuario activo de una empresa puede trasladar inventario")
+    }
+
+    if (!p_origen || !p_destino || !Array.isArray(p_items) || p_items.length === 0) {
+      return rechazo("LT003", "Los renglones del traslado no son válidos")
+    }
+
+    if (p_origen === p_destino) {
+      return rechazo("LT001", "El origen y el destino del traslado son la misma ubicación")
+    }
+
+    const agrupado = new Map()
+
+    for (const item of p_items) {
+      agrupado.set(item.producto_id, (agrupado.get(item.producto_id) || 0) + Number(item.cantidad))
+    }
+
+    const pedido = [...agrupado]
+      .map(([producto_id, cantidad]) => ({ producto_id, cantidad }))
+      .sort((a, b) => String(a.producto_id).localeCompare(String(b.producto_id)))
+
+    const huella = `${p_origen}>${p_destino}|` +
+      pedido.map((r) => `${r.producto_id}x${r.cantidad}`).join(",")
+
+    if (p_clave_idempotencia) {
+      const previo = (datos.traslados || []).find(
+        (t) => t.clave_idempotencia === p_clave_idempotencia
+      )
+
+      if (previo) {
+        if (previo.huella !== huella) {
+          return rechazo("LT006", `La clave ${p_clave_idempotencia} ya se usó para un traslado distinto de esta empresa`)
+        }
+
+        return {
+          data: { traslado_id: previo.id, origen_id: previo.origen_id, destino_id: previo.destino_id, estado: "aplicado", items: pedido, repetida: true },
+          error: null,
+        }
+      }
+    }
+
+    const nombreDe = (id) => (datos.ubicaciones || []).find((u) => u.id === id)?.nombre || id
+    const celda = (ubicacion, producto) =>
+      (datos.inventario_ubicacion || []).find(
+        (c) => c.ubicacion_id === ubicacion && c.producto_id === producto
+      )
+
+    for (const r of pedido) {
+      const disponible = Number(celda(p_origen, r.producto_id)?.cantidad ?? 0)
+
+      if (disponible < r.cantidad) {
+        const producto = (datos.productos || []).find((p) => p.id === r.producto_id)
+
+        return rechazo(
+          "LT005",
+          `No hay suficiente «${producto?.nombre || r.producto_id}» en ${nombreDe(p_origen)}: hay ${disponible}, se trasladan ${r.cantidad}`
+        )
+      }
+    }
+
+    const traslado = {
+      id: siguienteId(),
+      empresa_id: usuario.empresa_id,
+      origen_id: p_origen,
+      destino_id: p_destino,
+      usuario_id: usuario.id,
+      estado: "aplicado",
+      nota: String(p_nota || "").trim(),
+      clave_idempotencia: p_clave_idempotencia,
+      creado_en: new Date().toISOString(),
+      huella,
+    }
+
+    datos.traslados = [...(datos.traslados || []), traslado]
+
+    for (const r of pedido) {
+      datos.traslado_detalle = [
+        ...(datos.traslado_detalle || []),
+        { traslado_id: traslado.id, empresa_id: usuario.empresa_id, ...r },
+      ]
+
+      if (!celda(p_destino, r.producto_id)) {
+        datos.inventario_ubicacion = [
+          ...(datos.inventario_ubicacion || []),
+          { empresa_id: usuario.empresa_id, ubicacion_id: p_destino, producto_id: r.producto_id, cantidad: 0 },
+        ]
+      }
+
+      datos.inventario_ubicacion = datos.inventario_ubicacion.map((c) => {
+        if (c.producto_id !== r.producto_id) return c
+        if (c.ubicacion_id === p_origen) return { ...c, cantidad: Number(c.cantidad) - r.cantidad }
+        if (c.ubicacion_id === p_destino) return { ...c, cantidad: Number(c.cantidad) + r.cantidad }
+        return c
+      })
+
+      const movimiento = (ubicacion_id, tipo, cantidad, motivo) => ({
+        id: siguienteId(),
+        ...valoresPorOmision("movimientos_inventario"),
+        empresa_id: usuario.empresa_id,
+        producto_id: r.producto_id,
+        usuario_id: usuario.id,
+        venta_id: null,
+        traslado_id: traslado.id,
+        ubicacion_id,
+        tipo,
+        cantidad,
+        motivo,
+      })
+
+      datos.movimientos_inventario = [
+        ...(datos.movimientos_inventario || []),
+        movimiento(p_origen, "traslado_salida", -r.cantidad, `Traslado a ${nombreDe(p_destino)}`),
+        movimiento(p_destino, "traslado_entrada", r.cantidad, `Traslado desde ${nombreDe(p_origen)}`),
+      ]
+    }
+
+    return {
+      data: { traslado_id: traslado.id, origen_id: p_origen, destino_id: p_destino, estado: "aplicado", items: pedido, repetida: false },
+      error: null,
+    }
+  }
+
+  /*
     Entradas y ajustes por ubicación, como registrar_movimiento_ubicacion():
     mueve la celda y escribe el movimiento con su ubicación, y rechaza con
     LI003 lo que dejaría la celda en negativo.
@@ -786,6 +929,14 @@ export function crearSupabaseFalso({
 
         return Promise.resolve(
           falla ? { data: null, error: falla } : venderEnUbicacion(argumentos)
+        )
+      }
+
+      if (nombre === "registrar_traslado") {
+        const falla = fallaDe(nombre, "rpc")
+
+        return Promise.resolve(
+          falla ? { data: null, error: falla } : trasladarEntreUbicaciones(argumentos)
         )
       }
 

@@ -3,6 +3,7 @@ import {
   FaBoxes,
   FaCashRegister,
   FaCog,
+  FaExchangeAlt,
   FaFileAlt,
   FaHandHoldingUsd,
   FaHistory,
@@ -25,12 +26,12 @@ import { PERMISSIONS } from "../../context/permissions"
   dibuja el menú pregunta a hasPermission, igual que hacía la navegación
   anterior. Esto es una lista de presentación, no una regla de acceso.
 
-  Los grupos son solo agrupación visual. Ninguno añade rutas: los nueve
-  módulos son exactamente los que ya existen en NAV_ROUTES, y una prueba
-  comprueba que las dos listas no se separen.
+  Los grupos son solo agrupación visual. Ninguno añade rutas: los módulos
+  son exactamente los que ya existen en NAV_ROUTES, y una prueba comprueba
+  que las dos listas no se separen.
 
-  No se incluyen módulos que todavía no existen —reportes, traslados,
-  kardex—: un menú con elementos muertos invita a pulsarlos.
+  No se incluyen módulos que todavía no existen —reportes, kardex—: un
+  menú con elementos muertos invita a pulsarlos.
 */
 
 export const GRUPOS_DEL_MENU = [
@@ -89,6 +90,12 @@ export const GRUPOS_DEL_MENU = [
         to: "/inventory",
         label: "Existencias",
         Icono: FaBoxes,
+        permiso: PERMISSIONS.INVENTORY_OWN,
+      },
+      {
+        to: "/inventory/transfers",
+        label: "Traslados",
+        Icono: FaExchangeAlt,
         permiso: PERMISSIONS.INVENTORY_OWN,
       },
       {

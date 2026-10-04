@@ -11,6 +11,7 @@ import Login from "../pages/Login"
 import Dashboard from "../pages/Dashboard"
 import Products from "../pages/Products"
 import Inventory from "../pages/Inventory"
+import Transfers from "../pages/Transfers"
 import POS from "../pages/POS"
 import Quotes from "../pages/Quotes"
 import SalesHistory from "../pages/SalesHistory"
@@ -76,6 +77,23 @@ function AppRouter() {
             <ProtectedRoute permission={PERMISSIONS.INVENTORY_OWN}>
               <MainLayout>
                 <Inventory />
+              </MainLayout>
+            </ProtectedRoute>
+          }
+        />
+
+        {/*
+          TRASLADOS ENTRE UBICACIONES. El mismo permiso que Existencias:
+          quien ve su inventario puede trasladar desde su ubicación, y
+          quien ve el de todas, entre cualquiera. La base lo vuelve a
+          comprobar.
+        */}
+        <Route
+          path="/inventory/transfers"
+          element={
+            <ProtectedRoute permission={PERMISSIONS.INVENTORY_OWN}>
+              <MainLayout>
+                <Transfers />
               </MainLayout>
             </ProtectedRoute>
           }

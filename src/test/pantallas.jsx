@@ -269,12 +269,24 @@ export function montarDatos({
     la existencia de esa ubicación.
   */
   ubicacionOperativa = null,
+  /*
+    Quién es el usuario de prueba. Por omisión es administrador, que tiene
+    todos los permisos; para probar lo que ve un vendedor hay que darle
+    otro rol y sus secciones.
+  */
+  rolDelUsuario = "admin",
+  permisosDelUsuario = [],
+  traslados = [],
 } = {}) {
   const falso = crearSupabaseFalso({
     tablas: {
       empresas: empresa ? [empresa] : [],
-      usuarios: [{ ...USUARIO_PRUEBA, ubicacion_id: ubicacionOperativa }],
-      permisos_usuario: [],
+      usuarios: [{ ...USUARIO_PRUEBA, rol: rolDelUsuario, ubicacion_id: ubicacionOperativa }],
+      permisos_usuario: permisosDelUsuario.map((seccion) => ({
+        usuario_id: USUARIO_PRUEBA.id,
+        empresa_id: EMPRESA,
+        seccion,
+      })),
       productos: productos.map(aFilaDeProducto),
       movimientos_inventario: productos
         .map((producto, indice) => aMovimientoInicial(producto, indice))
@@ -283,6 +295,10 @@ export function montarDatos({
       proveedores: proveedores.map(aFilaDeProveedor),
       ubicaciones: ubicaciones.map(aFilaDeUbicacion),
       inventario_ubicacion: existencias.map(aFilaDeExistencia),
+      traslados: traslados.map((t) => ({ empresa_id: EMPRESA, estado: "aplicado", nota: "", ...t })),
+      traslado_detalle: traslados.flatMap((t) =>
+        (t.renglones || []).map((r) => ({ traslado_id: t.id, empresa_id: EMPRESA, ...r }))
+      ),
       ventas: ventas.map(aFilaDeVenta),
       detalle_venta: aplanar(ventas.map(renglonesDe)),
       abonos: aplanar(ventas.map(abonosDe)),

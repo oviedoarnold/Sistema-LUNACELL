@@ -81,7 +81,7 @@ const enlaces = () =>
 const TODOS = Object.values(PERMISSIONS)
 
 describe("Sidebar · permisos", () => {
-  it("el administrador ve los once módulos", async () => {
+  it("el administrador ve los doce módulos", async () => {
     await montarSidebar({ rol: "admin", secciones: TODOS })
 
     expect(enlaces()).toEqual([
@@ -90,6 +90,7 @@ describe("Sidebar · permisos", () => {
       "/quotes",
       "/products",
       "/inventory",
+      "/inventory/transfers",
       "/locations",
       "/clients",
       "/suppliers",
@@ -123,10 +124,10 @@ describe("Sidebar · permisos", () => {
     expect(enlaces()).toEqual(["/products"])
   })
 
-  it("ver el inventario de su ubicación muestra Existencias", async () => {
+  it("ver el inventario de su ubicación muestra Existencias y Traslados", async () => {
     await montarSidebar({ secciones: [PERMISSIONS.INVENTORY_OWN] })
 
-    expect(enlaces()).toEqual(["/inventory"])
+    expect(enlaces()).toEqual(["/inventory", "/inventory/transfers"])
   })
 
   /*
@@ -136,7 +137,7 @@ describe("Sidebar · permisos", () => {
   it("ver el inventario de todas también la muestra", async () => {
     await montarSidebar({ secciones: [PERMISSIONS.INVENTORY_ALL] })
 
-    expect(enlaces()).toEqual(["/inventory"])
+    expect(enlaces()).toEqual(["/inventory", "/inventory/transfers"])
   })
 
   /*
