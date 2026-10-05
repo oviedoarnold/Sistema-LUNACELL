@@ -12,6 +12,7 @@ import { claveDeIdempotencia } from "../utils/ids"
 import EmptyState from "../components/crud/EmptyState"
 import PageHeader from "../components/crud/PageHeader"
 import FormField from "../components/forms/FormField"
+import "../styles/transfers.css"
 
 /*
   Traslados de existencia entre ubicaciones.
@@ -187,7 +188,7 @@ function Transfers() {
     <div className="view active crud transfers">
       <PageHeader descripcion="Mueve mercadería de una ubicación a otra. El traslado se aplica en el acto; uno equivocado se corrige con otro en sentido contrario." />
 
-      <section className="card" aria-labelledby="transfers-nuevo">
+      <section className="card card-pad transfers-formulario" aria-labelledby="transfers-nuevo">
         <h2 id="transfers-nuevo">Nuevo traslado</h2>
 
         {sinOrigen && (
@@ -223,78 +224,82 @@ function Transfers() {
           </p>
         )}
 
-        {renglones.map((r, indice) => {
-          const numero = indice + 1
+        <div className="transfers-renglones">
+          {renglones.map((r, indice) => {
+            const numero = indice + 1
 
-          return (
-            <div className="form-grid transfers-renglon" key={r.clave}>
-              <FormField etiqueta={`Producto del renglón ${numero}`}>
-                <select
-                  id={`transfers-producto-${r.clave}`}
-                  value={r.productId}
-                  onChange={(e) => cambiarRenglon(r.clave, { productId: e.target.value })}
+            return (
+              <div className="transfers-renglon" key={r.clave}>
+                <FormField etiqueta={`Producto del renglón ${numero}`}>
+                  <select
+                    id={`transfers-producto-${r.clave}`}
+                    value={r.productId}
+                    onChange={(e) => cambiarRenglon(r.clave, { productId: e.target.value })}
+                  >
+                    <option value="">{origen ? "— Elige un producto —" : "— Elige primero el origen —"}</option>
+                    {opcionesPara(r.clave).map((e) => (
+                      <option key={e.productId} value={e.productId}>
+                        {`${e.productName} — ${e.quantity} disponibles`}
+                      </option>
+                    ))}
+                  </select>
+                </FormField>
+
+                <FormField
+                  etiqueta={`Cantidad del renglón ${numero}`}
+                  ayuda={r.productId && origen ? `Disponible en origen: ${disponible(r.productId)}` : undefined}
                 >
-                  <option value="">{origen ? "— Elige un producto —" : "— Elige primero el origen —"}</option>
-                  {opcionesPara(r.clave).map((e) => (
-                    <option key={e.productId} value={e.productId}>
-                      {`${e.productName} — ${e.quantity} disponibles`}
-                    </option>
-                  ))}
-                </select>
-              </FormField>
+                  <input
+                    id={`transfers-cantidad-${r.clave}`}
+                    type="number"
+                    min="1"
+                    max={r.productId ? disponible(r.productId) : undefined}
+                    step="1"
+                    value={r.qty}
+                    onChange={(e) => cambiarRenglon(r.clave, { qty: e.target.value })}
+                  />
+                </FormField>
 
-              <FormField
-                etiqueta={`Cantidad del renglón ${numero}`}
-                ayuda={r.productId && origen ? `Disponible en origen: ${disponible(r.productId)}` : undefined}
-              >
-                <input
-                  id={`transfers-cantidad-${r.clave}`}
-                  type="number"
-                  min="1"
-                  max={r.productId ? disponible(r.productId) : undefined}
-                  step="1"
-                  value={r.qty}
-                  onChange={(e) => cambiarRenglon(r.clave, { qty: e.target.value })}
-                />
-              </FormField>
-
-              {renglones.length > 1 && (
-                <button
-                  type="button"
-                  className="btn btn-danger btn-sm"
-                  aria-label={`Quitar renglón ${numero}`}
-                  onClick={() => setRenglones((actuales) => actuales.filter((x) => x.clave !== r.clave))}
-                >
-                  <FaTrash aria-hidden="true" />
-                </button>
-              )}
-            </div>
-          )
-        })}
-
-        <button
-          type="button"
-          className="btn btn-secondary"
-          onClick={() => setRenglones((actuales) => [...actuales, renglonVacio()])}
-        >
-          <FaPlus aria-hidden="true" />Agregar producto
-        </button>
+                {renglones.length > 1 && (
+                  <button
+                    type="button"
+                    className="btn btn-danger btn-sm transfers-quitar"
+                    aria-label={`Quitar renglón ${numero}`}
+                    onClick={() => setRenglones((actuales) => actuales.filter((x) => x.clave !== r.clave))}
+                  >
+                    <FaTrash aria-hidden="true" />
+                  </button>
+                )}
+              </div>
+            )
+          })}
+        </div>
 
         <FormField etiqueta="Observación" ancho="full">
           <textarea id="transfers-nota" value={nota} onChange={(e) => setNota(e.target.value)} rows={2} />
         </FormField>
 
-        <button
-          type="button"
-          className="btn btn-primary"
-          onClick={enviar}
-          disabled={guardando || sinOrigen || sinExistencias}
-        >
-          <FaExchangeAlt aria-hidden="true" />{guardando ? "Trasladando…" : "Trasladar"}
-        </button>
+        <div className="transfers-acciones">
+          <button
+            type="button"
+            className="btn btn-secondary"
+            onClick={() => setRenglones((actuales) => [...actuales, renglonVacio()])}
+          >
+            <FaPlus aria-hidden="true" />Agregar producto
+          </button>
+
+          <button
+            type="button"
+            className="btn btn-primary"
+            onClick={enviar}
+            disabled={guardando || sinOrigen || sinExistencias}
+          >
+            <FaExchangeAlt aria-hidden="true" />{guardando ? "Trasladando…" : "Trasladar"}
+          </button>
+        </div>
       </section>
 
-      <section aria-labelledby="transfers-historial">
+      <section className="transfers-historial" aria-labelledby="transfers-historial">
         <h2 id="transfers-historial">Historial</h2>
 
         {cargandoHistorial && <p className="crud-cargando" role="status">Cargando traslados…</p>}
