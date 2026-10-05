@@ -79,11 +79,38 @@ function Transfers() {
   const nombreUbicacion = (id) => locations.find((u) => u.id === id)?.name || "—"
   const nombreProducto = (id) => products.find((p) => String(p.id) === String(id))?.name || "Producto"
 
-  const disponible = (productId) =>
-    existencias.find((e) => e.locationId === origen && e.productId === productId)?.quantity ?? 0
+  /*
+    Lo que se puede trasladar sale de la existencia de la UBICACIÓN de
+    origen, no del stock global: un producto con 20 en total y 0 en este
+    camión no se ofrece. Es una ayuda para no pedir lo que no hay; si la
+    existencia cambia entre esta lectura y el traslado, registrar_traslado
+    lo rechaza igual (LT005) y la pantalla muestra su mensaje.
+  */
+  const disponibles = origen
+    ? existencias.filter((e) => e.locationId === origen && e.quantity > 0)
+    : []
 
+  const sinExistencias = Boolean(origen) && disponibles.length === 0
+
+  const disponible = (productId) =>
+    disponibles.find((e) => e.productId === productId)?.quantity ?? 0
+
+  // Cada producto en un solo renglón: lo elegido en los demás no se ofrece.
+  const opcionesPara = (claveRenglon) => {
+    const elegidosEnOtros = new Set(
+      renglones.filter((r) => r.clave !== claveRenglon && r.productId).map((r) => r.productId)
+    )
+
+    return disponibles.filter((e) => !elegidosEnOtros.has(e.productId))
+  }
+
+  /*
+    Otro origen es otra referencia: lo elegido y las cantidades del
+    anterior no valen para este.
+  */
   const cambiarOrigen = (valor) => {
     setOrigenElegido(valor)
+    setRenglones([renglonVacio()])
     if (valor === destino) setDestino("")
   }
 
@@ -109,6 +136,19 @@ function Transfers() {
         icon: "warning",
         title: "Revisa los productos",
         text: "Cada producto necesita una cantidad entera mayor que cero.",
+      })
+      return
+    }
+
+    const excedidos = items.filter((i) => i.qty > disponible(i.productId))
+
+    if (excedidos.length > 0) {
+      Swal.fire({
+        icon: "warning",
+        title: "Cantidad mayor que la disponible",
+        text: excedidos
+          .map((i) => `${nombreProducto(i.productId)}: hay ${disponible(i.productId)} en ${nombreUbicacion(origen)}, pides ${i.qty}.`)
+          .join(" "),
       })
       return
     }
@@ -177,6 +217,12 @@ function Transfers() {
           </FormField>
         </div>
 
+        {sinExistencias && (
+          <p className="alert-banner" role="status">
+            No hay productos con existencia en {nombreUbicacion(origen)}. Elige otro origen para trasladar.
+          </p>
+        )}
+
         {renglones.map((r, indice) => {
           const numero = indice + 1
 
@@ -188,8 +234,12 @@ function Transfers() {
                   value={r.productId}
                   onChange={(e) => cambiarRenglon(r.clave, { productId: e.target.value })}
                 >
-                  <option value="">— Elige un producto —</option>
-                  {products.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                  <option value="">{origen ? "— Elige un producto —" : "— Elige primero el origen —"}</option>
+                  {opcionesPara(r.clave).map((e) => (
+                    <option key={e.productId} value={e.productId}>
+                      {`${e.productName} — ${e.quantity} disponibles`}
+                    </option>
+                  ))}
                 </select>
               </FormField>
 
@@ -201,6 +251,7 @@ function Transfers() {
                   id={`transfers-cantidad-${r.clave}`}
                   type="number"
                   min="1"
+                  max={r.productId ? disponible(r.productId) : undefined}
                   step="1"
                   value={r.qty}
                   onChange={(e) => cambiarRenglon(r.clave, { qty: e.target.value })}
@@ -237,7 +288,7 @@ function Transfers() {
           type="button"
           className="btn btn-primary"
           onClick={enviar}
-          disabled={guardando || sinOrigen}
+          disabled={guardando || sinOrigen || sinExistencias}
         >
           <FaExchangeAlt aria-hidden="true" />{guardando ? "Trasladando…" : "Trasladar"}
         </button>
