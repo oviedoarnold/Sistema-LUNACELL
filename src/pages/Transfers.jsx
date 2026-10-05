@@ -1,5 +1,5 @@
 import { useContext, useRef, useState } from "react"
-import { FaExchangeAlt, FaPlus, FaTrash } from "react-icons/fa"
+import { FaExchangeAlt, FaEye, FaPlus, FaTrash } from "react-icons/fa"
 import Swal from "sweetalert2"
 
 import { LocationsContext, ProductContext } from "../context/contexts"
@@ -12,6 +12,7 @@ import { claveDeIdempotencia } from "../utils/ids"
 import EmptyState from "../components/crud/EmptyState"
 import PageHeader from "../components/crud/PageHeader"
 import FormField from "../components/forms/FormField"
+import DetalleDeTraslado from "../components/transfers/DetalleDeTraslado"
 import "../styles/transfers.css"
 
 /*
@@ -64,6 +65,7 @@ function Transfers() {
   const [renglones, setRenglones] = useState(() => [renglonVacio()])
   const [nota, setNota] = useState("")
   const [guardando, setGuardando] = useState(false)
+  const [detalleAbierto, setDetalleAbierto] = useState(null)
 
   // Un intento de traslado, no un clic: se renueva solo cuando se registra.
   const [clave, setClave] = useState(claveDeIdempotencia)
@@ -178,11 +180,29 @@ function Transfers() {
     }
   }
 
-  const historial = traslados.map((t) => ({
-    ...t,
-    ruta: `${nombreUbicacion(t.originId)} → ${nombreUbicacion(t.destinationId)}`,
-    productos: t.items.map((i) => `${nombreProducto(i.productId)} × ${i.qty}`).join(", "),
-  }))
+  /*
+    El nombre del producto viene con el traslado, resuelto aunque ya no
+    esté activo; el catálogo de la pantalla queda solo de respaldo.
+  */
+  const historial = traslados.map((t) => {
+    const renglonesConNombre = t.items.map((i) => ({
+      ...i,
+      nombre: i.productName || nombreProducto(i.productId),
+    }))
+
+    return {
+      ...t,
+      fecha: aFecha(t.isoDate),
+      origen: nombreUbicacion(t.originId),
+      destino: nombreUbicacion(t.destinationId),
+      ruta: `${nombreUbicacion(t.originId)} → ${nombreUbicacion(t.destinationId)}`,
+      estado: ESTADOS[t.status] || t.status,
+      renglones: renglonesConNombre,
+      productos: renglonesConNombre.map((r) => `${r.nombre} × ${r.qty}`).join(", "),
+    }
+  })
+
+  const detalle = historial.find((t) => t.id === detalleAbierto)
 
   return (
     <div className="view active crud transfers">
@@ -327,17 +347,28 @@ function Transfers() {
                   <th scope="col">Productos</th>
                   <th scope="col">Nota</th>
                   <th scope="col">Estado</th>
+                  <th scope="col">Detalle</th>
                 </tr>
               </thead>
               <tbody>
                 {historial.map((t) => (
                   <tr key={t.id}>
-                    <td>{aFecha(t.isoDate)}</td>
+                    <td>{t.fecha}</td>
                     <td>{t.userName || "—"}</td>
                     <td>{t.ruta}</td>
                     <td>{t.productos}</td>
                     <td>{t.note || "—"}</td>
-                    <td>{ESTADOS[t.status] || t.status}</td>
+                    <td>{t.estado}</td>
+                    <td>
+                      <button
+                        type="button"
+                        className="btn btn-secondary btn-sm transfers-ver"
+                        aria-label={`Ver detalle del traslado ${t.ruta}, ${t.fecha}`}
+                        onClick={() => setDetalleAbierto(t.id)}
+                      >
+                        <FaEye aria-hidden="true" />Ver detalle
+                      </button>
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -345,6 +376,21 @@ function Transfers() {
           </div>
         )}
       </section>
+
+      {detalle && (
+        <DetalleDeTraslado
+          traslado={{
+            fecha: detalle.fecha,
+            origen: detalle.origen,
+            destino: detalle.destino,
+            estado: detalle.estado,
+            usuario: detalle.userName,
+            nota: detalle.note,
+            renglones: detalle.renglones,
+          }}
+          onCerrar={() => setDetalleAbierto(null)}
+        />
+      )}
     </div>
   )
 }

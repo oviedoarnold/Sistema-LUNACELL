@@ -293,6 +293,142 @@ describe("Traslados: historial", () => {
 })
 
 /*
+  INV-4.2: cada traslado del historial se puede abrir para ver qué se
+  movió, de dónde, hacia dónde, cuándo y quién, aunque un producto ya
+  no esté activo en el catálogo.
+*/
+describe("Traslados: detalle", () => {
+  const INACTIVO = { id: "p9", code: "C-9", name: "Cable descontinuado", category: "Accesorios", price: 50, stock: 0, minStock: 0, active: false }
+
+  const DEVOLUCION = {
+    id: "t1",
+    origen_id: "camion1",
+    destino_id: "bodega",
+    usuario_id: "u-prueba",
+    nota: "Devolución de fin de ruta",
+    creado_en: "2026-10-02T15:00:00Z",
+    renglones: [
+      { producto_id: "p1", cantidad: 2 },
+      { producto_id: "p9", cantidad: 3 },
+    ],
+  }
+
+  const aFecha = (iso) =>
+    new Date(iso).toLocaleString("es-HN", {
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    })
+
+  const renderConHistorial = (traslados = [DEVOLUCION]) =>
+    renderTransfers({ productos: [...PRODUCTOS, INACTIVO], traslados })
+
+  const abrirDetalle = (nombre = /ver detalle del traslado camión 01 → lunacell bodega/i) => {
+    fireEvent.click(screen.getByRole("button", { name: nombre }))
+    return screen.getByRole("dialog", { name: /detalle del traslado/i })
+  }
+
+  // El valor que acompaña a un dato del detalle: el <dd> que sigue a su <dt>.
+  const dato = (dialogo, termino) =>
+    within(dialogo).getAllByRole("term").find((dt) => dt.textContent === termino)
+      ?.nextElementSibling.textContent
+
+  it("cada traslado del historial tiene una acción Ver detalle con nombre propio", async () => {
+    await renderConHistorial([
+      DEVOLUCION,
+      { ...DEVOLUCION, id: "t2", origen_id: "bodega", destino_id: "store", creado_en: "2026-10-03T15:00:00Z" },
+    ])
+
+    const botones = screen.getAllByRole("button", { name: /ver detalle del traslado/i })
+
+    expect(botones).toHaveLength(2)
+    expect(botones.map((b) => b.textContent)).toEqual(["Ver detalle", "Ver detalle"])
+    expect(
+      screen.getByRole("button", { name: `Ver detalle del traslado Lunacell Bodega → Lunacell Store, ${aFecha("2026-10-03T15:00:00Z")}` })
+    ).toBeInTheDocument()
+  })
+
+  it("el detalle muestra fecha y hora, origen, destino, estado, usuario y nota", async () => {
+    await renderConHistorial()
+
+    const dialogo = abrirDetalle()
+
+    expect(dato(dialogo, "Fecha y hora")).toBe(aFecha(DEVOLUCION.creado_en))
+    expect(dato(dialogo, "Origen")).toBe("Camión 01")
+    expect(dato(dialogo, "Destino")).toBe("Lunacell Bodega")
+    expect(dato(dialogo, "Estado")).toBe("Aplicado")
+    expect(dato(dialogo, "Usuario")).toBe("Administradora")
+    expect(dato(dialogo, "Nota")).toBe("Devolución de fin de ruta")
+  })
+
+  it("los productos se listan en una tabla con su cantidad, incluido uno inactivo", async () => {
+    await renderConHistorial()
+
+    const dialogo = abrirDetalle()
+    const tabla = within(dialogo).getByRole("table", { name: /productos trasladados/i })
+    const filas = within(tabla)
+      .getAllByRole("row")
+      .slice(1)
+      .map((fila) => within(fila).getAllByRole("cell").map((c) => c.textContent))
+
+    expect(filas).toEqual([
+      ["Cargador", "2"],
+      ["Cable descontinuado", "3"],
+      ["Total", "5"],
+    ])
+  })
+
+  it("el historial también nombra al producto inactivo", async () => {
+    await renderConHistorial()
+
+    const fila = within(screen.getByRole("table", { name: /historial de traslados/i }))
+      .getByText("Camión 01 → Lunacell Bodega")
+      .closest("tr")
+
+    expect(within(fila).getByText("Cargador × 2, Cable descontinuado × 3")).toBeInTheDocument()
+  })
+
+  it("sin nombre de usuario ni nota muestra un guion", async () => {
+    await renderConHistorial([{ ...DEVOLUCION, usuario_id: "u-ajeno", nota: "" }])
+
+    const dialogo = abrirDetalle()
+
+    expect(dato(dialogo, "Usuario")).toBe("—")
+    expect(dato(dialogo, "Nota")).toBe("—")
+  })
+
+  it("se cierra con el botón Cerrar y con Escape, y devuelve el foco a Ver detalle", async () => {
+    await renderConHistorial()
+
+    const boton = screen.getByRole("button", { name: /ver detalle del traslado/i })
+
+    boton.focus()
+    const dialogo = abrirDetalle()
+    fireEvent.click(within(dialogo).getAllByRole("button", { name: /^cerrar$/i }).at(-1))
+
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument()
+    expect(boton).toHaveFocus()
+
+    expect(abrirDetalle()).toBeInTheDocument()
+    fireEvent.keyDown(document, { key: "Escape" })
+
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument()
+  })
+
+  it("es un diálogo modal con título asociado y no cambia nada al abrirse", async () => {
+    const { falso } = await renderConHistorial()
+
+    const dialogo = abrirDetalle()
+
+    expect(dialogo).toHaveAttribute("aria-modal", "true")
+    expect(within(dialogo).getByRole("heading", { name: "Detalle del traslado" })).toBeInTheDocument()
+    expect(llamadas(falso)).toHaveLength(0)
+  })
+})
+
+/*
   INV-4.1: lo que la pantalla ofrece y deja enviar sale de la existencia
   de la UBICACIÓN de origen, no del stock global. Es una ayuda para no
   pedir lo que no hay; quien decide sigue siendo registrar_traslado.

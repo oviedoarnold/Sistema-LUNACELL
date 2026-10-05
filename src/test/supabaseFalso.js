@@ -11,7 +11,9 @@ import { vi } from "vitest"
 
 function aplicarFiltros(filas, filtros) {
   return filas.filter((fila) =>
-    filtros.every(([columna, valor]) => fila[columna] === valor)
+    filtros.every(([columna, valor, operador]) =>
+      operador === "in" ? valor.includes(fila[columna]) : fila[columna] === valor
+    )
   )
 }
 
@@ -304,6 +306,10 @@ export function crearSupabaseFalso({
       },
       eq(columna, valor) {
         estado.filtros.push([columna, valor])
+        return constructor
+      },
+      in(columna, valores) {
+        estado.filtros.push([columna, valores, "in"])
         return constructor
       },
       order(columna) {

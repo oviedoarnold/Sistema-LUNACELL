@@ -97,7 +97,29 @@ async function nombresDeUsuarios() {
   return new Map((data || []).map((u) => [u.id, u.nombre]))
 }
 
-export const aTrasladoDeApp = (fila, nombres = new Map()) => ({
+/*
+  Cómo se llama cada producto de los traslados, en UNA consulta por carga
+  del historial. No sale del catálogo de la pantalla porque ese solo trae
+  los activos, y un traslado de un producto que después se desactivó
+  quedaba como "Producto". La política de productos deja leer los de la
+  propia empresa, activos o no; si aun así falla, el historial se muestra
+  igual y el nombre queda vacío.
+*/
+async function nombresDeProductos(filas) {
+  const ids = [
+    ...new Set(filas.flatMap((f) => (f.traslado_detalle || []).map((d) => d.producto_id))),
+  ]
+
+  if (ids.length === 0) return new Map()
+
+  const { data, error } = await supabase.from("productos").select("id, nombre").in("id", ids)
+
+  if (error) return new Map()
+
+  return new Map((data || []).map((p) => [p.id, p.nombre]))
+}
+
+export const aTrasladoDeApp = (fila, nombres = new Map(), productos = new Map()) => ({
   id: fila.id,
   originId: fila.origen_id,
   destinationId: fila.destino_id,
@@ -109,6 +131,7 @@ export const aTrasladoDeApp = (fila, nombres = new Map()) => ({
   timestamp: new Date(fila.creado_en).getTime(),
   items: (fila.traslado_detalle || []).map((d) => ({
     productId: d.producto_id,
+    productName: productos.get(d.producto_id) || "",
     qty: Number(d.cantidad),
   })),
 })
@@ -127,9 +150,10 @@ export async function traerTraslados() {
 
   if (error) fallo(error, "cargar el historial de traslados")
 
-  const nombres = await nombresDeUsuarios()
+  const filas = data || []
+  const [nombres, productos] = await Promise.all([nombresDeUsuarios(), nombresDeProductos(filas)])
 
-  return (data || [])
-    .map((fila) => aTrasladoDeApp(fila, nombres))
+  return filas
+    .map((fila) => aTrasladoDeApp(fila, nombres, productos))
     .sort((a, b) => b.timestamp - a.timestamp)
 }

@@ -91,7 +91,7 @@ const aFilaDeProducto = (producto) => ({
   precio: producto.price ?? 0,
   costo: producto.costPrice ?? 0,
   stock_minimo: producto.minStock ?? 0,
-  activo: true,
+  activo: producto.active ?? true,
   creado_en: "2026-01-01",
 })
 
