@@ -231,11 +231,25 @@ describe("Traslados: registrar", () => {
     expect(within(historial).getByText(/cargador × 3/i)).toBeInTheDocument()
   })
 
+  /*
+    Desde INV-4.1 pedir más de lo que se ve disponible ya no llega al
+    servidor. Lo que sí puede pasar es que la existencia cambie entre lo
+    que vio la pantalla y el traslado —otra venta, otro traslado—, y
+    entonces el servidor rechaza con LT005. Ese mensaje es el que se
+    simula aquí, y es el que el usuario tiene que ver.
+  */
   it("un rechazo del servidor se muestra con su mensaje y no registra nada", async () => {
-    const { falso } = await renderTransfers()
+    const { falso } = await renderTransfers({
+      fallarEn: {
+        registrar_traslado: {
+          code: "LT005",
+          message: "No hay suficiente «Cargador» en Lunacell Bodega: hay 10, se trasladan 11",
+        },
+      },
+    })
     Swal.fire.mockClear()
 
-    llenarTraslado({ cantidad: "11" })
+    llenarTraslado({ cantidad: "3" })
     await trasladar()
 
     const aviso = Swal.fire.mock.calls.find(([o]) => o?.icon === "error")
@@ -275,5 +289,122 @@ describe("Traslados: historial", () => {
     await renderTransfers()
 
     expect(screen.getByText(/todavía no hay traslados/i)).toBeInTheDocument()
+  })
+})
+
+/*
+  INV-4.1: lo que la pantalla ofrece y deja enviar sale de la existencia
+  de la UBICACIÓN de origen, no del stock global. Es una ayuda para no
+  pedir lo que no hay; quien decide sigue siendo registrar_traslado.
+*/
+describe("Traslados: validación previa por ubicación", () => {
+  const opcionesDeProducto = (renglon) =>
+    opciones(new RegExp(`producto del renglón ${renglon}`, "i")).filter((t) => !t.startsWith("—"))
+
+  it("solo ofrece productos con existencia en el origen, con la cantidad disponible", async () => {
+    await renderTransfers()
+
+    elegir(/^origen$/i, "bodega")
+
+    expect(opcionesDeProducto(1)).toEqual([
+      "Cargador — 10 disponibles",
+      "Cubo Iphone — 6 disponibles",
+    ])
+  })
+
+  it("un producto con existencia 0 en el origen no aparece, aunque tenga stock global", async () => {
+    await renderTransfers()
+
+    elegir(/^origen$/i, "camion1")
+
+    expect(opcionesDeProducto(1)).toEqual(["Cargador — 2 disponibles"])
+  })
+
+  it("un producto elegido en un renglón desaparece de los demás", async () => {
+    await renderTransfers()
+
+    elegir(/^origen$/i, "bodega")
+    elegir(/producto del renglón 1/i, "p1")
+    fireEvent.click(screen.getByRole("button", { name: /agregar producto/i }))
+
+    expect(opcionesDeProducto(2)).toEqual(["Cubo Iphone — 6 disponibles"])
+    // El propio renglón conserva el suyo.
+    expect(opcionesDeProducto(1)).toContain("Cargador — 10 disponibles")
+  })
+
+  it("la cantidad no admite más que lo disponible en el origen", async () => {
+    await renderTransfers()
+
+    elegir(/^origen$/i, "bodega")
+    elegir(/producto del renglón 1/i, "p2")
+
+    expect(screen.getByLabelText(/cantidad del renglón 1/i)).toHaveAttribute("max", "6")
+  })
+
+  it("si la cantidad supera lo disponible, avisa y no llama a registrar_traslado", async () => {
+    const { falso } = await renderTransfers()
+    Swal.fire.mockClear()
+
+    llenarTraslado({ cantidad: "11" })
+    await trasladar()
+
+    expect(llamadas(falso)).toHaveLength(0)
+    expect(Swal.fire).toHaveBeenCalledWith(
+      expect.objectContaining({
+        icon: "warning",
+        text: expect.stringMatching(/cargador: hay 10 en lunacell bodega, pides 11/i),
+      })
+    )
+  })
+
+  it("cambiar el origen vacía los renglones y recalcula lo disponible", async () => {
+    await renderTransfers()
+
+    llenarTraslado()
+    fireEvent.click(screen.getByRole("button", { name: /agregar producto/i }))
+
+    elegir(/^origen$/i, "camion1")
+
+    expect(screen.queryByLabelText(/producto del renglón 2/i)).not.toBeInTheDocument()
+    expect(screen.getByLabelText(/producto del renglón 1/i)).toHaveValue("")
+    expect(screen.getByLabelText(/cantidad del renglón 1/i)).toHaveValue(null)
+    expect(opcionesDeProducto(1)).toEqual(["Cargador — 2 disponibles"])
+  })
+
+  it("un origen sin existencias lo dice y no deja trasladar", async () => {
+    const { falso } = await renderTransfers()
+
+    elegir(/^origen$/i, "store")
+
+    expect(screen.getByText(/no hay productos con existencia en lunacell store/i)).toBeInTheDocument()
+
+    const boton = screen.getByRole("button", { name: /^trasladar$/i })
+
+    expect(boton).toBeDisabled()
+
+    await trasladar()
+
+    expect(llamadas(falso)).toHaveLength(0)
+  })
+
+  it("con inventory-own ofrece solo lo que hay en su ubicación", async () => {
+    await renderTransfers({
+      rolDelUsuario: "vendedor",
+      permisosDelUsuario: ["inventory-own"],
+      ubicacionOperativa: "camion1",
+    })
+
+    expect(opcionesDeProducto(1)).toEqual(["Cargador — 2 disponibles"])
+  })
+
+  it("los controles nuevos tienen nombre accesible y la disponibilidad se dice con texto", async () => {
+    await renderTransfers()
+
+    elegir(/^origen$/i, "bodega")
+    elegir(/producto del renglón 1/i, "p1")
+    fireEvent.click(screen.getByRole("button", { name: /agregar producto/i }))
+
+    expect(screen.getByRole("button", { name: "Quitar renglón 2" })).toBeInTheDocument()
+    expect(screen.getByText("Disponible en origen: 10")).toBeInTheDocument()
   })
 })

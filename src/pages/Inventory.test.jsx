@@ -1,6 +1,8 @@
 import { describe, it, expect, vi } from "vitest"
 import { screen, fireEvent, within } from "@testing-library/react"
 
+import { MemoryRouter } from "react-router-dom"
+
 import { AuthProvider } from "../context/AuthContext"
 import { renderizarPantalla } from "../test/pantallas"
 import Inventory from "./Inventory"
@@ -54,7 +56,9 @@ const EXISTENCIAS = [
 function renderInventory(datos = {}) {
   return renderizarPantalla(
     <AuthProvider>
-      <Inventory />
+      <MemoryRouter>
+        <Inventory />
+      </MemoryRouter>
     </AuthProvider>,
     {
       productos: PRODUCTOS,
@@ -350,5 +354,36 @@ describe("Inventory · estados", () => {
     expect(screen.queryByText(/costo/i)).not.toBeInTheDocument()
     expect(screen.queryByText(/utilidad/i)).not.toBeInTheDocument()
     expect(screen.queryByText(/margen/i)).not.toBeInTheDocument()
+  })
+})
+
+/*
+  INV-4.1: desde Existencias se llega a Traslados con el mismo permiso que
+  protege su ruta. No es una regla nueva: es la de la ruta, preguntada con
+  hasPermission().
+*/
+describe("Existencias: acceso a Traslados", () => {
+  const enlace = () => screen.queryByRole("link", { name: /traslados/i })
+
+  it("el administrador ve el enlace a Traslados", async () => {
+    await renderInventory()
+
+    expect(enlace()).toHaveAttribute("href", "/inventory/transfers")
+  })
+
+  it("quien ve el inventario de su ubicación también lo ve", async () => {
+    await renderInventory({
+      rolDelUsuario: "vendedor",
+      permisosDelUsuario: ["inventory-own"],
+      ubicacionOperativa: "u-c1",
+    })
+
+    expect(enlace()).toBeInTheDocument()
+  })
+
+  it("sin permiso de inventario no aparece", async () => {
+    await renderInventory({ rolDelUsuario: "vendedor", permisosDelUsuario: ["pos"] })
+
+    expect(enlace()).not.toBeInTheDocument()
   })
 })
