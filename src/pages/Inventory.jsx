@@ -1,6 +1,8 @@
 import { useMemo, useState } from "react"
+import { Link } from "react-router-dom"
 import {
   FaBoxOpen,
+  FaExchangeAlt,
   FaExclamationTriangle,
   FaMapMarkerAlt,
   FaStore,
@@ -13,6 +15,8 @@ import PageHeader from "../components/crud/PageHeader"
 import SearchInput from "../components/crud/SearchInput"
 import StatusBadge from "../components/crud/StatusBadge"
 
+import { PERMISSIONS } from "../context/permissions"
+import { useAuth } from "../hooks/useAuth"
 import { useExistencias } from "../hooks/useExistencias"
 import {
   agruparPorProducto,
@@ -53,6 +57,14 @@ const ICONO_POR_TIPO = {
 function Inventory() {
   const { existencias, cargando, error } = useExistencias()
 
+  /*
+    El mismo permiso que protege /inventory/transfers, preguntado con la
+    misma función que usa la ruta: si un día cambia, cambia en los dos
+    sitios a la vez.
+  */
+  const { hasPermission } = useAuth()
+  const puedeTrasladar = hasPermission(PERMISSIONS.INVENTORY_OWN)
+
   const [busqueda, setBusqueda] = useState("")
   const [ubicacionElegida, setUbicacionElegida] = useState("")
 
@@ -77,7 +89,13 @@ function Inventory() {
 
   return (
     <div className="view active crud inventory">
-      <PageHeader descripcion="Dónde está la mercadería y cuánta hay en cada bodega, tienda y camión." />
+      <PageHeader descripcion="Dónde está la mercadería y cuánta hay en cada bodega, tienda y camión.">
+        {puedeTrasladar && (
+          <Link className="btn btn-secondary" to="/inventory/transfers">
+            <FaExchangeAlt aria-hidden="true" />Traslados
+          </Link>
+        )}
+      </PageHeader>
 
       {cargando && (
         <p className="crud-cargando" role="status">
