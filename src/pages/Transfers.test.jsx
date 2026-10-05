@@ -405,13 +405,13 @@ describe("Traslados: detalle", () => {
     const boton = screen.getByRole("button", { name: /ver detalle del traslado/i })
 
     boton.focus()
-    let dialogo = abrirDetalle()
+    const dialogo = abrirDetalle()
     fireEvent.click(within(dialogo).getAllByRole("button", { name: /^cerrar$/i }).at(-1))
 
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument()
     expect(boton).toHaveFocus()
 
-    dialogo = abrirDetalle()
+    expect(abrirDetalle()).toBeInTheDocument()
     fireEvent.keyDown(document, { key: "Escape" })
 
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument()
