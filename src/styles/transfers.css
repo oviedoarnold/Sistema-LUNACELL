@@ -1,0 +1,86 @@
+/*
+  Traslados entre ubicaciones.
+
+  Acotado bajo `.transfers`, como Existencias bajo `.inventory`: la
+  pantalla reutiliza `.card`, `.form-grid`, `.field`, `.btn` y
+  `.table-wrap`, y escribir esas clases sueltas cambiaría de paso los
+  demás formularios.
+
+  Los colores salen de los tokens. Aquí no se define ninguno.
+*/
+
+.transfers .transfers-formulario {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  margin-bottom: var(--space-6);
+}
+
+.transfers .transfers-formulario h2,
+.transfers .transfers-historial h2 {
+  margin: 0;
+}
+
+/* ── RENGLONES ────────────────────────────────────────────── */
+
+.transfers .transfers-renglones {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+/*
+  Producto ancho, cantidad estrecha y el botón de quitar al final, en la
+  misma línea que los controles y no que las etiquetas.
+*/
+.transfers .transfers-renglon {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(7rem, 10rem) auto;
+  gap: var(--space-3);
+  align-items: end;
+  padding: var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface, var(--paper));
+}
+
+.transfers .transfers-renglon .field {
+  margin: 0;
+}
+
+.transfers .transfers-quitar {
+  align-self: end;
+  min-width: 2.5rem;
+  min-height: 2.5rem;
+}
+
+/* ── ACCIONES ─────────────────────────────────────────────── */
+
+.transfers .transfers-acciones {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  justify-content: space-between;
+  align-items: center;
+}
+
+/* ── RESPONSIVE ───────────────────────────────────────────── */
+
+/*
+  En pantallas angostas cada renglón se apila: producto, cantidad y el
+  botón de quitar a todo lo ancho, para que siga siendo fácil de pulsar.
+*/
+@media (max-width: 640px) {
+  .transfers .transfers-renglon {
+    grid-template-columns: 1fr;
+  }
+
+  .transfers .transfers-quitar {
+    width: 100%;
+  }
+
+  .transfers .transfers-acciones {
+    flex-direction: column;
+    align-items: stretch;
+  }
+}
