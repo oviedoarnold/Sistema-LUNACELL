@@ -217,3 +217,80 @@ describe("el historial", () => {
     await expect(traerTraslados()).rejects.toThrow("No se pudo cargar el historial de traslados.")
   })
 })
+
+/*
+  INV-4.2: el detalle nombra cada producto aunque ya no esté activo. Los
+  nombres no salen del catálogo de la pantalla —que solo tiene los
+  activos— sino de una consulta propia, UNA por carga del historial y no
+  una por traslado.
+*/
+describe("el historial: nombres de los productos", () => {
+  const CATALOGO = [
+    { id: "p1", empresa_id: EMPRESA, nombre: "Cargador", activo: true },
+    { id: "p2", empresa_id: EMPRESA, nombre: "Cable descontinuado", activo: false },
+    { id: "p3", empresa_id: EMPRESA, nombre: "Funda", activo: true },
+  ]
+
+  const TRASLADOS = ["t1", "t2", "t3"].map((id, i) => ({
+    id,
+    empresa_id: EMPRESA,
+    origen_id: "bodega",
+    destino_id: "store",
+    usuario_id: "u1",
+    estado: "aplicado",
+    nota: "",
+    creado_en: `2026-10-0${i + 1}T10:00:00Z`,
+  }))
+
+  const DETALLE = [
+    { traslado_id: "t1", empresa_id: EMPRESA, producto_id: "p1", cantidad: 4 },
+    { traslado_id: "t1", empresa_id: EMPRESA, producto_id: "p2", cantidad: 2 },
+    { traslado_id: "t2", empresa_id: EMPRESA, producto_id: "p2", cantidad: 1 },
+    { traslado_id: "t3", empresa_id: EMPRESA, producto_id: "p3", cantidad: 5 },
+  ]
+
+  const consultasA = (falso, tabla) =>
+    falso.from.mock.calls.filter(([nombre]) => nombre === tabla).length
+
+  it("cada renglón trae el nombre del producto, también si está inactivo", async () => {
+    montar({ tablas: { productos: CATALOGO, traslados: TRASLADOS, traslado_detalle: DETALLE } })
+
+    const lista = await traerTraslados()
+
+    expect(lista.find((t) => t.id === "t1").items).toEqual([
+      { productId: "p1", productName: "Cargador", qty: 4 },
+      { productId: "p2", productName: "Cable descontinuado", qty: 2 },
+    ])
+  })
+
+  it("resuelve los nombres en una sola consulta, sin importar cuántos traslados haya", async () => {
+    const falso = montar({
+      tablas: { productos: CATALOGO, traslados: TRASLADOS, traslado_detalle: DETALLE },
+    })
+
+    await traerTraslados()
+
+    expect(consultasA(falso, "productos")).toBe(1)
+  })
+
+  it("sin traslados no consulta productos", async () => {
+    const falso = montar({ tablas: { productos: CATALOGO } })
+
+    expect(await traerTraslados()).toEqual([])
+    expect(consultasA(falso, "productos")).toBe(0)
+  })
+
+  it("si no puede leer los productos, muestra el historial con el nombre vacío", async () => {
+    montar({
+      tablas: { productos: CATALOGO, traslados: TRASLADOS, traslado_detalle: DETALLE },
+      fallarEn: { productos: { message: "sin permiso" } },
+    })
+
+    const lista = await traerTraslados()
+
+    expect(lista).toHaveLength(3)
+    expect(lista.find((t) => t.id === "t3").items).toEqual([
+      { productId: "p3", productName: "", qty: 5 },
+    ])
+  })
+})
