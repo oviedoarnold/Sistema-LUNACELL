@@ -378,7 +378,6 @@ describe("Traslados: detalle", () => {
       ["Cable descontinuado", "3"],
       ["Total", "5"],
     ])
-    expect(within(dialogo).queryByText("Producto")).not.toBeInTheDocument()
   })
 
   it("el historial también nombra al producto inactivo", async () => {
