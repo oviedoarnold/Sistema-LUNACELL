@@ -9,12 +9,60 @@ import { vi } from "vitest"
   válida que nadie invitó.
 */
 
+/*
+  Las fechas se comparan como instantes y no como texto: la base guarda
+  "2026-10-01T10:00:00Z" y la consulta puede pedir "2026-10-01T06:00:00.000Z",
+  que como texto no se ordenan bien entre sí.
+*/
+const comoComparable = (valor) => {
+  if (typeof valor === "string" && valor.includes("T") && !Number.isNaN(Date.parse(valor))) {
+    return Date.parse(valor)
+  }
+
+  return valor
+}
+
+const COMPARADORES = {
+  eq: (a, b) => a === b,
+  in: (a, b) => b.includes(a),
+  gte: (a, b) => comoComparable(a) >= comoComparable(b),
+  lt: (a, b) => comoComparable(a) < comoComparable(b),
+  // `or` llega como lista de [columna, valor] y basta con que uno coincida.
+  or: (fila, condiciones) => condiciones.some(([c, v]) => fila[c] === v),
+}
+
 function aplicarFiltros(filas, filtros) {
   return filas.filter((fila) =>
-    filtros.every(([columna, valor, operador]) =>
-      operador === "in" ? valor.includes(fila[columna]) : fila[columna] === valor
+    filtros.every(([columna, valor, operador = "eq"]) =>
+      operador === "or"
+        ? COMPARADORES.or(fila, valor)
+        : COMPARADORES[operador](fila[columna], valor)
     )
   )
+}
+
+/*
+  Solo entiende lo que usa la aplicación: "col.eq.valor,col.eq.valor".
+  Cualquier otra cosa es un error de la prueba, no un caso a simular.
+*/
+function leerOr(expresion) {
+  return expresion.split(",").map((parte) => {
+    const [columna, operador, ...resto] = parte.split(".")
+
+    if (operador !== "eq") throw new Error(`or() no soporta "${parte}"`)
+
+    return [columna, resto.join(".")]
+  })
+}
+
+const compararPor = (orden) => (a, b) => {
+  for (const [columna, ascendente] of orden) {
+    const diferencia = String(a[columna]).localeCompare(String(b[columna]))
+
+    if (diferencia !== 0) return ascendente ? diferencia : -diferencia
+  }
+
+  return 0
 }
 
 /*
@@ -225,7 +273,8 @@ export function crearSupabaseFalso({
       columnas: "*",
       filtros: [],
       registro: null,
-      ordenarPor: null,
+      orden: [],
+      saltar: 0,
       tope: null,
     }
 
@@ -238,15 +287,13 @@ export function crearSupabaseFalso({
           proyectar(f, estado.columnas, datos, nombreTabla)
         )
 
-        if (estado.ordenarPor) {
-          encontradas.sort((a, b) =>
-            String(a[estado.ordenarPor]).localeCompare(String(b[estado.ordenarPor]))
-          )
+        if (estado.orden.length > 0) {
+          encontradas.sort(compararPor(estado.orden))
         }
 
         return estado.tope === null
-          ? encontradas
-          : encontradas.slice(0, estado.tope)
+          ? encontradas.slice(estado.saltar)
+          : encontradas.slice(estado.saltar, estado.saltar + estado.tope)
       }
 
       if (estado.accion === "insert") {
@@ -312,12 +359,31 @@ export function crearSupabaseFalso({
         estado.filtros.push([columna, valores, "in"])
         return constructor
       },
-      order(columna) {
-        estado.ordenarPor = columna
+      gte(columna, valor) {
+        estado.filtros.push([columna, valor, "gte"])
+        return constructor
+      },
+      lt(columna, valor) {
+        estado.filtros.push([columna, valor, "lt"])
+        return constructor
+      },
+      or(expresion) {
+        estado.filtros.push([null, leerOr(expresion), "or"])
+        return constructor
+      },
+      // Como PostgREST: se ordena por cada columna en el orden en que se pide.
+      order(columna, { ascending = true } = {}) {
+        estado.orden.push([columna, ascending])
         return constructor
       },
       limit(cantidad) {
         estado.tope = cantidad
+        return constructor
+      },
+      // Los dos extremos incluidos, igual que range() de supabase-js.
+      range(desde, hasta) {
+        estado.saltar = desde
+        estado.tope = hasta - desde + 1
         return constructor
       },
       /*

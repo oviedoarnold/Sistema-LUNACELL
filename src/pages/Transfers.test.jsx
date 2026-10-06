@@ -6,6 +6,7 @@ import { AuthProvider } from "../context/AuthContext"
 import ProductProvider from "../context/ProductContext"
 import LocationsProvider from "../context/LocationsContext"
 import { renderizarPantalla } from "../test/pantallas"
+import { TAMANO_PAGINA } from "../lib/api/traslados"
 import Transfers from "./Transfers"
 
 vi.mock("../lib/supabase", () => ({
@@ -542,5 +543,290 @@ describe("Traslados: validación previa por ubicación", () => {
 
     expect(screen.getByRole("button", { name: "Quitar renglón 2" })).toBeInTheDocument()
     expect(screen.getByText("Disponible en origen: 10")).toBeInTheDocument()
+  })
+})
+
+/*
+  INV-4.3: el historial se filtra por ubicación y por fechas, y se recorre
+  por páginas con "Cargar más". Filtrar y paginar lo hace la consulta; la
+  pantalla solo pide y agrega lo que llega.
+*/
+describe("Traslados: filtros y Cargar más", () => {
+  const HORA = 60 * 60 * 1000
+
+  // Una serie de traslados, uno por hora; cada uno se reconoce por su nota.
+  const serie = (n, { inicio = Date.UTC(2026, 9, 1), prefijo = "Serie", ...cambios } = {}) =>
+    Array.from({ length: n }, (_, i) => ({
+      id: `${prefijo}-${String(i).padStart(3, "0")}`,
+      origen_id: "bodega",
+      destino_id: "store",
+      usuario_id: "u-prueba",
+      nota: `${prefijo} ${i}`,
+      creado_en: new Date(inicio + i * HORA).toISOString(),
+      renglones: [{ producto_id: "p1", cantidad: 1 }],
+      ...cambios,
+    }))
+
+  // Notas de la serie, de la más reciente a la más antigua.
+  const notasEsperadas = (n, prefijo = "Serie") =>
+    Array.from({ length: n }, (_, i) => `${prefijo} ${n - 1 - i}`)
+
+  const tablaHistorial = () => screen.getByRole("table", { name: /historial de traslados/i })
+
+  const notas = () =>
+    within(tablaHistorial())
+      .getAllByRole("row")
+      .slice(1)
+      .map((fila) => within(fila).getAllByRole("cell")[4].textContent)
+
+  const consultasDeTraslados = (falso) =>
+    falso.from.mock.calls.filter(([tabla]) => tabla === "traslados").length
+
+  const cargarMas = () => screen.getByRole("button", { name: /^cargar más$/i })
+
+  const pulsarCargarMas = async () => {
+    await act(async () => {
+      fireEvent.click(cargarMas())
+    })
+  }
+
+  const filtrar = async (etiqueta, valor) => {
+    await act(async () => {
+      fireEvent.change(screen.getByLabelText(etiqueta), { target: { value: valor } })
+    })
+  }
+
+  // La hora local, que es la que el usuario elige en los campos de fecha.
+  const local = (anio, mes, dia, h = 0, m = 0) => new Date(anio, mes - 1, dia, h, m).toISOString()
+
+  it("muestra los controles de filtro con nombre accesible", async () => {
+    await renderTransfers()
+
+    const ubicacion = screen.getByLabelText("Ubicación")
+
+    expect(within(ubicacion).getAllByRole("option").map((o) => o.textContent)).toEqual([
+      "Todas",
+      "Lunacell Bodega",
+      "Lunacell Store",
+      "Camión 01",
+      "Camión retirado",
+    ])
+    expect(screen.getByLabelText("Fecha desde")).toHaveAttribute("type", "date")
+    expect(screen.getByLabelText("Fecha hasta")).toHaveAttribute("type", "date")
+    expect(screen.getByRole("button", { name: /limpiar filtros/i })).toBeInTheDocument()
+  })
+
+  it("con más de una página muestra solo la primera y ofrece Cargar más", async () => {
+    await renderTransfers({ traslados: serie(TAMANO_PAGINA + 3) })
+
+    expect(notas()).toEqual(notasEsperadas(TAMANO_PAGINA + 3).slice(0, TAMANO_PAGINA))
+    expect(cargarMas()).toBeEnabled()
+  })
+
+  it("Cargar más agrega la página siguiente debajo, sin reemplazar ni repetir, y desaparece al llegar al final", async () => {
+    await renderTransfers({ traslados: serie(TAMANO_PAGINA * 2 + 2) })
+
+    await pulsarCargarMas()
+
+    expect(notas()).toEqual(notasEsperadas(TAMANO_PAGINA * 2 + 2).slice(0, TAMANO_PAGINA * 2))
+    expect(cargarMas()).toBeEnabled()
+
+    await pulsarCargarMas()
+
+    expect(notas()).toEqual(notasEsperadas(TAMANO_PAGINA * 2 + 2))
+    expect(new Set(notas()).size).toBe(TAMANO_PAGINA * 2 + 2)
+    expect(screen.queryByRole("button", { name: /^cargar más$/i })).not.toBeInTheDocument()
+  })
+
+  it("sin más páginas no ofrece Cargar más", async () => {
+    await renderTransfers({ traslados: serie(3) })
+
+    expect(notas()).toHaveLength(3)
+    expect(screen.queryByRole("button", { name: /cargar más/i })).not.toBeInTheDocument()
+  })
+
+  it("mientras carga la página siguiente lo dice y no deja pedirla otra vez", async () => {
+    const { falso } = await renderTransfers({ traslados: serie(TAMANO_PAGINA + 3) })
+    const antes = consultasDeTraslados(falso)
+
+    fireEvent.click(cargarMas())
+
+    const cargando = screen.getByRole("button", { name: /cargando más/i })
+    expect(cargando).toBeDisabled()
+
+    fireEvent.click(cargando)
+    fireEvent.click(cargando)
+
+    await waitFor(() => expect(notas()).toHaveLength(TAMANO_PAGINA + 3))
+    expect(consultasDeTraslados(falso)).toBe(antes + 1)
+  })
+
+  it("dos pulsaciones seguidas de Cargar más piden una sola página", async () => {
+    const { falso } = await renderTransfers({ traslados: serie(TAMANO_PAGINA * 3) })
+    const antes = consultasDeTraslados(falso)
+
+    await act(async () => {
+      const boton = cargarMas()
+      fireEvent.click(boton)
+      fireEvent.click(boton)
+    })
+
+    expect(consultasDeTraslados(falso)).toBe(antes + 1)
+    expect(notas()).toEqual(notasEsperadas(TAMANO_PAGINA * 3).slice(0, TAMANO_PAGINA * 2))
+  })
+
+  it("si falla Cargar más conserva lo que ya se ve, lo dice y deja reintentar", async () => {
+    const fallarEn = {}
+    await renderTransfers({ traslados: serie(TAMANO_PAGINA + 3), fallarEn })
+
+    fallarEn.traslados = { message: "sin conexión" }
+    await pulsarCargarMas()
+
+    expect(notas()).toEqual(notasEsperadas(TAMANO_PAGINA + 3).slice(0, TAMANO_PAGINA))
+    expect(screen.getByRole("alert")).toHaveTextContent(/no se pudieron cargar más traslados/i)
+
+    delete fallarEn.traslados
+    await pulsarCargarMas()
+
+    expect(notas()).toEqual(notasEsperadas(TAMANO_PAGINA + 3))
+    expect(screen.queryByText(/no se pudieron cargar más traslados/i)).not.toBeInTheDocument()
+  })
+
+  it("filtrar por ubicación vuelve a la primera página e incluye origen y destino", async () => {
+    await renderTransfers({
+      traslados: [
+        ...serie(TAMANO_PAGINA + 3),
+        ...serie(2, { prefijo: "Sale", inicio: Date.UTC(2026, 10, 1), origen_id: "camion1", destino_id: "store" }),
+        ...serie(1, { prefijo: "Entra", inicio: Date.UTC(2026, 10, 5), origen_id: "store", destino_id: "camion1" }),
+      ],
+    })
+
+    await pulsarCargarMas()
+    await filtrar("Ubicación", "camion1")
+
+    await waitFor(() => expect(notas()).toEqual(["Entra 0", "Sale 1", "Sale 0"]))
+    expect(screen.queryByRole("button", { name: /^cargar más$/i })).not.toBeInTheDocument()
+  })
+
+  it("la fecha desde filtra desde el inicio de ese día y vuelve a la primera página", async () => {
+    await renderTransfers({
+      traslados: [
+        ...serie(1, { prefijo: "Antes", inicio: Date.parse(local(2026, 10, 1, 23, 59)) }),
+        ...serie(2, { prefijo: "Dentro", inicio: Date.parse(local(2026, 10, 2)) }),
+      ],
+    })
+
+    await filtrar("Fecha desde", "2026-10-02")
+
+    await waitFor(() => expect(notas()).toEqual(["Dentro 1", "Dentro 0"]))
+  })
+
+  it("la fecha hasta incluye todo ese día y vuelve a la primera página", async () => {
+    await renderTransfers({
+      traslados: [
+        ...serie(1, { prefijo: "Ultimo", inicio: Date.parse(local(2026, 10, 5, 23, 30)) }),
+        ...serie(1, { prefijo: "Despues", inicio: Date.parse(local(2026, 10, 6)) }),
+      ],
+    })
+
+    await filtrar("Fecha hasta", "2026-10-05")
+
+    await waitFor(() => expect(notas()).toEqual(["Ultimo 0"]))
+  })
+
+  it("si la fecha desde es posterior a la fecha hasta lo dice y no consulta", async () => {
+    const { falso } = await renderTransfers({ traslados: serie(3) })
+
+    await filtrar("Fecha desde", "2026-10-06")
+    const antes = consultasDeTraslados(falso)
+    await filtrar("Fecha hasta", "2026-10-05")
+
+    expect(screen.getByText("La fecha desde no puede ser posterior a la fecha hasta.")).toBeInTheDocument()
+    expect(screen.getByLabelText("Fecha hasta")).toHaveAttribute("aria-invalid", "true")
+    expect(screen.queryByRole("table", { name: /historial de traslados/i })).not.toBeInTheDocument()
+    expect(consultasDeTraslados(falso)).toBe(antes)
+  })
+
+  it("sin resultados por los filtros lo dice distinto que un historial vacío", async () => {
+    await renderTransfers({ traslados: serie(3) })
+
+    await filtrar("Ubicación", "camion1")
+
+    await waitFor(() => expect(screen.getByText("No hay traslados con estos filtros")).toBeInTheDocument())
+    expect(screen.queryByText(/todavía no hay traslados/i)).not.toBeInTheDocument()
+  })
+
+  it("Limpiar filtros deja todas las ubicaciones, fechas vacías y la primera página sin filtros", async () => {
+    const { falso } = await renderTransfers({ traslados: serie(TAMANO_PAGINA + 3) })
+
+    await filtrar("Ubicación", "camion1")
+    await filtrar("Fecha desde", "2026-10-01")
+    await filtrar("Fecha hasta", "2026-10-31")
+    const antes = consultasDeTraslados(falso)
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /limpiar filtros/i }))
+    })
+
+    expect(screen.getByLabelText("Ubicación")).toHaveValue("")
+    expect(screen.getByLabelText("Fecha desde")).toHaveValue("")
+    expect(screen.getByLabelText("Fecha hasta")).toHaveValue("")
+    await waitFor(() =>
+      expect(notas()).toEqual(notasEsperadas(TAMANO_PAGINA + 3).slice(0, TAMANO_PAGINA))
+    )
+    expect(cargarMas()).toBeEnabled()
+    expect(consultasDeTraslados(falso)).toBe(antes + 1)
+  })
+
+  it("Ver detalle funciona sobre un traslado traído con Cargar más", async () => {
+    await renderTransfers({ traslados: serie(TAMANO_PAGINA + 2) })
+
+    await pulsarCargarMas()
+    fireEvent.click(
+      within(within(tablaHistorial()).getByText("Serie 0").closest("tr")).getByRole("button", {
+        name: /ver detalle/i,
+      })
+    )
+
+    const dialogo = screen.getByRole("dialog", { name: /detalle del traslado/i })
+    expect(within(dialogo).getByText("Serie 0")).toBeInTheDocument()
+  })
+
+  it("después de filtrar, el detalle nombra al producto inactivo, muestra guion sin usuario y se cierra con Escape devolviendo el foco", async () => {
+    const INACTIVO = { id: "p9", code: "C-9", name: "Cable descontinuado", category: "Accesorios", price: 50, stock: 0, minStock: 0, active: false }
+
+    await renderTransfers({
+      productos: [...PRODUCTOS, INACTIVO],
+      traslados: [
+        ...serie(3),
+        ...serie(1, {
+          prefijo: "Ruta",
+          origen_id: "camion1",
+          destino_id: "bodega",
+          usuario_id: "u-ajeno",
+          renglones: [{ producto_id: "p9", cantidad: 4 }],
+        }),
+      ],
+    })
+
+    await filtrar("Ubicación", "camion1")
+    await waitFor(() => expect(notas()).toEqual(["Ruta 0"]))
+
+    const fila = within(tablaHistorial()).getByText("Ruta 0").closest("tr")
+    expect(within(fila).getByText("Cable descontinuado × 4")).toBeInTheDocument()
+
+    const boton = within(fila).getByRole("button", { name: /ver detalle/i })
+    boton.focus()
+    fireEvent.click(boton)
+
+    const dialogo = screen.getByRole("dialog", { name: /detalle del traslado/i })
+    const usuario = within(dialogo).getAllByRole("term").find((dt) => dt.textContent === "Usuario")
+    expect(usuario.nextElementSibling).toHaveTextContent("—")
+    expect(within(dialogo).getByText("Cable descontinuado")).toBeInTheDocument()
+
+    fireEvent.keyDown(document, { key: "Escape" })
+
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument()
+    expect(boton).toHaveFocus()
   })
 })
