@@ -1,4 +1,5 @@
--- Seguridad: solo el administrador reparte permisos.
+-- Seguridad: solo el administrador reparte permisos, y ventas y cobros
+-- solo se escriben por sus funciones.
 --
 -- SEC-1. La 0003 quiso que cada empleado viera solo sus permisos y que
 -- solo el administrador los repartiera, pero no retiró la política que el
@@ -11,12 +12,18 @@
 -- empresa del permiso con la del usuario, y esa fila ajena concedía
 -- acceso.
 --
+-- SEC-2. ventas, detalle_venta, pagos y abonos se escriben solo desde
+-- registrar_venta_ubicacion() y registrar_pago_cliente(), pero
+-- `authenticated` conservaba insert, update y delete sobre ellas, y sus
+-- políticas solo miran la empresa: cualquier empleado podía cambiar el
+-- total de una factura, borrarla o inventar un pago.
+--
 -- En producción nadie pudo aprovecharlo: hasta hoy la única cuenta es la
 -- del administrador y no hay ningún permiso repartido. Tiene que estar
 -- aplicada antes de invitar al primer empleado.
 --
--- Lo que NO hace: no toca ningún dato ni cambia quién lee qué fuera de
--- permisos_usuario.
+-- Lo que NO hace: no toca ningún dato, no cambia quién LEE qué y no toca
+-- las funciones de venta ni de cobro.
 
 -- ─────────────────────────────────────────────────────────
 -- LA POLÍTICA QUE SOBRABA
@@ -90,3 +97,31 @@ begin
       on delete cascade;
   end if;
 end $$;
+
+-- ─────────────────────────────────────────────────────────
+-- VENTAS Y COBROS, SOLO POR SUS FUNCIONES
+-- ─────────────────────────────────────────────────────────
+/*
+  Lo mismo que la 0019 hizo con el libro de inventario. Los tres, y no
+  solo el insert: una factura editada o borrada descuadra igual que una
+  inventada, y un cobro mal hecho se corrige con su propio flujo, no
+  reescribiendo filas.
+
+  La lectura no cambia: el select y las políticas de cada tabla siguen
+  dejando ver lo de la propia empresa, que es lo que usan el historial, el
+  panel y las cuentas por cobrar.
+
+  Quién sigue escribiendo:
+  - registrar_venta_ubicacion() crea la venta y sus renglones.
+  - registrar_pago_cliente() crea el pago, sus abonos y marca pagadas las
+    facturas que cubre.
+  Las dos son SECURITY DEFINER y corren como su dueño, así que no les
+  afecta. Tampoco a las acciones referenciales —el `on delete set null` de
+  usuario_id y cliente_id, el `on delete cascade` de los renglones y
+  abonos—, que PostgreSQL ejecuta con los permisos del dueño de la tabla.
+
+  `anon` también, aunque RLS ya lo dejaba fuera: un permiso que no se usa
+  y que solo RLS neutraliza es una segunda línea que falta.
+*/
+revoke insert, update, delete on ventas, detalle_venta, pagos, abonos from authenticated;
+revoke insert, update, delete on ventas, detalle_venta, pagos, abonos from anon;
