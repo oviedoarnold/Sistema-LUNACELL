@@ -604,12 +604,13 @@ describe("Traslados: filtros y Cargar más", () => {
 
     const ubicacion = screen.getByLabelText("Ubicación")
 
+    // Todas las ubicaciones, también las inactivas: un traslado viejo pudo pasar por ellas.
     expect(within(ubicacion).getAllByRole("option").map((o) => o.textContent)).toEqual([
       "Todas",
-      "Lunacell Bodega",
-      "Lunacell Store",
       "Camión 01",
       "Camión retirado",
+      "Lunacell Bodega",
+      "Lunacell Store",
     ])
     expect(screen.getByLabelText("Fecha desde")).toHaveAttribute("type", "date")
     expect(screen.getByLabelText("Fecha hasta")).toHaveAttribute("type", "date")

@@ -1,5 +1,5 @@
 import { useContext, useRef, useState } from "react"
-import { FaExchangeAlt, FaEye, FaPlus, FaTrash } from "react-icons/fa"
+import { FaExchangeAlt, FaEye, FaPlus, FaSearch, FaTimes, FaTrash } from "react-icons/fa"
 import Swal from "sweetalert2"
 
 import { LocationsContext, ProductContext } from "../context/contexts"
@@ -46,12 +46,39 @@ function Transfers() {
   const { products = [] } = useContext(ProductContext)
   const { locations = [], ubicacionesActivas = [] } = useContext(LocationsContext)
   const { existencias, recargar: recargarExistencias } = useExistencias()
+
+  /*
+    Filtros del historial. Los aplica la consulta, no esta pantalla: aquí
+    solo se eligen. Un rango con desde después de hasta no se consulta.
+  */
+  const [filtroUbicacion, setFiltroUbicacion] = useState("")
+  const [filtroDesde, setFiltroDesde] = useState("")
+  const [filtroHasta, setFiltroHasta] = useState("")
+
+  const rangoInvalido = Boolean(filtroDesde && filtroHasta && filtroDesde > filtroHasta)
+  const hayFiltros = Boolean(filtroUbicacion || filtroDesde || filtroHasta)
+
   const {
     traslados,
     cargando: cargandoHistorial,
     error: errorHistorial,
     recargar: recargarHistorial,
-  } = useTraslados()
+    hayMas,
+    cargandoMas,
+    errorMas,
+    cargarMas,
+  } = useTraslados({
+    ubicacionId: filtroUbicacion,
+    desde: filtroDesde,
+    hasta: filtroHasta,
+    activo: !rangoInvalido,
+  })
+
+  const limpiarFiltros = () => {
+    setFiltroUbicacion("")
+    setFiltroDesde("")
+    setFiltroHasta("")
+  }
 
   const veTodas = hasPermission(PERMISSIONS.INVENTORY_ALL)
   const propia = user?.locationId || ""
@@ -322,18 +349,71 @@ function Transfers() {
       <section className="transfers-historial" aria-labelledby="transfers-historial">
         <h2 id="transfers-historial">Historial</h2>
 
+        <div className="transfers-filtros">
+          <FormField etiqueta="Ubicación">
+            <select
+              id="transfers-filtro-ubicacion"
+              value={filtroUbicacion}
+              onChange={(e) => setFiltroUbicacion(e.target.value)}
+            >
+              <option value="">Todas</option>
+              {locations.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
+            </select>
+          </FormField>
+
+          <FormField etiqueta="Fecha desde">
+            <input
+              id="transfers-filtro-desde"
+              type="date"
+              value={filtroDesde}
+              max={filtroHasta || undefined}
+              onChange={(e) => setFiltroDesde(e.target.value)}
+            />
+          </FormField>
+
+          <FormField
+            etiqueta="Fecha hasta"
+            error={rangoInvalido ? "La fecha desde no puede ser posterior a la fecha hasta." : undefined}
+          >
+            <input
+              id="transfers-filtro-hasta"
+              type="date"
+              value={filtroHasta}
+              min={filtroDesde || undefined}
+              onChange={(e) => setFiltroHasta(e.target.value)}
+            />
+          </FormField>
+
+          <button
+            type="button"
+            className="btn btn-secondary transfers-limpiar"
+            onClick={limpiarFiltros}
+            disabled={!hayFiltros}
+          >
+            <FaTimes aria-hidden="true" />Limpiar filtros
+          </button>
+        </div>
+
         {cargandoHistorial && <p className="crud-cargando" role="status">Cargando traslados…</p>}
 
         {errorHistorial && (
           <EmptyState Icono={FaExchangeAlt} titulo="No se pudo cargar el historial" descripcion={errorHistorial} />
         )}
 
-        {!cargandoHistorial && !errorHistorial && historial.length === 0 && (
-          <EmptyState
-            Icono={FaExchangeAlt}
-            titulo="Todavía no hay traslados"
-            descripcion="Los traslados que registres aparecerán aquí."
-          />
+        {!rangoInvalido && !cargandoHistorial && !errorHistorial && historial.length === 0 && (
+          hayFiltros ? (
+            <EmptyState
+              Icono={FaSearch}
+              titulo="No hay traslados con estos filtros"
+              descripcion="Cambia los filtros o límpialos."
+            />
+          ) : (
+            <EmptyState
+              Icono={FaExchangeAlt}
+              titulo="Todavía no hay traslados"
+              descripcion="Los traslados que registres aparecerán aquí."
+            />
+          )
         )}
 
         {historial.length > 0 && (
@@ -373,6 +453,30 @@ function Transfers() {
                 ))}
               </tbody>
             </table>
+          </div>
+        )}
+
+        {/*
+          Si la página siguiente falla, lo ya visto se queda y el mismo
+          botón sirve para intentarlo otra vez.
+        */}
+        {errorMas && (
+          <p className="alert-banner" role="alert">
+            No se pudieron cargar más traslados. Inténtalo de nuevo.
+          </p>
+        )}
+
+        {hayMas && (
+          <div className="transfers-mas">
+            <button
+              type="button"
+              className="btn btn-secondary"
+              onClick={cargarMas}
+              disabled={cargandoMas}
+              aria-busy={cargandoMas || undefined}
+            >
+              {cargandoMas ? "Cargando más…" : "Cargar más"}
+            </button>
           </div>
         )}
       </section>
