@@ -64,6 +64,34 @@
   align-items: center;
 }
 
+/* ── FILTROS Y PÁGINAS DEL HISTORIAL ──────────────────────── */
+
+/*
+  Ubicación ancha, las dos fechas estrechas y Limpiar al final, en la
+  línea de los controles y no de las etiquetas.
+*/
+.transfers .transfers-filtros {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(9rem, 1fr) minmax(9rem, 1fr) auto;
+  gap: var(--space-3);
+  align-items: end;
+  margin: var(--space-3) 0 var(--space-4);
+}
+
+.transfers .transfers-filtros .field {
+  margin: 0;
+}
+
+.transfers .transfers-limpiar {
+  white-space: nowrap;
+}
+
+.transfers .transfers-mas {
+  display: flex;
+  justify-content: center;
+  margin-top: var(--space-4);
+}
+
 /* ── HISTORIAL Y DETALLE ──────────────────────────────────── */
 
 .transfers .transfers-ver {
@@ -125,5 +153,16 @@
 
   .transfers .transfers-detalle-datos {
     grid-template-columns: 1fr;
+  }
+
+  .transfers .transfers-filtros {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .transfers .transfers-filtros .field:first-child,
+  .transfers .transfers-limpiar,
+  .transfers .transfers-mas .btn {
+    grid-column: 1 / -1;
+    width: 100%;
   }
 }

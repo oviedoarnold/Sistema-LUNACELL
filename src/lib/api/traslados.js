@@ -136,24 +136,82 @@ export const aTrasladoDeApp = (fila, nombres = new Map(), productos = new Map())
   })),
 })
 
+// Cuántos traslados trae cada página del historial.
+export const TAMANO_PAGINA = 25
+
+const FECHA = /^(\d{4})-(\d{2})-(\d{2})$/
+
 /*
-  Los traslados que el usuario puede ver, del más reciente al más antiguo.
-  Cuáles son lo decide la base: se ve un traslado si se ve su origen o su
-  destino.
+  El primer instante de un día AAAA-MM-DD en la hora de quien usa la
+  pantalla —la misma en que se le muestran las fechas—, como instante UTC
+  para comparar con creado_en. `dias` corre ese día hacia adelante.
 */
-export async function traerTraslados() {
-  const { data, error } = await supabase
-    .from("traslados")
-    .select(COLUMNAS)
+function inicioDelDia(texto, dias = 0) {
+  const partes = FECHA.exec(texto)
+
+  if (!partes) throw new Error("Fecha no válida.")
+
+  const [, anio, mes, dia] = partes.map(Number)
+
+  return new Date(anio, mes - 1, dia + dias).toISOString()
+}
+
+/*
+  La ubicación se mete dentro de la expresión de or(), así que solo se
+  acepta algo con forma de identificador: una coma, un punto o un
+  paréntesis cambiarían el filtro en vez de nombrar una ubicación.
+*/
+const IDENTIFICADOR = /^[\w-]+$/
+
+/*
+  Los traslados que el usuario puede ver, del más reciente al más antiguo,
+  de a una página. Cuáles puede ver lo decide la base —se ve un traslado
+  si se ve su origen o su destino—; qué ubicación y qué fechas, la
+  consulta, para no traer todo al navegador.
+
+  - Ubicación: el traslado aparece si es su origen O su destino.
+  - Fechas: desde el primer instante de `desde` hasta antes del primer
+    instante del día siguiente a `hasta`, para que ese día entre completo.
+  - Orden: fecha y, para dos con la misma, el id. Sin el desempate, dos
+    páginas podrían repetir uno y perder otro.
+  - Página: se pide una fila más de las que se muestran; si llega, hay más.
+*/
+export async function traerTraslados(
+  { ubicacionId = "", desde = "", hasta = "" } = {},
+  { inicio = 0 } = {}
+) {
+  if (ubicacionId && !IDENTIFICADOR.test(ubicacionId)) {
+    throw new Error("Ubicación no válida.")
+  }
+
+  const limiteInferior = desde ? inicioDelDia(desde) : null
+  const limiteSuperior = hasta ? inicioDelDia(hasta, 1) : null
+
+  if (limiteInferior && limiteSuperior && limiteInferior >= limiteSuperior) {
+    throw new Error("La fecha desde no puede ser posterior a la fecha hasta.")
+  }
+
+  let consulta = supabase.from("traslados").select(COLUMNAS)
+
+  if (ubicacionId) consulta = consulta.or(`origen_id.eq.${ubicacionId},destino_id.eq.${ubicacionId}`)
+  if (limiteInferior) consulta = consulta.gte("creado_en", limiteInferior)
+  if (limiteSuperior) consulta = consulta.lt("creado_en", limiteSuperior)
+
+  const { data, error } = await consulta
     .order("creado_en", { ascending: false })
-    .limit(50)
+    .order("id", { ascending: false })
+    .range(inicio, inicio + TAMANO_PAGINA)
 
   if (error) fallo(error, "cargar el historial de traslados")
 
-  const filas = data || []
+  const filas = (data || []).slice(0, TAMANO_PAGINA)
+
+  if (filas.length === 0) return { traslados: [], hayMas: false }
+
   const [nombres, productos] = await Promise.all([nombresDeUsuarios(), nombresDeProductos(filas)])
 
-  return filas
-    .map((fila) => aTrasladoDeApp(fila, nombres, productos))
-    .sort((a, b) => b.timestamp - a.timestamp)
+  return {
+    traslados: filas.map((fila) => aTrasladoDeApp(fila, nombres, productos)),
+    hayMas: (data || []).length > TAMANO_PAGINA,
+  }
 }

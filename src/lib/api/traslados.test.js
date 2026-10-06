@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
 
-import { registrarTraslado, traerTraslados, ErrorDeTraslado } from "./traslados"
+import { registrarTraslado, traerTraslados, ErrorDeTraslado, TAMANO_PAGINA } from "./traslados"
 import { crearSupabaseFalso } from "../../test/supabaseFalso"
 
 vi.mock("../supabase", () => ({
@@ -189,7 +189,7 @@ describe("el historial", () => {
   it("trae los traslados del más reciente al más antiguo, con sus renglones y quién los hizo", async () => {
     montar({ tablas: HISTORIAL })
 
-    const lista = await traerTraslados()
+    const { traslados: lista } = await traerTraslados()
 
     expect(lista.map((t) => t.id)).toEqual(["t2", "t1"])
     expect(lista[0]).toMatchObject({
@@ -205,7 +205,7 @@ describe("el historial", () => {
   it("si no puede leer quién lo hizo, deja el nombre vacío en vez de fallar", async () => {
     montar({ tablas: HISTORIAL, fallarEn: { usuarios: { message: "sin permiso" } } })
 
-    const lista = await traerTraslados()
+    const { traslados: lista } = await traerTraslados()
 
     expect(lista).toHaveLength(2)
     expect(lista[0].userName).toBe("")
@@ -255,7 +255,7 @@ describe("el historial: nombres de los productos", () => {
   it("cada renglón trae el nombre del producto, también si está inactivo", async () => {
     montar({ tablas: { productos: CATALOGO, traslados: TRASLADOS, traslado_detalle: DETALLE } })
 
-    const lista = await traerTraslados()
+    const { traslados: lista } = await traerTraslados()
 
     expect(lista.find((t) => t.id === "t1").items).toEqual([
       { productId: "p1", productName: "Cargador", qty: 4 },
@@ -276,7 +276,7 @@ describe("el historial: nombres de los productos", () => {
   it("sin traslados no consulta productos", async () => {
     const falso = montar({ tablas: { productos: CATALOGO } })
 
-    expect(await traerTraslados()).toEqual([])
+    expect((await traerTraslados()).traslados).toEqual([])
     expect(consultasA(falso, "productos")).toBe(0)
   })
 
@@ -286,11 +286,237 @@ describe("el historial: nombres de los productos", () => {
       fallarEn: { productos: { message: "sin permiso" } },
     })
 
-    const lista = await traerTraslados()
+    const { traslados: lista } = await traerTraslados()
 
     expect(lista).toHaveLength(3)
     expect(lista.find((t) => t.id === "t3").items).toEqual([
       { productId: "p3", productName: "", qty: 5 },
     ])
+  })
+})
+
+/*
+  INV-4.3: el historial se filtra y se pagina EN LA CONSULTA. Con cientos
+  de traslados, traerlos todos para filtrar en el navegador no escala, y
+  el antiguo limit(50) dejaba fuera todo lo anterior sin forma de verlo.
+*/
+describe("el historial: páginas", () => {
+  const HORA = 60 * 60 * 1000
+  const BASE = Date.UTC(2026, 9, 1)
+
+  // n traslados, uno por hora; el último creado es el más reciente.
+  const muchos = (n, { mismaHora = false } = {}) =>
+    Array.from({ length: n }, (_, i) => ({
+      id: `t${String(i).padStart(3, "0")}`,
+      empresa_id: EMPRESA,
+      origen_id: "bodega",
+      destino_id: "store",
+      usuario_id: "u1",
+      estado: "aplicado",
+      nota: "",
+      creado_en: new Date(BASE + (mismaHora ? 0 : i * HORA)).toISOString(),
+    }))
+
+  const conDetalle = (traslados) =>
+    traslados.map((t) => ({ traslado_id: t.id, empresa_id: EMPRESA, producto_id: "p1", cantidad: 1 }))
+
+  const montarMuchos = (n, opciones) => {
+    const traslados = muchos(n, opciones)
+    return montar({ tablas: { traslados, traslado_detalle: conDetalle(traslados) } })
+  }
+
+  // Los ids del más reciente al más antiguo, como debe verlos el usuario.
+  const ordenEsperado = (n) =>
+    Array.from({ length: n }, (_, i) => `t${String(n - 1 - i).padStart(3, "0")}`)
+
+  const ids = (pagina) => pagina.traslados.map((t) => t.id)
+
+  const consultasA = (falso, tabla) =>
+    falso.from.mock.calls.filter(([nombre]) => nombre === tabla).length
+
+  it("la primera página trae los más recientes y avisa que hay más", async () => {
+    montarMuchos(TAMANO_PAGINA * 2 + 3)
+
+    const pagina = await traerTraslados()
+
+    expect(ids(pagina)).toEqual(ordenEsperado(TAMANO_PAGINA * 2 + 3).slice(0, TAMANO_PAGINA))
+    expect(pagina.hayMas).toBe(true)
+  })
+
+  it("las páginas siguientes continúan justo donde terminó la anterior, sin solaparse ni saltarse ninguno", async () => {
+    const total = TAMANO_PAGINA * 2 + 3
+    montarMuchos(total)
+
+    const primera = await traerTraslados()
+    const segunda = await traerTraslados({}, { inicio: TAMANO_PAGINA })
+    const tercera = await traerTraslados({}, { inicio: TAMANO_PAGINA * 2 })
+
+    expect([...ids(primera), ...ids(segunda), ...ids(tercera)]).toEqual(ordenEsperado(total))
+    expect(segunda.hayMas).toBe(true)
+    expect(tercera.traslados).toHaveLength(3)
+    expect(tercera.hayMas).toBe(false)
+  })
+
+  it("con exactamente una página no ofrece más", async () => {
+    montarMuchos(TAMANO_PAGINA)
+
+    const pagina = await traerTraslados()
+
+    expect(pagina.traslados).toHaveLength(TAMANO_PAGINA)
+    expect(pagina.hayMas).toBe(false)
+  })
+
+  it("una página más allá del final llega vacía, sin más, y no consulta productos", async () => {
+    const falso = montarMuchos(3)
+
+    const pagina = await traerTraslados({}, { inicio: TAMANO_PAGINA })
+
+    expect(pagina).toEqual({ traslados: [], hayMas: false })
+    expect(consultasA(falso, "productos")).toBe(0)
+  })
+
+  it("con la misma fecha y hora el orden lo desempata el id, y las páginas no repiten ni pierden traslados", async () => {
+    const total = TAMANO_PAGINA + 5
+    montarMuchos(total, { mismaHora: true })
+
+    const primera = await traerTraslados()
+    const segunda = await traerTraslados({}, { inicio: TAMANO_PAGINA })
+    const vistos = [...ids(primera), ...ids(segunda)]
+
+    expect(vistos).toEqual(ordenEsperado(total))
+    expect(new Set(vistos).size).toBe(total)
+  })
+
+  it("cada página resuelve productos y usuarios con una consulta, no una por traslado", async () => {
+    const falso = montarMuchos(TAMANO_PAGINA * 2)
+
+    await traerTraslados()
+    await traerTraslados({}, { inicio: TAMANO_PAGINA })
+
+    expect(consultasA(falso, "traslados")).toBe(2)
+    expect(consultasA(falso, "productos")).toBe(2)
+    expect(consultasA(falso, "usuarios")).toBe(2)
+  })
+})
+
+describe("el historial: filtros", () => {
+  // Medianoche y fin del día en la hora de quien usa la pantalla.
+  const local = (anio, mes, dia, h = 0, m = 0, s = 0, ms = 0) =>
+    new Date(anio, mes - 1, dia, h, m, s, ms).toISOString()
+
+  const traslado = (id, creado_en, origen_id = "bodega", destino_id = "store") => ({
+    id,
+    empresa_id: EMPRESA,
+    origen_id,
+    destino_id,
+    usuario_id: "u1",
+    estado: "aplicado",
+    nota: "",
+    creado_en,
+  })
+
+  const montarCon = (traslados) =>
+    montar({
+      tablas: {
+        ubicaciones: [
+          { id: "bodega", empresa_id: EMPRESA, nombre: "Lunacell Bodega" },
+          { id: "store", empresa_id: EMPRESA, nombre: "Lunacell Store" },
+          { id: "camion1", empresa_id: EMPRESA, nombre: "Camión 01" },
+        ],
+        traslados,
+        traslado_detalle: [],
+      },
+    })
+
+  const ids = async (filtros) => (await traerTraslados(filtros)).traslados.map((t) => t.id).sort()
+
+  it("la ubicación incluye los traslados en que es origen y en los que es destino", async () => {
+    montarCon([
+      traslado("sale", local(2026, 10, 1, 9), "bodega", "camion1"),
+      traslado("entra", local(2026, 10, 2, 9), "camion1", "bodega"),
+      traslado("ajeno", local(2026, 10, 3, 9), "store", "camion1"),
+    ])
+
+    expect(await ids({ ubicacionId: "bodega" })).toEqual(["entra", "sale"])
+    expect(await ids({ ubicacionId: "store" })).toEqual(["ajeno"])
+  })
+
+  it("la fecha desde incluye desde el primer instante de ese día", async () => {
+    montarCon([
+      traslado("antes", local(2026, 10, 1, 23, 59, 59, 999)),
+      traslado("justo", local(2026, 10, 2)),
+      traslado("despues", local(2026, 10, 3, 12)),
+    ])
+
+    expect(await ids({ desde: "2026-10-02" })).toEqual(["despues", "justo"])
+  })
+
+  it("la fecha hasta incluye todo ese día y nada del siguiente", async () => {
+    montarCon([
+      traslado("temprano", local(2026, 10, 5)),
+      traslado("ultimo", local(2026, 10, 5, 23, 59, 59, 999)),
+      traslado("siguiente", local(2026, 10, 6)),
+    ])
+
+    expect(await ids({ hasta: "2026-10-05" })).toEqual(["temprano", "ultimo"])
+  })
+
+  it("desde, hasta y ubicación se combinan", async () => {
+    montarCon([
+      traslado("fuera-antes", local(2026, 9, 30, 23, 59), "bodega", "store"),
+      traslado("dentro", local(2026, 10, 1, 8), "store", "bodega"),
+      traslado("dentro-fin", local(2026, 10, 5, 22), "bodega", "camion1"),
+      traslado("otra-ubicacion", local(2026, 10, 3, 8), "store", "camion1"),
+      traslado("fuera-despues", local(2026, 10, 6, 0, 1), "bodega", "store"),
+    ])
+
+    expect(await ids({ ubicacionId: "bodega", desde: "2026-10-01", hasta: "2026-10-05" })).toEqual([
+      "dentro",
+      "dentro-fin",
+    ])
+  })
+
+  it("un mismo día en desde y hasta trae ese día completo", async () => {
+    montarCon([
+      traslado("inicio", local(2026, 10, 5)),
+      traslado("fin", local(2026, 10, 5, 23, 59)),
+      traslado("otro", local(2026, 10, 6, 0, 0, 0, 1)),
+    ])
+
+    expect(await ids({ desde: "2026-10-05", hasta: "2026-10-05" })).toEqual(["fin", "inicio"])
+  })
+
+  it("sin filtros trae todos", async () => {
+    montarCon([
+      traslado("a", local(2026, 10, 1)),
+      traslado("b", local(2026, 10, 2), "camion1", "store"),
+    ])
+
+    expect(await ids({ ubicacionId: "", desde: "", hasta: "" })).toEqual(["a", "b"])
+  })
+
+  it("un rango con desde posterior a hasta se rechaza sin consultar", async () => {
+    const falso = montarCon([])
+
+    await expect(traerTraslados({ desde: "2026-10-06", hasta: "2026-10-05" })).rejects.toThrow(
+      "La fecha desde no puede ser posterior a la fecha hasta."
+    )
+    expect(falso.from).not.toHaveBeenCalledWith("traslados")
+  })
+
+  it("una fecha que no es AAAA-MM-DD se rechaza sin consultar", async () => {
+    const falso = montarCon([])
+
+    await expect(traerTraslados({ desde: "05/10/2026" })).rejects.toThrow("Fecha no válida.")
+    expect(falso.from).not.toHaveBeenCalledWith("traslados")
+  })
+
+  it("una ubicación que no es un identificador se rechaza sin consultar", async () => {
+    const falso = montarCon([])
+
+    await expect(
+      traerTraslados({ ubicacionId: "bodega,destino_id.neq.x" })
+    ).rejects.toThrow("Ubicación no válida.")
+    expect(falso.from).not.toHaveBeenCalledWith("traslados")
   })
 })
