@@ -1020,6 +1020,37 @@ export function crearSupabaseFalso({
         )
       }
 
+      /*
+        Como nombres_de_usuarios() de la 0022: solo id y nombre, solo de la
+        empresa de quien llama —que tiene que estar activo— y sin repetir.
+      */
+      if (nombre === "nombres_de_usuarios") {
+        const falla = fallaDe(nombre, "rpc")
+        if (falla) return Promise.resolve({ data: null, error: falla })
+
+        const ids = argumentos.p_ids || []
+        if (ids.length > 100) {
+          return Promise.resolve({
+            data: null,
+            error: { code: "22023", message: "Se pidieron más de 100 usuarios" },
+          })
+        }
+
+        const quien = (datos.usuarios || []).find(
+          (u) => u.auth_id === sesion?.user?.id && u.activo !== false
+        )
+        const pedidos = new Set(ids)
+
+        return Promise.resolve({
+          data: quien
+            ? (datos.usuarios || [])
+                .filter((u) => pedidos.has(u.id) && u.empresa_id === quien.empresa_id)
+                .map((u) => ({ id: u.id, nombre: u.nombre }))
+            : [],
+          error: null,
+        })
+      }
+
       return Promise.resolve({
         data: null,
         error: { message: "función desconocida: " + nombre },

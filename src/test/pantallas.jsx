@@ -277,11 +277,16 @@ export function montarDatos({
   rolDelUsuario = "admin",
   permisosDelUsuario = [],
   traslados = [],
+  // Compañeros de la misma empresa, para lo que muestra quién hizo qué.
+  otrosUsuarios = [],
 } = {}) {
   const falso = crearSupabaseFalso({
     tablas: {
       empresas: empresa ? [empresa] : [],
-      usuarios: [{ ...USUARIO_PRUEBA, rol: rolDelUsuario, ubicacion_id: ubicacionOperativa }],
+      usuarios: [
+        { ...USUARIO_PRUEBA, rol: rolDelUsuario, ubicacion_id: ubicacionOperativa },
+        ...otrosUsuarios.map((u) => ({ empresa_id: EMPRESA, rol: "vendedor", activo: true, ...u })),
+      ],
       permisos_usuario: permisosDelUsuario.map((seccion) => ({
         usuario_id: USUARIO_PRUEBA.id,
         empresa_id: EMPRESA,
