@@ -85,12 +85,18 @@ const COLUMNAS = `
 `
 
 /*
-  Quién hizo cada traslado. La política de usuarios puede no dejar leer a
-  los demás —un vendedor no ve la lista de usuarios—, y eso no es motivo
-  para no mostrar el historial: el nombre queda vacío.
+  Quién hizo cada traslado, en UNA llamada por página. No sale de la tabla
+  usuarios: su política deja a un vendedor ver solo su propia fila, y
+  abrirla expondría correo, rol y el resto. nombres_de_usuarios() (0022)
+  entrega solo id y nombre de los pedidos, y solo de la propia empresa.
+  Si falla, el historial se muestra igual y el nombre queda vacío.
 */
-async function nombresDeUsuarios() {
-  const { data, error } = await supabase.from("usuarios").select("id, nombre")
+async function nombresDeUsuarios(filas) {
+  const ids = [...new Set(filas.map((f) => f.usuario_id).filter(Boolean))]
+
+  if (ids.length === 0) return new Map()
+
+  const { data, error } = await supabase.rpc("nombres_de_usuarios", { p_ids: ids })
 
   if (error) return new Map()
 
@@ -208,7 +214,7 @@ export async function traerTraslados(
 
   if (filas.length === 0) return { traslados: [], hayMas: false }
 
-  const [nombres, productos] = await Promise.all([nombresDeUsuarios(), nombresDeProductos(filas)])
+  const [nombres, productos] = await Promise.all([nombresDeUsuarios(filas), nombresDeProductos(filas)])
 
   return {
     traslados: filas.map((fila) => aTrasladoDeApp(fila, nombres, productos)),
