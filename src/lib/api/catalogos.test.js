@@ -617,3 +617,34 @@ describe("empresa", () => {
     )
   })
 })
+
+/*
+  SEC-3a: sin el permiso de su sección la base contesta 42501. Decirle
+  «No se pudo…» a quien no tiene permiso lo manda a reintentar algo que
+  nunca va a funcionar; tiene que saber que es una cuestión de permiso.
+*/
+describe("productos sin permiso", () => {
+  const SIN_PERMISO = { code: "42501", message: "new row violates row-level security policy for table \"productos\"" }
+
+  it("crear dice que falta permiso", async () => {
+    montar({ fallarEn: { productos: { insert: SIN_PERMISO } } })
+
+    await expect(
+      crearProducto({ code: "M-1", name: "Martillo" }, EMPRESA, USUARIO)
+    ).rejects.toThrow("No tienes permiso para crear el producto.")
+  })
+
+  it("actualizar dice que falta permiso", async () => {
+    montar({ fallarEn: { productos: { update: SIN_PERMISO } } })
+
+    await expect(
+      actualizarProducto("p1", { name: "x" }, { empresaId: EMPRESA, stockAnterior: 0 })
+    ).rejects.toThrow("No tienes permiso para actualizar el producto.")
+  })
+
+  it("desactivar dice que falta permiso", async () => {
+    montar({ fallarEn: { productos: { update: SIN_PERMISO } } })
+
+    await expect(desactivarProducto("p1")).rejects.toThrow("No tienes permiso para eliminar el producto.")
+  })
+})

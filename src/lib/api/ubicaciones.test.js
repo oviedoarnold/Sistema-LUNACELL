@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
 
-import { cambiarEstadoUbicacion } from "./ubicaciones"
+import { cambiarEstadoUbicacion, crearUbicacion, actualizarUbicacion } from "./ubicaciones"
 import { crearSupabaseFalso } from "../../test/supabaseFalso"
 
 vi.mock("../supabase", () => ({
@@ -161,5 +161,38 @@ describe("cambiarEstadoUbicacion · el camino que funciona", () => {
 
     expect(falso.datos.ubicaciones[0].activa).toBe(false)
     expect(falso.datos.ubicaciones).toHaveLength(1)
+  })
+})
+
+/*
+  SEC-3a: sin `locations`, o al tocar lo fiscal sin ser administrador, la
+  base contesta 42501, y el aviso tiene que decir que es una cuestión de
+  permiso, no un fallo que se arregla reintentando.
+*/
+describe("ubicaciones sin permiso", () => {
+  const SIN_PERMISO = { code: "42501", message: "new row violates row-level security policy for table \"ubicaciones\"" }
+
+  it("crear dice que falta permiso", async () => {
+    montar({ ubicaciones: { insert: SIN_PERMISO } })
+
+    await expect(crearUbicacion({ name: "Camión 02", type: "camion" }, "e1")).rejects.toThrow(
+      "No tienes permiso para crear la ubicación."
+    )
+  })
+
+  it("actualizar dice que falta permiso", async () => {
+    montar({ ubicaciones: { update: SIN_PERMISO } })
+
+    await expect(actualizarUbicacion("u1", { name: "Otro", type: "camion" }, "e1")).rejects.toThrow(
+      "No tienes permiso para actualizar la ubicación."
+    )
+  })
+
+  it("cambiar el estado dice que falta permiso", async () => {
+    montar({ ubicaciones: { update: SIN_PERMISO } })
+
+    await expect(cambiarEstadoUbicacion("u1", false)).rejects.toThrow(
+      "No tienes permiso para cambiar el estado de la ubicación."
+    )
   })
 })
