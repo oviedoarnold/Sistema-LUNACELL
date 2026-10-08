@@ -26,6 +26,7 @@ duda de si ya se aplicó, correrla de nuevo es seguro.
 | 0019 | El libro de inventario solo se escribe por las funciones: se retiran insert, update y delete a `authenticated` y `anon`, y un disparador exige ubicación en todo movimiento nuevo sin tocar los históricos |
 | 0020 | Traslados entre ubicaciones: `traslados`, `traslado_detalle`, `movimientos_inventario.traslado_id`, los tipos `traslado_salida` y `traslado_entrada`, y `registrar_traslado()`, que descuenta el origen y suma al destino en una sola transacción |
 | 0021 | Seguridad: retira la política que dejaba a cualquier empleado repartirse permisos, `usuario_tiene_permiso()` exige que el permiso sea de la empresa del usuario, una llave impide permisos cruzados entre empresas, y `ventas`, `detalle_venta`, `pagos` y `abonos` solo se escriben por sus funciones |
+| 0022 | `nombres_de_usuarios()`: id y nombre de los usuarios pedidos, solo de la propia empresa, para mostrar quién hizo cada registro sin abrir la tabla `usuarios` |
 
 ## Instalación en una base vacía
 
@@ -56,6 +57,7 @@ LUNACELL.
 | 0019 | **Correr, después de desplegar el frontend de INV-3.3.** Con el punto de venta anterior en producción dejaría de facturar. No toca ningún dato |
 | 0020 | **Correr, antes de desplegar el frontend de INV-4.** Solo agrega: tablas nuevas sin datos, una columna nula, dos tipos de movimiento y una función. No toca ningún dato |
 | 0021 | **Correr, antes de invitar al primer empleado.** No toca ningún dato: retira una política, refuerza una función, agrega una llave y quita escrituras directas que el frontend no usa |
+| 0022 | **Correr, antes de desplegar el frontend de INV-4.4.** Solo crea una función de lectura; no toca ningún dato ni ninguna política. Revoca su ejecución a `anon` |
 
 Ninguna de las que se corren borra datos: solo la 0010 tiene un `delete`,
 y es de las que se omiten. Lo que sí hacen varias es recrear vistas y

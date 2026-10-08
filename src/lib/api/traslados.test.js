@@ -203,7 +203,7 @@ describe("el historial", () => {
   })
 
   it("si no puede leer quién lo hizo, deja el nombre vacío en vez de fallar", async () => {
-    montar({ tablas: HISTORIAL, fallarEn: { usuarios: { message: "sin permiso" } } })
+    montar({ tablas: HISTORIAL, fallarEn: { nombres_de_usuarios: { message: "sin permiso" } } })
 
     const { traslados: lista } = await traerTraslados()
 
@@ -395,7 +395,9 @@ describe("el historial: páginas", () => {
 
     expect(consultasA(falso, "traslados")).toBe(2)
     expect(consultasA(falso, "productos")).toBe(2)
-    expect(consultasA(falso, "usuarios")).toBe(2)
+    // INV-4.4: los autores salen de la función, una llamada por página, y nunca de la tabla.
+    expect(falso.rpc.mock.calls.filter(([n]) => n === "nombres_de_usuarios")).toHaveLength(2)
+    expect(consultasA(falso, "usuarios")).toBe(0)
   })
 })
 
@@ -518,5 +520,120 @@ describe("el historial: filtros", () => {
       traerTraslados({ ubicacionId: "bodega,destino_id.neq.x" })
     ).rejects.toThrow("Ubicación no válida.")
     expect(falso.from).not.toHaveBeenCalledWith("traslados")
+  })
+})
+
+/*
+  INV-4.4: quién hizo cada traslado sale de nombres_de_usuarios(), que
+  entrega solo id y nombre de la propia empresa. La tabla usuarios ya no
+  se consulta: para un vendedor, su política solo deja ver su propia fila,
+  y por eso el autor de un compañero quedaba como "—".
+*/
+describe("el historial: autores", () => {
+  const AJENA = "empresa-2"
+
+  const traslado = (id, usuario_id, hora) => ({
+    id,
+    empresa_id: EMPRESA,
+    origen_id: "bodega",
+    destino_id: "store",
+    usuario_id,
+    estado: "aplicado",
+    nota: "",
+    creado_en: `2026-10-01T${String(hora).padStart(2, "0")}:00:00Z`,
+  })
+
+  const USUARIOS = [
+    { id: "u1", auth_id: AUTH, empresa_id: EMPRESA, nombre: "Ana", activo: true },
+    { id: "u2", auth_id: "auth-2", empresa_id: EMPRESA, nombre: "Beto", activo: true },
+    { id: "u3", auth_id: "auth-3", empresa_id: EMPRESA, nombre: "Ceci", activo: false },
+    { id: "u9", auth_id: "auth-9", empresa_id: AJENA, nombre: "Ajeno", activo: true },
+  ]
+
+  const llamadasDeNombres = (falso) =>
+    falso.rpc.mock.calls.filter(([nombre]) => nombre === "nombres_de_usuarios")
+
+  const autores = (pagina) => Object.fromEntries(pagina.traslados.map((t) => [t.id, t.userName]))
+
+  it("no consulta la tabla usuarios", async () => {
+    const falso = montar({ tablas: { usuarios: USUARIOS, traslados: [traslado("t1", "u2", 1)] } })
+
+    await traerTraslados()
+
+    expect(falso.from).not.toHaveBeenCalledWith("usuarios")
+  })
+
+  it("pide los autores a nombres_de_usuarios, una vez por página y sin repetir ids", async () => {
+    const falso = montar({
+      tablas: {
+        usuarios: USUARIOS,
+        traslados: [traslado("t1", "u2", 1), traslado("t2", "u2", 2), traslado("t3", "u1", 3), traslado("t4", "u2", 4)],
+      },
+    })
+
+    await traerTraslados()
+
+    expect(llamadasDeNombres(falso)).toHaveLength(1)
+    expect([...llamadasDeNombres(falso)[0][1].p_ids].sort()).toEqual(["u1", "u2"])
+  })
+
+  it("sin autores que resolver no llama a la función", async () => {
+    const falso = montar({ tablas: { usuarios: USUARIOS, traslados: [traslado("t1", null, 1)] } })
+
+    const pagina = await traerTraslados()
+
+    expect(llamadasDeNombres(falso)).toHaveLength(0)
+    expect(pagina.traslados[0].userName).toBe("")
+
+    const vacio = montar({ tablas: { usuarios: USUARIOS } })
+    await traerTraslados()
+    expect(llamadasDeNombres(vacio)).toHaveLength(0)
+  })
+
+  it("asigna a cada traslado el nombre de su autor, también si está inactivo", async () => {
+    montar({
+      tablas: {
+        usuarios: USUARIOS,
+        traslados: [traslado("t1", "u2", 1), traslado("t2", "u3", 2), traslado("t3", "u1", 3)],
+      },
+    })
+
+    expect(autores(await traerTraslados())).toEqual({ t1: "Beto", t2: "Ceci", t3: "Ana" })
+  })
+
+  it("un autor que la función no devuelve queda sin nombre", async () => {
+    montar({
+      tablas: { usuarios: USUARIOS, traslados: [traslado("t1", "u9", 1), traslado("t2", "u-borrado", 2)] },
+    })
+
+    expect(autores(await traerTraslados())).toEqual({ t1: "", t2: "" })
+  })
+
+  it("si la función falla, el historial carga igual y sin nombres", async () => {
+    montar({
+      tablas: { usuarios: USUARIOS, traslados: [traslado("t1", "u2", 1)] },
+      fallarEn: { nombres_de_usuarios: { message: "sin red" } },
+    })
+
+    const pagina = await traerTraslados()
+
+    expect(pagina.traslados.map((t) => t.id)).toEqual(["t1"])
+    expect(pagina.traslados[0].userName).toBe("")
+  })
+
+  it("Cargar más resuelve los autores de la página nueva con su propia llamada", async () => {
+    const lista = Array.from({ length: TAMANO_PAGINA + 2 }, (_, i) =>
+      traslado(`t${String(i).padStart(3, "0")}`, i < 2 ? "u3" : "u2", 0)
+    ).map((t, i) => ({ ...t, creado_en: new Date(Date.UTC(2026, 9, 1) + i * 3600000).toISOString() }))
+    const falso = montar({ tablas: { usuarios: USUARIOS, traslados: lista } })
+
+    const primera = await traerTraslados()
+    const segunda = await traerTraslados({}, { inicio: TAMANO_PAGINA })
+
+    expect(llamadasDeNombres(falso)).toHaveLength(2)
+    expect(llamadasDeNombres(falso)[0][1].p_ids).toEqual(["u2"])
+    expect(llamadasDeNombres(falso)[1][1].p_ids).toEqual(["u3"])
+    expect(new Set(primera.traslados.map((t) => t.userName))).toEqual(new Set(["Beto"]))
+    expect(segunda.traslados.map((t) => t.userName)).toEqual(["Ceci", "Ceci"])
   })
 })

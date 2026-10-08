@@ -831,3 +831,54 @@ describe("Traslados: filtros y Cargar más", () => {
     expect(boton).toHaveFocus()
   })
 })
+
+/*
+  INV-4.4: un vendedor ve quién hizo cada traslado aunque haya sido un
+  compañero. El nombre lo da nombres_de_usuarios(); si no lo da, "—".
+*/
+describe("Traslados: autor visible para quien no es administrador", () => {
+  const DE_COMPANERA = {
+    id: "t-comp",
+    origen_id: "bodega",
+    destino_id: "store",
+    usuario_id: "u-companera",
+    nota: "Reposición",
+    creado_en: "2026-10-02T15:00:00Z",
+    renglones: [{ producto_id: "p1", cantidad: 2 }],
+  }
+
+  const comoVendedor = (extra = {}) =>
+    renderTransfers({
+      rolDelUsuario: "vendedor",
+      permisosDelUsuario: ["inventory-own"],
+      ubicacionOperativa: "bodega",
+      otrosUsuarios: [{ id: "u-companera", auth_id: "auth-companera", nombre: "Carla Compañera" }],
+      traslados: [DE_COMPANERA],
+      ...extra,
+    })
+
+  const filaDelTraslado = () =>
+    within(screen.getByRole("table", { name: /historial de traslados/i }))
+      .getByText("Lunacell Bodega → Lunacell Store")
+      .closest("tr")
+
+  it("el historial y el detalle muestran a la compañera que lo hizo", async () => {
+    await comoVendedor()
+
+    expect(within(filaDelTraslado()).getByText("Carla Compañera")).toBeInTheDocument()
+
+    fireEvent.click(within(filaDelTraslado()).getByRole("button", { name: /ver detalle/i }))
+    const dialogo = screen.getByRole("dialog", { name: /detalle del traslado/i })
+    const usuario = within(dialogo).getAllByRole("term").find((dt) => dt.textContent === "Usuario")
+    expect(usuario.nextElementSibling).toHaveTextContent("Carla Compañera")
+  })
+
+  it("si no se pueden resolver los nombres, el historial se ve igual con un guion", async () => {
+    await comoVendedor({ fallarEn: { nombres_de_usuarios: { message: "sin red" } } })
+
+    const fila = filaDelTraslado()
+    expect(within(fila).getByText("Reposición")).toBeInTheDocument()
+    expect(within(fila).queryByText("Carla Compañera")).not.toBeInTheDocument()
+    expect(within(fila).getAllByText("—").length).toBeGreaterThan(0)
+  })
+})
