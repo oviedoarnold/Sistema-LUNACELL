@@ -377,6 +377,91 @@ describe("SEC-3a ubicaciones: con `locations`, lo ordinario; lo fiscal, solo el 
   })
 })
 
+/*
+  El disparador que impide desactivar una ubicación operativa contaba los
+  usuarios con la RLS de quien desactivaba. Un no administrador solo ve su
+  propia fila, así que contaba cero y la desactivación pasaba.
+*/
+describe("SEC-3a: la ubicación desde la que alguien opera no se desactiva, la desactive quien la desactive", () => {
+  const desactivar = (authId, id) => como(authId, "update ubicaciones set activa = false where id = $1", [id])
+
+  it("T1. el administrador no la desactiva", async () => {
+    const e = await escenario()
+
+    await expect(desactivar(e.a.authId, e.tienda)).rejects.toMatchObject({ code: "P0001" })
+    expect((await fila("ubicaciones", e.tienda)).activa).toBe(true)
+  })
+
+  it("T2. quien tiene `locations` tampoco, aunque no vea a los otros usuarios", async () => {
+    const e = await escenario()
+
+    await expect(desactivar(e.sucursales.authId, e.tienda)).rejects.toMatchObject({ code: "P0001" })
+    expect((await fila("ubicaciones", e.tienda)).activa).toBe(true)
+  })
+
+  it("T3. quien tiene `locations` sí desactiva una ubicación sin usuarios", async () => {
+    const e = await escenario()
+    const vacia = (await db.query(NUEVA_UBICACION, [e.a.empresa, "Sin nadie"])).rows[0].id
+
+    await desactivar(e.sucursales.authId, vacia)
+
+    expect((await fila("ubicaciones", vacia)).activa).toBe(false)
+  })
+
+  it("T4. sin `locations` no se desactiva nada, ni siquiera una vacía", async () => {
+    const e = await escenario()
+    const vacia = (await db.query(NUEVA_UBICACION, [e.a.empresa, "Sin nadie"])).rows[0].id
+
+    await expect(desactivar(e.vendedor.authId, vacia)).rejects.toMatchObject(RECHAZO)
+    expect((await fila("ubicaciones", vacia)).activa).toBe(true)
+  })
+
+  it("T5. ni otra empresa ni un usuario inactivo la desactivan", async () => {
+    const e = await escenario()
+
+    const ajeno = await desactivar(e.sucursales.authId, e.bodegaB)
+    expect(ajeno.rowCount).toBe(0)
+    expect((await fila("ubicaciones", e.bodegaB)).activa).toBe(true)
+
+    const inactivo = await desactivar(e.inactivo.authId, e.tienda)
+    expect(inactivo.rowCount).toBe(0)
+    expect((await fila("ubicaciones", e.tienda)).activa).toBe(true)
+  })
+
+  it("T6. el disparador corre como su dueño, con search_path vacío, y nadie de la aplicación lo ejecuta directo", async () => {
+    const r = await db.query(`
+      select p.prosecdef, p.proconfig, pg_get_userbyid(p.proowner) as dueno,
+             has_function_privilege('anon', p.oid, 'EXECUTE') as anon,
+             has_function_privilege('authenticated', p.oid, 'EXECUTE') as autenticado,
+             coalesce((select bool_or(a.grantee = 0) from aclexplode(p.proacl) a where a.privilege_type = 'EXECUTE'), false) as publico
+        from pg_proc p where p.oid = 'public.ubicaciones_no_desactivar_operativa()'::regprocedure`)
+
+    expect(r.rows[0]).toEqual({
+      prosecdef: true,
+      proconfig: ['search_path=""'],
+      dueno: "postgres",
+      anon: false,
+      autenticado: false,
+      publico: false,
+    })
+  })
+})
+
+describe("SEC-3a: el disparador de lo fiscal no corre con privilegios de nadie más", () => {
+  it("es SECURITY INVOKER, con search_path vacío, y nadie de la aplicación lo ejecuta directo", async () => {
+    const r = await db.query(`
+      select p.prosecdef, p.proconfig,
+             has_function_privilege('anon', p.oid, 'EXECUTE') as anon,
+             has_function_privilege('authenticated', p.oid, 'EXECUTE') as autenticado,
+             coalesce((select bool_or(a.grantee = 0) from aclexplode(p.proacl) a where a.privilege_type = 'EXECUTE'), false) as publico
+        from pg_proc p where p.proname = 'ubicaciones_fiscal_solo_admin'`)
+
+    expect(r.rows).toEqual([
+      { prosecdef: false, proconfig: ['search_path=""'], anon: false, autenticado: false, publico: false },
+    ])
+  })
+})
+
 describe("SEC-3a: las políticas quedan separadas por operación", () => {
   it("productos y ubicaciones ya no tienen una política para todo", async () => {
     const r = await db.query(
