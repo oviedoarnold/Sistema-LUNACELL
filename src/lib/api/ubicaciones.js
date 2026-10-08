@@ -53,8 +53,16 @@ function mensajeParaElUsuario(error) {
   return error?.code === "P0001" ? String(error.message || "").trim() : ""
 }
 
+/*
+  42501 es la base diciendo que falta permiso: `locations`, o ser
+  administrador para decidir si una ubicación vende o es fiscal (SEC-3a).
+*/
 function fallo(error, queHacia) {
   console.error(`No se pudo ${queHacia}:`, error)
+
+  if (error?.code === "42501") {
+    throw new Error(`No tienes permiso para ${queHacia}.`)
+  }
 
   throw new Error(mensajeParaElUsuario(error) || `No se pudo ${queHacia}.`)
 }
