@@ -29,6 +29,7 @@ duda de si ya se aplicó, correrla de nuevo es seguro.
 | 0022 | `nombres_de_usuarios()`: id y nombre de los usuarios pedidos, solo de la propia empresa, para mostrar quién hizo cada registro sin abrir la tabla `usuarios` |
 | 0023 | Seguridad (SEC-3a): productos y ubicaciones se crean y cambian solo con `products` y `locations`, no se borran desde la aplicación, solo el administrador decide qué ubicación vende o es fiscal, y el disparador de ubicación operativa cuenta a todos los usuarios y no solo a los visibles |
 | 0024 | Seguridad (SEC-3a, storage): las imágenes de producto se suben, reemplazan, mueven y borran solo con `products` y en la carpeta de la propia empresa; el bucket deja de poder listarse sin iniciar sesión |
+| 0025 | Seguridad (SEC-3b): clientes se dan de alta con `clients`, `pos` o `quotes`, se cambian con `clients` y no se borran nunca; proveedores con `suppliers`; una cotización la crea quien tiene `quotes` a su nombre y solo su autor o un administrador la cambia o la borra, con su detalle |
 
 ## Instalación en una base vacía
 
@@ -62,6 +63,7 @@ LUNACELL.
 | 0022 | **Correr, antes de desplegar el frontend de INV-4.4.** Solo crea una función de lectura; no toca ningún dato ni ninguna política. Revoca su ejecución a `anon` |
 | 0023 | **Correr, antes de invitar al primer empleado.** No toca ningún dato: cambia políticas, retira el borrado directo, agrega un disparador y endurece otro. No toca storage |
 | 0024 | **Correr, antes de invitar al primer empleado.** No toca ningún archivo ni el bucket: solo cambia las políticas de `storage.objects`. Las imágenes se siguen viendo por su URL pública |
+| 0025 | **Correr, antes de invitar al primer empleado.** No toca ningún dato: cambia políticas, agrega `usuario_actual()` y retira el borrado de clientes y la escritura de `anon` |
 
 Ninguna de las que se corren borra datos: solo la 0010 tiene un `delete`,
 y es de las que se omiten. Lo que sí hacen varias es recrear vistas y
