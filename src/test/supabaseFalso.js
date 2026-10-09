@@ -247,6 +247,7 @@ export function crearSupabaseFalso({
   cuentas = [],
   sesionInicial = null,
   fallarEn = {},
+  fallarAlmacenamiento = {},
 } = {}) {
   const datos = JSON.parse(JSON.stringify(tablas))
   let sesion = sesionInicial
@@ -953,11 +954,18 @@ export function crearSupabaseFalso({
     Almacenamiento en memoria. Guarda las rutas subidas para poder
     comprobar que la imagen queda en la carpeta de su empresa, que es de
     donde sale el aislamiento entre ferreterías.
+
+    fallarAlmacenamiento provoca el error que devolvería el servicio, por
+    operación: { upload: error } o { remove: error }.
   */
   const archivos = new Map()
 
   const cubeta = (nombreCubeta) => ({
     upload: vi.fn((ruta, archivo) => {
+      if (fallarAlmacenamiento.upload) {
+        return Promise.resolve({ data: null, error: fallarAlmacenamiento.upload })
+      }
+
       archivos.set(nombreCubeta + "/" + ruta, {
         tipo: archivo?.type || "",
         tamano: archivo?.size || 0,
@@ -967,6 +975,10 @@ export function crearSupabaseFalso({
     }),
 
     remove: vi.fn((rutas) => {
+      if (fallarAlmacenamiento.remove) {
+        return Promise.resolve({ data: null, error: fallarAlmacenamiento.remove })
+      }
+
       rutas.forEach((r) => archivos.delete(nombreCubeta + "/" + r))
 
       return Promise.resolve({ data: [], error: null })
