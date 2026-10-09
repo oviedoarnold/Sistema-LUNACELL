@@ -22,7 +22,7 @@
 
 import { describe, it, expect, beforeAll, afterAll } from "vitest"
 
-import { levantarBase, comoUsuario, comoDueno } from "./arnes.mjs"
+import { levantarBase, consultarComo } from "./arnes.mjs"
 import { crearEmpresa, crearVendedor, crearCliente, crearFactura, contar } from "./fixtures.mjs"
 
 let base
@@ -37,21 +37,11 @@ afterAll(async () => {
   await base?.cerrar()
 })
 
-/* Corre una consulta como ese usuario (null = anónimo) y vuelve a dueño. */
-async function como(authId, consulta, valores = []) {
-  await comoUsuario(db, authId)
-
-  try {
-    return await db.query(consulta, valores)
-  } finally {
-    await comoDueno(db)
-  }
-}
+const como = (authId, consulta, valores) => consultarComo(db, authId, consulta, valores)
 
 const RECHAZO = { code: "42501" }
 
-const fila = async (tabla, id) =>
-  (await db.query(`select * from ${tabla} where id = $1`, [id])).rows[0]
+const fila = async (tabla, id) => (await db.query(`select * from ${tabla} where id = $1`, [id])).rows[0]
 
 let serie = 0
 
