@@ -18,6 +18,10 @@ const COLUMNAS = `
 function fallo(error, queHacia) {
   console.error(`No se pudo ${queHacia}:`, error)
 
+  if (error?.code === "42501") {
+    throw new Error(`No tienes permiso para ${queHacia}.`)
+  }
+
   throw new Error(`No se pudo ${queHacia}.`)
 }
 
@@ -187,10 +191,20 @@ async function guardarRenglones(cotizacionId, items, empresaId) {
   if (error) fallo(error, "guardar el detalle de la cotización")
 }
 
+/*
+  Solo su autor o un administrador la borra (0025). A cualquier otro la base
+  no le alcanza la fila y responde sin error: se pide de vuelta lo borrado
+  para no dar por hecho lo que no pasó.
+*/
 export async function eliminarCotizacion(id) {
-  const { error } = await supabase.from("cotizaciones").delete().eq("id", id)
+  const { data, error } = await supabase
+    .from("cotizaciones")
+    .delete()
+    .eq("id", id)
+    .select("id")
 
   if (error) fallo(error, "eliminar la cotización")
+  if (!data?.length) throw new Error("No tienes permiso para eliminar la cotización.")
 }
 
 /*

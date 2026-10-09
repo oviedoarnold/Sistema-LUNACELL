@@ -7,7 +7,6 @@ import {
   traerClientes,
   crearCliente,
   actualizarCliente,
-  eliminarCliente,
 } from "../lib/api/catalogos"
 
 function ClientsProvider({ children }) {
@@ -74,14 +73,6 @@ function ClientsProvider({ children }) {
     [empresaId, refrescar]
   )
 
-  const deleteClient = useCallback(
-    async (id) => {
-      await eliminarCliente(id)
-      await refrescar()
-    },
-    [refrescar]
-  )
-
   const getClientById = useCallback(
     (id) => clients.find((c) => String(c.id) === String(id)) || null,
     [clients]
@@ -95,10 +86,9 @@ function ClientsProvider({ children }) {
 
       addClient,
       updateClient,
-      deleteClient,
       getClientById,
     }),
-    [clients, cargando, error, addClient, updateClient, deleteClient, getClientById]
+    [clients, cargando, error, addClient, updateClient, getClientById]
   )
 
   return (

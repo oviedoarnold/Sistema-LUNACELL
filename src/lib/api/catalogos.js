@@ -310,11 +310,10 @@ export async function actualizarCliente(id, cliente, empresaId) {
   if (error) fallo(error, "actualizar el cliente")
 }
 
-export async function eliminarCliente(id) {
-  const { error } = await supabase.from("clientes").delete().eq("id", id)
-
-  if (error) fallo(error, "eliminar el cliente")
-}
+/*
+  Un cliente no se borra: sus ventas, facturas y cuentas por cobrar lo
+  necesitan, y la base no lo permite a nadie (0025).
+*/
 
 // ── PROVEEDORES ────────────────────────────────────────────
 
@@ -350,10 +349,19 @@ export async function actualizarProveedor(id, proveedor, empresaId) {
   if (error) fallo(error, "actualizar el proveedor")
 }
 
+/*
+  Sin el permiso, la base no alcanza la fila y responde sin error. Se pide
+  de vuelta lo borrado para no dar por hecho lo que no pasó.
+*/
 export async function eliminarProveedor(id) {
-  const { error } = await supabase.from("proveedores").delete().eq("id", id)
+  const { data, error } = await supabase
+    .from("proveedores")
+    .delete()
+    .eq("id", id)
+    .select("id")
 
   if (error) fallo(error, "eliminar el proveedor")
+  if (!data?.length) throw new Error("No tienes permiso para eliminar el proveedor.")
 }
 
 // ── EMPRESA ────────────────────────────────────────────────

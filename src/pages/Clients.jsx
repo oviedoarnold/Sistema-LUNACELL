@@ -1,5 +1,5 @@
 import { useContext, useMemo, useState } from "react"
-import { FaPen, FaPlus, FaSearch, FaTrash, FaUsers } from "react-icons/fa"
+import { FaPen, FaPlus, FaSearch, FaUsers } from "react-icons/fa"
 import Swal from "sweetalert2"
 import { ClientsContext } from "../context/contexts"
 import EmptyState from "../components/crud/EmptyState"
@@ -12,7 +12,7 @@ import ModalShell from "../components/forms/ModalShell"
 const emptyForm = { id: null, name: "", rtn: "", phone: "", address: "", email: "" }
 
 function Clients() {
-  const { clients = [], cargando, addClient, updateClient, deleteClient } = useContext(ClientsContext)
+  const { clients = [], cargando, addClient, updateClient } = useContext(ClientsContext)
   const [search, setSearch] = useState("")
   const [modalOpen, setModalOpen] = useState(false)
   const [form, setForm] = useState(emptyForm)
@@ -43,18 +43,6 @@ function Clients() {
       Swal.fire({ icon: "error", title: "No se pudo guardar", text: e.message })
     } finally {
       setGuardando(false)
-    }
-  }
-
-  const remove = async (id) => {
-    const result = await Swal.fire({ title: "¿Eliminar cliente?", text: "Esta acción no se puede deshacer", icon: "warning", showCancelButton: true, confirmButtonText: "Sí, eliminar", cancelButtonText: "Cancelar" })
-    if (!result.isConfirmed) return
-
-    try {
-      await deleteClient(id)
-      Swal.fire({ icon: "success", title: "Cliente eliminado" })
-    } catch (e) {
-      Swal.fire({ icon: "error", title: "No se pudo eliminar", text: e.message })
     }
   }
 
@@ -96,7 +84,6 @@ function Clients() {
                 <td className="celda-secundaria">{c.email || "—"}</td>
                 <td><div className="row-actions">
                   <button className="btn btn-secondary btn-sm" onClick={() => openEdit(c)}><FaPen aria-hidden="true" />Editar</button>
-                  <button className="btn btn-danger btn-sm" onClick={() => remove(c.id)}><FaTrash aria-hidden="true" />Eliminar</button>
                 </div></td>
               </tr>
             ))}
