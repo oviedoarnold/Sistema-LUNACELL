@@ -71,10 +71,20 @@ const aProveedorDeBase = (proveedor, empresaId) => ({
   42501 es la base diciendo que falta permiso: la sección que exige quien
   escribe (SEC-3a). Reintentar no lo arregla, así que el aviso lo dice.
 */
+/*
+  La base rechaza por permiso con 42501. Storage traduce ese mismo rechazo
+  a un 403 (AccessDenied), que según la versión llega con estado HTTP 400
+  o 403 pero siempre con statusCode "403" en el cuerpo.
+*/
+const esFaltaDePermiso = (error) =>
+  error?.code === "42501" ||
+  error?.code === "AccessDenied" ||
+  String(error?.statusCode) === "403"
+
 function fallo(error, queHacia) {
   console.error(`No se pudo ${queHacia}:`, error)
 
-  if (error?.code === "42501") {
+  if (esFaltaDePermiso(error)) {
     throw new Error(`No tienes permiso para ${queHacia}.`)
   }
 

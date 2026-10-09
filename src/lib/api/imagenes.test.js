@@ -18,8 +18,8 @@ vi.mock("../supabase", () => ({
 
 const archivo = ({ type = "image/jpeg", size = 1024 } = {}) => ({ type, size })
 
-const montarAlmacenamiento = () => {
-  const falso = crearSupabaseFalso({ tablas: {} })
+const montarAlmacenamiento = (fallarAlmacenamiento = {}) => {
+  const falso = crearSupabaseFalso({ tablas: {}, fallarAlmacenamiento })
 
   globalThis.__supabaseFalso = falso
 
@@ -119,6 +119,45 @@ describe("subirImagenDeProducto", () => {
 
     expect(url).toContain("/productos/")
     expect(url).toMatch(/^https:\/\//)
+  })
+
+  /*
+    Así responde el servicio de Storage cuando la política rechaza la
+    subida: el cuerpo trae statusCode "403" y code "AccessDenied", y el
+    estado HTTP puede venir como 400 o como 403 según la versión.
+  */
+  const rechazoDeStorage = (status) => ({
+    name: "StorageApiError",
+    message: "new row violates row-level security policy",
+    status,
+    statusCode: "403",
+    code: "AccessDenied",
+  })
+
+  it("dice que no tiene permiso si Storage rechaza la subida (HTTP 400)", async () => {
+    montarAlmacenamiento({ upload: rechazoDeStorage(400) })
+
+    await expect(subirImagenDeProducto(archivo(), PRODUCTO, EMPRESA)).rejects.toThrow(
+      "No tienes permiso para subir la imagen del producto."
+    )
+  })
+
+  it("dice que no tiene permiso si Storage rechaza la subida (HTTP 403)", async () => {
+    montarAlmacenamiento({ upload: { ...rechazoDeStorage(403), code: undefined } })
+
+    await expect(subirImagenDeProducto(archivo(), PRODUCTO, EMPRESA)).rejects.toThrow(
+      "No tienes permiso para subir la imagen del producto."
+    )
+  })
+
+  it("no confunde otro fallo de Storage con falta de permiso", async () => {
+    montarAlmacenamiento({
+      upload: { name: "StorageApiError", message: "Payload too large", status: 413, statusCode: "413" },
+    })
+
+    await expect(subirImagenDeProducto(archivo(), PRODUCTO, EMPRESA)).rejects.toThrow(
+      "No se pudo subir la imagen del producto."
+    )
   })
 
   it("no sube nada si el archivo no pasa la revisión", async () => {
