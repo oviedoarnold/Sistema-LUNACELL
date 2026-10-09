@@ -32,14 +32,14 @@ const PROVEEDORES = [
   },
 ]
 
-function renderSuppliers(proveedores = PROVEEDORES) {
+function renderSuppliers(proveedores = PROVEEDORES, usuario = {}) {
   return renderizarPantalla(
     <AuthProvider>
       <ProductProvider>
         <Suppliers />
       </ProductProvider>
     </AuthProvider>,
-    { proveedores, esperar: ["proveedores"] }
+    { proveedores, esperar: ["proveedores"], ...usuario }
   )
 }
 
@@ -97,5 +97,19 @@ describe("Suppliers", () => {
     await renderSuppliers([])
 
     expect(screen.getByText(/no hay proveedores/i)).toBeInTheDocument()
+  })
+
+  // Borrar un proveedor lo decide solo el administrador (0025).
+  it("el administrador puede eliminar cada proveedor", async () => {
+    await renderSuppliers()
+
+    expect(screen.getAllByRole("button", { name: /eliminar/i })).toHaveLength(2)
+  })
+
+  it("quien solo tiene `suppliers` edita pero no ve eliminar", async () => {
+    await renderSuppliers(PROVEEDORES, { rolDelUsuario: "vendedor", permisosDelUsuario: ["suppliers"] })
+
+    expect(screen.getAllByRole("button", { name: /editar/i })).toHaveLength(2)
+    expect(screen.queryAllByRole("button", { name: /eliminar/i })).toHaveLength(0)
   })
 })

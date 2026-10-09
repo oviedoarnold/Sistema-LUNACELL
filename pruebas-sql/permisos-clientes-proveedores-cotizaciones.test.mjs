@@ -14,7 +14,8 @@
     lo dan de alta) y se cambia con `clients`;
   - un cliente NO se borra nunca, ni siquiera por el administrador: sus
     ventas, facturas y cuentas por cobrar lo necesitan;
-  - un proveedor se escribe con `suppliers`;
+  - un proveedor se crea y se cambia con `suppliers`, y solo el
+    administrador lo borra;
   - una cotización la crea quien tiene `quotes`, a su nombre, y solo su
     autor o un administrador la cambia o la borra; su detalle sigue a su
     cotización.
@@ -198,14 +199,24 @@ describe("SEC-3b clientes: no se borran nunca", () => {
 
 // ── PROVEEDORES ───────────────────────────────────────────
 
-describe("SEC-3b proveedores: se escriben con `suppliers`", () => {
-  it("P1. con `suppliers` se crea, cambia y borra un proveedor", async () => {
+describe("SEC-3b proveedores: se escriben con `suppliers`; solo el administrador los borra", () => {
+  it("P1. con `suppliers` se crea y se cambia un proveedor", async () => {
     const e = await escenario()
 
     const nuevo = (await como(e.compras.authId, NUEVO_PROVEEDOR, [e.a.empresa, "Nuevo"])).rows[0].id
 
     expect((await como(e.compras.authId, "update proveedores set contacto = 'Ana' where id = $1", [nuevo])).rowCount).toBe(1)
-    expect((await como(e.compras.authId, "delete from proveedores where id = $1", [nuevo])).rowCount).toBe(1)
+  })
+
+  /*
+    Borrar un proveedor deja sus productos sin proveedor: lo decide solo el
+    administrador.
+  */
+  it("P1b. con `suppliers` no se borra un proveedor", async () => {
+    const e = await escenario()
+
+    expect((await como(e.compras.authId, "delete from proveedores where id = $1", [e.proveedor])).rowCount).toBe(0)
+    expect(await contar(db, "proveedores", "id = $1", [e.proveedor])).toBe(1)
   })
 
   it("P2. el administrador también, sin permisos repartidos", async () => {
