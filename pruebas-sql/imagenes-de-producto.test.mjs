@@ -20,7 +20,12 @@
     superusuario. Si la prueba falla, responde 403.
   - remove: DELETE … RETURNING * como el usuario. Lo que la RLS no deja
     ver no se borra y no da error: vuelve vacío.
-  - list: lee storage.objects como el usuario.
+  - move: busca el original como el usuario (si no lo ve, NoSuchKey) y
+    lo actualiza como el usuario.
+  - list: llama a storage.search(), que es SECURITY INVOKER: lee
+    storage.objects como el usuario, con su RLS.
+
+  Comprobado contra el código de la versión que corre producción (v1.80.2).
   - URL pública: lee como superusuario, sin RLS. Por eso cerrar el listado
     no la rompe.
 */
@@ -103,15 +108,37 @@ const borrar = (authId, nombres) =>
     )
   )
 
+/*
+  Mover: el servicio busca el original y lo actualiza, las dos cosas como
+  el usuario. Si no lo encuentra, o si la actualización no alcanza ninguna
+  fila, responde NoSuchKey.
+*/
+const noLoEncuentra = () => Object.assign(new Error("Object not found"), { code: "NoSuchKey" })
+
 const mover = (authId, desde, hacia) =>
-  enStorage(authId, "storage.object.move", () =>
-    db.query(
-      `update storage.objects set name = $2
+  enStorage(authId, "storage.object.move", async () => {
+    const original = await db.query(
+      `select id from storage.objects
+        where name collate "C" = $1 and bucket_id = 'productos' and archived_at is null
+        limit 1`,
+      [desde]
+    )
+
+    if (original.rowCount === 0) throw noLoEncuentra()
+
+    const movida = await db.query(
+      `update storage.objects set name = $2, version = $3, bucket_id = 'productos', owner = $4, owner_id = $5
         where bucket_id = 'productos' and name collate "C" = $1 and archived_at is null
         returning *`,
-      [desde, hacia]
+      [desde, hacia, `v-${++serie}`, authId, authId]
     )
-  )
+
+    if (movida.rowCount === 0) throw noLoEncuentra()
+
+    return movida
+  })
+
+const NO_LO_VE = { code: "NoSuchKey" }
 
 const listar = async (authId) =>
   (
@@ -191,9 +218,7 @@ describe("SEC-3a storage: sin el permiso `products` no se tocan las imágenes", 
   it("I3. no la mueve ni la renombra", async () => {
     const e = await escenario()
 
-    const r = await mover(e.vendedor.authId, e.fotoA, `${e.a.empresa}/otro.webp`)
-
-    expect(r.rowCount).toBe(0)
+    await expect(mover(e.vendedor.authId, e.fotoA, `${e.a.empresa}/otro.webp`)).rejects.toMatchObject(NO_LO_VE)
     expect(await existe(e.fotoA)).toBe(1)
   })
 
@@ -282,7 +307,7 @@ describe("SEC-3a storage: nadie toca las imágenes de otra empresa", () => {
     const e = await escenario()
 
     await expect(subir(e.catalogo.authId, e.fotoB)).rejects.toMatchObject(RECHAZO)
-    expect((await mover(e.a.authId, e.fotoB, `${e.a.empresa}/robada.webp`)).rowCount).toBe(0)
+    await expect(mover(e.a.authId, e.fotoB, `${e.a.empresa}/robada.webp`)).rejects.toMatchObject(NO_LO_VE)
     expect((await borrar(e.a.authId, [e.fotoB])).rowCount).toBe(0)
     expect(await existe(e.fotoB)).toBe(1)
   })
@@ -317,6 +342,16 @@ describe("SEC-3a storage: el listado se cierra y la URL pública sigue sirviendo
 
     expect(nombres).toContain(e.fotoA)
     expect(nombres.every((n) => n.startsWith(`${e.a.empresa}/`))).toBe(true)
+  })
+
+  it("I21. el administrador de otra empresa no ve en el listado las imágenes ajenas", async () => {
+    const e = await escenario()
+
+    const nombres = await listar(e.b.authId)
+
+    expect(nombres).toContain(e.fotoB)
+    expect(nombres).not.toContain(e.fotoA)
+    expect(nombres.every((n) => n.startsWith(`${e.b.empresa}/`))).toBe(true)
   })
 
   it("I18. la imagen se sigue sirviendo por su URL pública, sin iniciar sesión", async () => {
