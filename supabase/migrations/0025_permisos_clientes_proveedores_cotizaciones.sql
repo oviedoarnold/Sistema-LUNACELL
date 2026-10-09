@@ -101,7 +101,8 @@ revoke insert, update on public.clientes from anon;
 -- ─────────────────────────────────────────────────────────
 -- PROVEEDORES
 -- ─────────────────────────────────────────────────────────
--- Leer, la empresa; crear, cambiar y borrar, además el permiso `suppliers`.
+-- Leer, la empresa; crear y cambiar, además el permiso `suppliers`; borrar,
+-- solo el administrador.
 drop policy if exists proveedores_de_mi_empresa on public.proveedores;
 
 drop policy if exists proveedores_lectura on public.proveedores;
@@ -129,15 +130,19 @@ create policy proveedores_cambio on public.proveedores
     and (select public.usuario_tiene_permiso('suppliers'))
   );
 
--- Un DELETE no tiene WITH CHECK: sin el permiso no alcanza ninguna fila. El
--- frontend comprueba que se haya borrado algo y lo dice.
+/*
+  Borrar un proveedor deja sus productos sin proveedor: lo decide solo el
+  administrador. Un DELETE no tiene WITH CHECK, así que a cualquier otro no
+  le alcanza ninguna fila; el frontend comprueba que se haya borrado algo y
+  no le muestra el botón.
+*/
 drop policy if exists proveedores_baja on public.proveedores;
 create policy proveedores_baja on public.proveedores
   for delete
   to authenticated
   using (
     empresa_id = public.empresa_del_usuario()
-    and (select public.usuario_tiene_permiso('suppliers'))
+    and (select public.usuario_es_admin())
   );
 
 revoke insert, update, delete on public.proveedores from anon;
