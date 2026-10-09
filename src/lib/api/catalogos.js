@@ -67,8 +67,16 @@ const aProveedorDeBase = (proveedor, empresaId) => ({
   notas: String(proveedor.notes || "").trim(),
 })
 
+/*
+  42501 es la base diciendo que falta permiso: la sección que exige quien
+  escribe (SEC-3a). Reintentar no lo arregla, así que el aviso lo dice.
+*/
 function fallo(error, queHacia) {
   console.error(`No se pudo ${queHacia}:`, error)
+
+  if (error?.code === "42501") {
+    throw new Error(`No tienes permiso para ${queHacia}.`)
+  }
 
   throw new Error(`No se pudo ${queHacia}.`)
 }
