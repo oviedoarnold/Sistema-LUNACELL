@@ -119,14 +119,10 @@ describe("ClientsContext", () => {
     expect(dos.name).toBe("Dos")
   })
 
-  it("elimina un cliente", async () => {
-    const { result } = await montarContexto([{ id: "c1", name: "Temporal" }])
+  it("no ofrece eliminar clientes", async () => {
+    const { result } = await montarContexto([{ id: "c1", name: "Permanente" }])
 
-    await act(async () => {
-      await result.current.deleteClient("c1")
-    })
-
-    expect(result.current.clients).toHaveLength(0)
+    expect(result.current.deleteClient).toBeUndefined()
   })
 
   it("encuentra un cliente por identificador", async () => {

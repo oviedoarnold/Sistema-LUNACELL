@@ -157,6 +157,20 @@ export async function comoDueno(cliente) {
 }
 
 /*
+  Una consulta como ese usuario (null = anónimo), y la conexión vuelve a
+  ser del dueño pase lo que pase: la siguiente prueba no hereda el rol.
+*/
+export async function consultarComo(cliente, authId, consulta, valores = []) {
+  await comoUsuario(cliente, authId)
+
+  try {
+    return await cliente.query(consulta, valores)
+  } finally {
+    await comoDueno(cliente)
+  }
+}
+
+/*
   Espera a que una sesión esté de verdad detenida esperando un candado, y
   falla si no llega a estarlo.
 

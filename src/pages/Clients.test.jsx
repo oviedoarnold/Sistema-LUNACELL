@@ -113,10 +113,10 @@ describe("Clients", () => {
     ).toBeInTheDocument()
   })
 
-  it("cada cliente ofrece editar y eliminar", async () => {
+  it("cada cliente ofrece editar y ninguno se puede eliminar", async () => {
     await renderClients()
 
     expect(screen.getAllByRole("button", { name: /editar/i })).toHaveLength(2)
-    expect(screen.getAllByRole("button", { name: /eliminar/i })).toHaveLength(2)
+    expect(screen.queryAllByRole("button", { name: /eliminar/i })).toHaveLength(0)
   })
 })

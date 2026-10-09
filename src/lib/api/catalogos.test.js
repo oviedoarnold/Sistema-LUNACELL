@@ -13,7 +13,6 @@ import {
   traerClientes,
   crearCliente,
   actualizarCliente,
-  eliminarCliente,
   traerProveedores,
   crearProveedor,
   actualizarProveedor,
@@ -21,6 +20,7 @@ import {
   traerEmpresa,
   actualizarEmpresa,
 } from "./catalogos"
+import * as catalogos from "./catalogos"
 import { crearSupabaseFalso } from "../../test/supabaseFalso"
 
 vi.mock("../supabase", () => ({
@@ -483,12 +483,12 @@ describe("clientes", () => {
     expect(falso.datos.clientes[0].nombre).toBe("Después")
   })
 
-  it("elimina al cliente", async () => {
-    const falso = montar({ tablas: { clientes: [{ id: "c1", nombre: "Ferremax" }] } })
-
-    await eliminarCliente("c1")
-
-    expect(falso.datos.clientes).toHaveLength(0)
+  /*
+    Un cliente no se borra: sus ventas, facturas y cuentas por cobrar lo
+    necesitan. La base tampoco lo permite (0025).
+  */
+  it("no ofrece borrar clientes", () => {
+    expect(catalogos.eliminarCliente).toBeUndefined()
   })
 
   it("avisa si no puede cargarlos", async () => {
@@ -497,11 +497,6 @@ describe("clientes", () => {
     await expect(traerClientes()).rejects.toThrow(/No se pudo cargar los clientes/i)
   })
 
-  it("avisa si no puede eliminarlo", async () => {
-    montar({ fallarEn: { clientes: { delete: { message: "sin permiso" } } } })
-
-    await expect(eliminarCliente("c1")).rejects.toThrow(/No se pudo eliminar el cliente/i)
-  })
 })
 
 describe("proveedores", () => {
@@ -545,6 +540,19 @@ describe("proveedores", () => {
     montar({ fallarEn: { proveedores: { message: "sin permiso" } } })
 
     await expect(traerProveedores()).rejects.toThrow(/No se pudo cargar los proveedores/i)
+  })
+
+  /*
+    Sin `suppliers`, la base no alcanza ninguna fila y responde sin error:
+    la pantalla no puede decir que lo borró.
+  */
+  it("avisa que no tiene permiso si no se borró ningún proveedor", async () => {
+    const falso = montar({ tablas: { proveedores: [{ id: "s1", nombre: "X" }] } })
+
+    await expect(eliminarProveedor("no-visible")).rejects.toThrow(
+      "No tienes permiso para eliminar el proveedor."
+    )
+    expect(falso.datos.proveedores).toHaveLength(1)
   })
 })
 

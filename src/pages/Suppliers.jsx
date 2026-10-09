@@ -2,7 +2,7 @@ import { useContext, useMemo, useState } from "react"
 import { FaPen, FaPlus, FaSearch, FaTrash, FaTruck } from "react-icons/fa"
 import Swal from "sweetalert2"
 
-import { ProductContext } from "../context/contexts"
+import { AuthContext, ProductContext } from "../context/contexts"
 import EmptyState from "../components/crud/EmptyState"
 import PageHeader from "../components/crud/PageHeader"
 import SearchInput from "../components/crud/SearchInput"
@@ -24,6 +24,9 @@ function Suppliers() {
     editarProveedor,
     quitarProveedor,
   } = useContext(ProductContext)
+
+  // Borrar un proveedor lo decide solo el administrador (0025).
+  const { isAdmin } = useContext(AuthContext)
 
   const [search, setSearch] = useState("")
   const [form, setForm] = useState(emptyForm)
@@ -103,7 +106,9 @@ function Suppliers() {
                 <td className="celda-secundaria">{s.notes || "—"}</td>
                 <td><div className="row-actions">
                   <button className="btn btn-secondary btn-sm" onClick={() => openEdit(s)}><FaPen aria-hidden="true" />Editar</button>
-                  <button className="btn btn-danger btn-sm" onClick={() => remove(s.id)}><FaTrash aria-hidden="true" />Eliminar</button>
+                  {isAdmin && (
+                    <button className="btn btn-danger btn-sm" onClick={() => remove(s.id)}><FaTrash aria-hidden="true" />Eliminar</button>
+                  )}
                 </div></td>
               </tr>
             ))}
