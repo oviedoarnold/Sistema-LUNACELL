@@ -102,12 +102,21 @@ async function traerUsuariosDeLaEmpresa() {
     return []
   }
 
-  const { data } = await supabase
+  /*
+    permisos_usuario apunta a usuarios por dos llaves (usuario_id y, desde
+    0021, usuario_id + empresa_id). Sin nombrar una, PostgREST responde
+    PGRST201 y no devuelve ninguna fila.
+  */
+  const { data, error } = await supabase
     .from("usuarios")
     .select(
-      "id, email, nombre, nombre_usuario, rol, activo, entro_en, ubicacion_id, debe_cambiar_contrasena, permisos_usuario(seccion), bloqueos_de_acceso(bloqueado_hasta)"
+      "id, email, nombre, nombre_usuario, rol, activo, entro_en, ubicacion_id, debe_cambiar_contrasena, permisos_usuario!permisos_usuario_usuario_id_fkey(seccion), bloqueos_de_acceso(bloqueado_hasta)"
     )
     .order("nombre")
+
+  if (error) {
+    throw new Error(error.message || "La base rechazó la consulta de usuarios.")
+  }
 
   return (data || []).map((fila) => ({
     id: fila.id,
@@ -123,6 +132,22 @@ async function traerUsuariosDeLaEmpresa() {
     aceptoInvitacion: Boolean(fila.entro_en),
     permissions: (fila.permisos_usuario || []).map((p) => p.seccion),
   }))
+}
+
+/*
+  La lista o el aviso de que no se pudo traer; nunca lanza. La lista de
+  usuarios es administrativa: si falla, la pantalla sigue funcionando, pero
+  el fallo no se pierde, porque entonces la lista se ve vacía y dice «No
+  hay usuarios» sin que nadie sepa por qué.
+*/
+function leerUsuariosDeLaEmpresa() {
+  return traerUsuariosDeLaEmpresa().then(
+    (lista) => ({ lista }),
+    (error) => {
+      console.error("No se pudieron cargar los usuarios de la empresa:", error)
+      return { fallo: true }
+    }
+  )
 }
 
 export function AuthProvider({ children }) {
@@ -245,10 +270,20 @@ export function AuthProvider({ children }) {
   }, [])
 
   const [users, setUsers] = useState([])
+  const [errorUsuarios, setErrorUsuarios] = useState("")
 
-  const recargarUsuarios = useCallback(async () => {
-    setUsers(await traerUsuariosDeLaEmpresa())
+  const aplicarUsuarios = useCallback(({ lista, fallo }) => {
+    if (fallo) {
+      setErrorUsuarios("No se pudieron cargar los usuarios. Revisa tu conexión e intenta de nuevo.")
+      return
+    }
+
+    setUsers(lista)
+    setErrorUsuarios("")
   }, [])
+
+  // Después de guardar: un fallo al recargar no convierte en error lo que sí se guardó.
+  const recargarUsuarios = useCallback(() => leerUsuariosDeLaEmpresa().then(aplicarUsuarios), [aplicarUsuarios])
 
   useEffect(() => {
     if (!user) {
@@ -257,26 +292,16 @@ export function AuthProvider({ children }) {
 
     let vigente = true
 
-    /*
-      La lista de usuarios de la empresa es administrativa: si no se puede
-      traer, la pantalla sigue funcionando con la que ya tenga. Lo que no
-      vale es que el fallo se pierda, porque entonces la lista se ve vacía
-      sin que nadie sepa por qué.
-    */
-    traerUsuariosDeLaEmpresa()
-      .then((lista) => {
-        if (vigente) {
-          setUsers(lista)
-        }
-      })
-      .catch((error) => {
-        console.error("No se pudieron cargar los usuarios de la empresa:", error)
-      })
+    leerUsuariosDeLaEmpresa().then((resultado) => {
+      if (vigente) {
+        aplicarUsuarios(resultado)
+      }
+    })
 
     return () => {
       vigente = false
     }
-  }, [user])
+  }, [user, aplicarUsuarios])
 
   /*
     La identidad la crea la función de acceso con una contraseña temporal
@@ -426,6 +451,8 @@ export function AuthProvider({ children }) {
       unlockUser,
       changePassword,
       getUserById,
+      errorUsuarios,
+      recargarUsuarios,
 
       permissions: PERMISSIONS,
       adminPermissions: ADMIN_PERMISSIONS,
@@ -447,6 +474,8 @@ export function AuthProvider({ children }) {
       unlockUser,
       changePassword,
       getUserById,
+      errorUsuarios,
+      recargarUsuarios,
     ]
   )
 
