@@ -285,3 +285,19 @@ describe("los rechazos del RPC", () => {
     )
   })
 })
+
+describe("sin respuesta del servidor", () => {
+  it("una caída de red se distingue de un rechazo: la venta pudo haberse registrado", async () => {
+    montar()
+    globalThis.__supabaseFalso.rpc.mockResolvedValueOnce({
+      data: null,
+      error: { code: "", message: "TypeError: Failed to fetch" },
+      status: 0,
+    })
+
+    const error = await crearVenta({ items: [{ productId: "p1", qty: 1 }], paymentType: "contado" }, { clave: "k-1" }).catch((e) => e)
+
+    expect(error).toBeInstanceOf(ErrorDeVenta)
+    expect(error.motivo).toBe("sin-respuesta")
+  })
+})

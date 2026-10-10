@@ -141,6 +141,7 @@ const aFilaDeUbicacion = (ubicacion) => ({
   activa: ubicacion.active !== false,
   vende: ubicacion.sells !== false,
   emite_fiscal: ubicacion.fiscal === true,
+  vende_sin_conexion: ubicacion.offline === true,
   creada_en: "2026-01-01",
 })
 
@@ -279,6 +280,9 @@ export function montarDatos({
   traslados = [],
   // Compañeros de la misma empresa, para lo que muestra quién hizo qué.
   otrosUsuarios = [],
+  // Tablas y RPC que la prueba arma por su cuenta (modo sin conexión).
+  tablasExtra = {},
+  rpcsExtra = {},
 } = {}) {
   const falso = crearSupabaseFalso({
     tablas: {
@@ -309,7 +313,9 @@ export function montarDatos({
       abonos: aplanar(ventas.map(abonosDe)),
       cotizaciones: cotizaciones.map(aFilaDeCotizacion),
       detalle_cotizacion: aplanar(cotizaciones.map(renglonesDeCotizacion)),
+      ...tablasExtra,
     },
+    rpcsExtra,
     sesionInicial: conSesion ? { user: { id: AUTH_ID } } : null,
     fallarEn,
   })
