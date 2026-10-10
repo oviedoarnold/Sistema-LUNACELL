@@ -227,8 +227,8 @@ describe("SEC-1: solo el administrador reparte permisos", () => {
       )
     ).rejects.toMatchObject({ code: "42501" })
 
-    const borrados = await como(null, "delete from permisos_usuario")
-    expect(borrados.rowCount).toBe(0)
+    // Desde 0026 anon ni siquiera tiene el privilegio: el intento es un error.
+    await expect(como(null, "delete from permisos_usuario")).rejects.toMatchObject({ code: "42501" })
   })
 
   it("11. el administrador de A no administra permisos de B", async () => {
