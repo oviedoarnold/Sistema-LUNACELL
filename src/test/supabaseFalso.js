@@ -93,6 +93,25 @@ function llaveHacia(tablaPadre) {
   return llave
 }
 
+/*
+  Pares de tablas unidos por más de una llave foránea en la base real. Ahí
+  PostgREST no adivina: si la consulta no dice cuál usar
+  (`tabla!llave(...)`), responde PGRST201 y no devuelve ninguna fila.
+
+  permisos_usuario apunta a usuarios por usuario_id y, desde 0021, también
+  por (usuario_id, empresa_id).
+*/
+const RELACIONES_AMBIGUAS = {
+  "usuarios>permisos_usuario": ["permisos_usuario_usuario_id_fkey", "permisos_usuario_de_un_usuario_de_mi_empresa"],
+}
+
+function errorDeRelacionAmbigua(tablaPadre, tablaHija) {
+  return {
+    code: "PGRST201",
+    message: `Could not embed because more than one relationship was found for '${tablaPadre}' and '${tablaHija}'`,
+  }
+}
+
 function proyectar(fila, columnas, tablas, tablaPadre) {
   const listaDeColumnas = (columnas || "*")
     .split(",")
@@ -104,10 +123,18 @@ function proyectar(fila, columnas, tablas, tablaPadre) {
   for (const parte of listaDeColumnas) {
     if (parte === "*") continue
 
-    const anidada = parte.match(/^(\w+)\s*\(([\s\S]*)\)$/)
+    const anidada = parte.match(/^(\w+)(?:!(\w+))?\s*\(([\s\S]*)\)$/)
 
     if (anidada) {
-      const [, tablaHija, columnasHijas] = anidada
+      const [, tablaHija, llaveElegida, columnasHijas] = anidada
+      const posibles = RELACIONES_AMBIGUAS[`${tablaPadre}>${tablaHija}`]
+
+      if (posibles && !posibles.includes(llaveElegida)) {
+        throw Object.assign(new Error("relación ambigua"), {
+          respuesta: errorDeRelacionAmbigua(tablaPadre, tablaHija),
+        })
+      }
+
       const llave = llaveHacia(tablaPadre)
 
       const hijas = (tablas[tablaHija] || []).filter(
@@ -280,6 +307,19 @@ export function crearSupabaseFalso({
       tope: null,
     }
 
+    /*
+      Lo que devuelve supabase-js: las filas, o el error de PostgREST si la
+      consulta misma no se puede resolver (como una relación ambigua).
+    */
+    const resolver = () => {
+      try {
+        return { data: ejecutar(), error: null }
+      } catch (falla) {
+        if (falla.respuesta) return { data: null, error: falla.respuesta }
+        throw falla
+      }
+    }
+
     const ejecutar = () => {
       const vista = VISTAS[nombreTabla]
       const filas = vista ? vista(datos) : datos[nombreTabla] || []
@@ -397,26 +437,30 @@ export function crearSupabaseFalso({
         const falla = fallaDe(nombreTabla, estado.accion)
         if (falla) return Promise.resolve({ data: null, error: falla })
 
-        const filas = ejecutar()
+        const { data: filas, error } = resolver()
+        if (error) return Promise.resolve({ data: null, error })
+
         return Promise.resolve({ data: filas[0] || null, error: null })
       },
       single() {
         const falla = fallaDe(nombreTabla, estado.accion)
         if (falla) return Promise.resolve({ data: null, error: falla })
 
-        const filas = ejecutar()
+        const { data: filas, error } = resolver()
+        if (error) return Promise.resolve({ data: null, error })
+
         return Promise.resolve(
           filas.length
             ? { data: filas[0], error: null }
             : { data: null, error: { message: "sin filas" } }
         )
       },
-      then(resolver) {
+      then(alResolver) {
         const falla = fallaDe(nombreTabla, estado.accion)
 
         return Promise.resolve(
-          falla ? { data: null, error: falla } : { data: ejecutar(), error: null }
-        ).then(resolver)
+          falla ? { data: null, error: falla } : resolver()
+        ).then(alResolver)
       },
     }
 

@@ -401,6 +401,47 @@ describe("administración de usuarios", () => {
     expect(pendiente.aceptoInvitacion).toBe(false)
   })
 
+  it("trae a cada usuario con sus permisos", async () => {
+    const { result } = await renderAuth({
+      sesionInicial: { user: { id: "auth-admin" } },
+    })
+
+    await waitFor(() => expect(result.current.users.length).toBe(3))
+
+    const vendedor = result.current.users.find((u) => u.id === "u-vendedor")
+
+    expect(vendedor.permissions).toEqual(["pos", "sales-history"])
+    expect(result.current.errorUsuarios).toBe("")
+  })
+
+  it("si la lista no se puede cargar, lo dice en vez de dejarla vacía", async () => {
+    falso = crearSupabaseFalso({ tablas: DATOS_BASE, cuentas: CUENTAS, sesionInicial: { user: { id: "auth-admin" } } })
+    globalThis.__supabaseFalso = falso
+
+    // Solo la consulta del listado (la que trae los permisos) falla; el perfil carga.
+    const original = falso.from.bind(falso)
+    falso.from = (nombre) => {
+      const consulta = original(nombre)
+      if (nombre !== "usuarios") return consulta
+
+      const seleccionar = consulta.select.bind(consulta)
+      consulta.select = (columnas) =>
+        String(columnas).includes("permisos_usuario")
+          ? { order: () => Promise.resolve({ data: null, error: { code: "PGRST201", message: "ambigua" } }) }
+          : seleccionar(columnas)
+
+      return consulta
+    }
+
+    const { AuthProvider } = await import("./AuthContext")
+    const { useAuth } = await import("../hooks/useAuth")
+    const { result } = renderHook(() => useAuth(), { wrapper: AuthProvider })
+
+    await waitFor(() => expect(result.current.user).not.toBeNull())
+    await waitFor(() => expect(result.current.errorUsuarios).toMatch(/No se pudieron cargar los usuarios/))
+    expect(result.current.users).toEqual([])
+  })
+
   it("no muestra usuarios sin sesión", async () => {
     const { result } = await renderAuth()
 

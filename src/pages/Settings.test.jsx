@@ -52,6 +52,7 @@ async function renderSettings({
   ubicaciones = UBICACIONES,
   usuariosExtra = [],
   bloqueos = [],
+  listadoCaido = null,
 } = {}) {
   const falso = montarSupabaseFalso({
     usuarios: [
@@ -86,6 +87,27 @@ async function renderSettings({
       })),
     },
   })
+
+  /*
+    Solo falla la consulta del listado de usuarios (la que trae permisos);
+    el perfil del administrador sí carga. `listadoCaido.activo` se puede
+    apagar a mitad de la prueba para simular que la red volvió.
+  */
+  if (listadoCaido) {
+    const original = falso.from.bind(falso)
+    falso.from = (nombre) => {
+      const consulta = original(nombre)
+      if (nombre !== "usuarios") return consulta
+
+      const seleccionar = consulta.select.bind(consulta)
+      consulta.select = (columnas) =>
+        listadoCaido.activo && String(columnas).includes("permisos_usuario")
+          ? { order: () => Promise.resolve({ data: null, error: { code: "PGRST201", message: "ambigua" } }) }
+          : seleccionar(columnas)
+
+      return consulta
+    }
+  }
 
   const { AuthProvider } = await import("../context/AuthContext")
   const ProductProvider = (await import("../context/ProductContext")).default
@@ -234,6 +256,33 @@ describe("Settings: usuarios", () => {
     expect(
       (await screen.findAllByText("Administrador")).length
     ).toBeGreaterThan(0)
+  })
+
+  it("muestra en la tabla al administrador y a cada empleado", async () => {
+    await renderSettings({
+      usuariosExtra: [usuarioDePrueba({ id: "u-2", authId: "auth-2", nombre: "Vendedor Camión 01", email: "camion01@ferreteria.test" })],
+    })
+
+    const tabla = await screen.findByRole("table", { name: /usuarios/i })
+
+    expect(await within(tabla).findByText("Vendedor Camión 01")).toBeInTheDocument()
+    expect(within(tabla).getAllByText("Administrador").length).toBeGreaterThan(0)
+    expect(screen.queryByText("No hay usuarios")).not.toBeInTheDocument()
+  })
+
+  it("si la lista no se pudo cargar, lo dice y deja reintentar, en vez de decir que no hay usuarios", async () => {
+    const listadoCaido = { activo: true }
+    await renderSettings({ listadoCaido })
+
+    expect(await screen.findByText(/no se pudieron cargar los usuarios/i)).toBeInTheDocument()
+    expect(screen.queryByText("No hay usuarios")).not.toBeInTheDocument()
+
+    listadoCaido.activo = false
+    fireEvent.click(screen.getByRole("button", { name: /reintentar/i }))
+
+    const tabla = await screen.findByRole("table", { name: /usuarios/i })
+    expect((await within(tabla).findAllByText("Administrador")).length).toBeGreaterThan(0)
+    expect(screen.queryByText(/no se pudieron cargar los usuarios/i)).not.toBeInTheDocument()
   })
 
   it("abre el formulario de usuario nuevo", async () => {
