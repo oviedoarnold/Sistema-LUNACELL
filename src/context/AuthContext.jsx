@@ -9,6 +9,13 @@ import { AuthContext } from "./contexts"
 import { supabase } from "../lib/supabase"
 import { marcarSesionAbierta, borrarMarcaDeSesion } from "../lib/marcaDeSesion"
 import {
+  authIdDeLaSesionGuardada,
+  esFalloDeRed,
+  olvidarPerfil,
+  perfilSinConexion,
+  recordarPerfil,
+} from "../lib/sinConexion/sesionSinConexion"
+import {
   iniciarSesionConUsuario,
   crearEmpleado,
   restablecerContrasena,
@@ -25,12 +32,15 @@ import {
 } from "./permissions"
 
 /*
-  Carga el perfil del usuario en sesión junto con sus permisos.
+  Consulta el perfil del usuario en sesión junto con sus permisos.
 
-  Devuelve null si la cuenta existe en Supabase pero nadie la invitó a una
-  empresa: tener credenciales válidas no da acceso por sí solo.
+  perfil es null si la cuenta existe en Supabase pero nadie la invitó a una
+  empresa: tener credenciales válidas no da acceso por sí solo. `error`
+  dice además si no se pudo preguntar (sin red), que no es lo mismo que una
+  respuesta negativa: solo en ese caso se puede usar el perfil guardado
+  para facturar sin conexión.
 */
-async function cargarPerfil(authId) {
+async function consultarPerfil(authId) {
   const { data, error } = await supabase
     .from("usuarios")
     .select("id, empresa_id, email, nombre, nombre_usuario, rol, activo, ubicacion_id, debe_cambiar_contrasena")
@@ -39,15 +49,20 @@ async function cargarPerfil(authId) {
     .maybeSingle()
 
   if (error || !data) {
-    return null
+    return { perfil: null, error }
   }
 
-  const { data: filas } = await supabase
+  const { data: filas, error: errorDePermisos } = await supabase
     .from("permisos_usuario")
     .select("seccion")
     .eq("usuario_id", data.id)
 
-  return {
+  // Sin red, un perfil sin permisos lo dejaría sin ninguna pantalla.
+  if (errorDePermisos && esFalloDeRed(errorDePermisos)) {
+    return { perfil: null, error: errorDePermisos }
+  }
+
+  return { perfil: {
     ...data,
     name: data.nombre,
     role: data.rol,
@@ -60,7 +75,28 @@ async function cargarPerfil(authId) {
     debeCambiar: Boolean(data.debe_cambiar_contrasena),
     authId,
     permissions: (filas || []).map((f) => f.seccion),
+  }, error: null }
+}
+
+async function cargarPerfil(authId) {
+  return (await consultarPerfil(authId)).perfil
+}
+
+/*
+  El perfil para facturar sin conexión, solo si el servidor NO respondió:
+  - con sesión, si el perfil no se pudo consultar por falta de red;
+  - sin sesión, si el navegador todavía guarda la de este usuario. Supabase
+    la borra al cerrar sesión o si el servidor la revoca; si sigue ahí y aun
+    así no hay sesión, es que no se pudo renovar el token por falta de red.
+*/
+async function perfilParaSinConexion(sesion, fallo) {
+  if (sesion?.user) {
+    return esFalloDeRed(fallo) ? perfilSinConexion(sesion.user.id) : null
   }
+
+  const guardada = authIdDeLaSesionGuardada(supabase)
+
+  return guardada ? perfilSinConexion(guardada) : null
 }
 
 const NOMBRE_DE_USUARIO = /^[a-z0-9._-]{3,30}$/
@@ -177,10 +213,12 @@ export function AuthProvider({ children }) {
     */
     const aplicarSesion = async (sesion) => {
       let perfil = null
+      let fallo = null
 
       try {
-        perfil = sesion?.user ? await cargarPerfil(sesion.user.id) : null
+        if (sesion?.user) ({ perfil, error: fallo } = await consultarPerfil(sesion.user.id))
       } catch (error) {
+        fallo = error
         console.error("No se pudo cargar el perfil de la sesión:", error)
       }
 
@@ -188,9 +226,17 @@ export function AuthProvider({ children }) {
         La marca acompaña al perfil y no a la sesión de Supabase: una
         cuenta válida que no está asignada a ninguna empresa no entra,
         y no debe quedar marcada como si hubiera entrado.
+
+        Un perfil confirmado por el servidor se guarda para poder facturar
+        sin conexión más adelante. Sin servidor, solo el guardado.
       */
-      if (perfil) marcarSesionAbierta()
-      else borrarMarcaDeSesion()
+      if (perfil) {
+        marcarSesionAbierta()
+        void recordarPerfil(perfil)
+      } else {
+        perfil = await perfilParaSinConexion(sesion, fallo)
+        if (!perfil) borrarMarcaDeSesion()
+      }
 
       if (vigente) {
         setUser(perfil)
@@ -261,12 +307,43 @@ export function AuthProvider({ children }) {
     return { ok: true }
   }, [])
 
+  /*
+    Sin red, signOut() no puede avisar al servidor y deja la sesión
+    guardada: se cierra entonces en este navegador, para que nadie vuelva a
+    entrar sin conexión con ella. El perfil sin conexión se borra siempre.
+    Las ventas sin sincronizar NO se borran: siguen en el teléfono y se
+    envían cuando su vendedor vuelva a iniciar sesión.
+  */
   const logout = useCallback(async () => {
     if (supabase) {
-      await supabase.auth.signOut()
+      const resultado = await supabase.auth.signOut()
+
+      if (resultado?.error) {
+        await supabase.auth.signOut({ scope: "local" })
+      }
     }
 
+    await olvidarPerfil()
     setUser(null)
+  }, [])
+
+  /*
+    Vuelve a preguntar quién es al servidor. Lo usa el modo sin conexión al
+    recuperar la red: un perfil «sin conexión» se cambia por el confirmado.
+  */
+  const revalidarSesion = useCallback(async () => {
+    if (!supabase) return
+
+    const { data } = await supabase.auth.getSession()
+    if (!data?.session?.user) return
+
+    const { perfil } = await consultarPerfil(data.session.user.id).catch(() => ({ perfil: null }))
+
+    if (perfil) {
+      marcarSesionAbierta()
+      void recordarPerfil(perfil)
+      setUser(perfil)
+    }
   }, [])
 
   const [users, setUsers] = useState([])
@@ -417,6 +494,14 @@ export function AuthProvider({ children }) {
         return false
       }
 
+      /*
+        Sin conexión solo se puede facturar: el resto de las pantallas
+        necesita al servidor y el perfil no está confirmado.
+      */
+      if (user.sinConexion) {
+        return permission === PERMISSIONS.POS && (user.role === "admin" || concedePermiso(user.permissions, permission))
+      }
+
       if (user.role === "admin") {
         return true
       }
@@ -439,6 +524,7 @@ export function AuthProvider({ children }) {
 
       login,
       logout,
+      revalidarSesion,
       hasPermission,
 
       // Sin sesión no hay lista que mostrar: se deriva en vez de
@@ -458,13 +544,14 @@ export function AuthProvider({ children }) {
       adminPermissions: ADMIN_PERMISSIONS,
       sellerPermissions: SELLER_PERMISSIONS,
 
-      isAdmin: user?.role === "admin",
+      isAdmin: user?.role === "admin" && !user?.sinConexion,
     }),
     [
       user,
       cargando,
       login,
       logout,
+      revalidarSesion,
       hasPermission,
       users,
       addUser,
