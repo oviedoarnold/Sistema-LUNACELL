@@ -193,3 +193,18 @@ describe("nada se envía sin una sesión real del mismo usuario", () => {
     expect(vista.result.current.ventas[0]).toMatchObject({ estado: "registrada", numeroFactura: "F-1" })
   })
 })
+
+describe("perfil sin conexión vencido", () => {
+  it("no guarda ventas con un perfil sin conexión de más de 7 días", async () => {
+    await venderEnElTelefono()
+    const vencido = new Date(Date.now() - 8 * 24 * 3600000).toISOString()
+
+    const vista = montar({ user: usuario({ sinConexion: true, confirmadoEn: vencido }) })
+    await waitFor(() => expect(vista.result.current.copia).not.toBeNull())
+
+    await expect(
+      vista.result.current.guardarVentaSinConexion({ carrito: [{ productoId: CARGADOR.id, cantidad: 1 }] })
+    ).rejects.toThrow(/venció/i)
+    expect(vista.result.current.pendientes).toBe(1)
+  })
+})
