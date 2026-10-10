@@ -22,6 +22,13 @@ const PRODUCTOS = [
 
 const CLIENTES = [{ id: "c1", name: "Ferremax", phone: "9999-0000" }]
 
+/*
+  La existencia que la pantalla que vende le pasa a addSale: la de su
+  ubicación operativa. Aquí la bodega tiene lo mismo que el catálogo.
+*/
+const CANTIDAD_EN_BODEGA = Object.fromEntries(PRODUCTOS.map((p) => [p.id, p.stock]))
+const EN_BODEGA = { existenciaDe: (producto) => CANTIDAD_EN_BODEGA[producto.id] ?? 0 }
+
 const SIN_DATOS_FISCALES = {
   ...EMPRESA_PRUEBA,
   cai: "",
@@ -93,7 +100,7 @@ async function facturar(result, venta) {
   let factura
 
   await act(async () => {
-    factura = await result.current.addSale(venta)
+    factura = await result.current.addSale(venta, null, EN_BODEGA)
   })
 
   return factura
@@ -103,13 +110,13 @@ describe("addSale: validaciones", () => {
   it("rechaza una venta sin datos", async () => {
     const { result } = await montarVentas()
 
-    await expect(result.current.addSale(null)).rejects.toThrow()
+    await expect(result.current.addSale(null, null, EN_BODEGA)).rejects.toThrow()
   })
 
   it("rechaza una venta sin productos", async () => {
     const { result } = await montarVentas()
 
-    await expect(result.current.addSale({ items: [] })).rejects.toThrow(
+    await expect(result.current.addSale({ items: [] }, null, EN_BODEGA)).rejects.toThrow(
       /al menos un producto/i
     )
   })
@@ -119,7 +126,9 @@ describe("addSale: validaciones", () => {
 
     await expect(
       result.current.addSale(
-        ventaContado({ items: [{ productId: "p1", qty: 0 }] })
+        ventaContado({ items: [{ productId: "p1", qty: 0 }] }),
+        null,
+        EN_BODEGA
       )
     ).rejects.toThrow(/mayor que cero/i)
   })
@@ -129,7 +138,9 @@ describe("addSale: validaciones", () => {
 
     await expect(
       result.current.addSale(
-        ventaContado({ items: [{ productId: "zzz", qty: 1 }] })
+        ventaContado({ items: [{ productId: "zzz", qty: 1 }] }),
+        null,
+        EN_BODEGA
       )
     ).rejects.toThrow(/ya no existe/i)
   })
@@ -139,16 +150,36 @@ describe("addSale: validaciones", () => {
 
     await expect(
       result.current.addSale(
-        ventaContado({ items: [{ productId: "p2", qty: 99 }] })
+        ventaContado({ items: [{ productId: "p2", qty: 99 }] }),
+        null,
+        EN_BODEGA
       )
     ).rejects.toThrow(/insuficiente/i)
+  })
+
+  it("compara contra la existencia de la ubicación, no contra el catálogo", async () => {
+    const { result } = await montarVentas()
+
+    // El catálogo dice 10 martillos; la ubicación de quien vende no tiene.
+    await expect(
+      result.current.addSale(ventaContado(), null, { existenciaDe: () => 0 })
+    ).rejects.toThrow(/martillo.*0 unidades/i)
+  })
+
+  it("sin la existencia de la ubicación no se vende: no se usa el total del catálogo", async () => {
+    const { result, falso } = await montarVentas()
+
+    await expect(result.current.addSale(ventaContado())).rejects.toThrow(
+      /existencia de tu ubicación/i
+    )
+    expect(falso.datos.ventas).toHaveLength(0)
   })
 
   it("exige un cliente registrado para vender al crédito", async () => {
     const { result } = await montarVentas()
 
     await expect(
-      result.current.addSale(ventaCredito({ clientId: null }))
+      result.current.addSale(ventaCredito({ clientId: null }), null, EN_BODEGA)
     ).rejects.toThrow(/crédito/i)
   })
 })
@@ -303,7 +334,7 @@ describe("addSale con registrar_venta_ubicacion", () => {
     const { result, falso } = await montarVentas()
 
     await act(async () => {
-      await result.current.addSale(ventaContado(), "clave-1")
+      await result.current.addSale(ventaContado(), "clave-1", EN_BODEGA)
     })
 
     const llamadas = llamadasAlRpc(falso)
@@ -346,8 +377,8 @@ describe("addSale con registrar_venta_ubicacion", () => {
     let segunda
 
     await act(async () => {
-      primera = await result.current.addSale(ventaContado(), "clave-2")
-      segunda = await result.current.addSale(ventaContado(), "clave-2")
+      primera = await result.current.addSale(ventaContado(), "clave-2", EN_BODEGA)
+      segunda = await result.current.addSale(ventaContado(), "clave-2", EN_BODEGA)
     })
 
     expect(segunda.id).toBe(primera.id)
@@ -366,7 +397,7 @@ describe("addSale con registrar_venta_ubicacion", () => {
 
     await expect(
       act(async () => {
-        await result.current.addSale(ventaContado())
+        await result.current.addSale(ventaContado(), null, EN_BODEGA)
       })
     ).rejects.toMatchObject({
       motivo: "existencia-insuficiente",

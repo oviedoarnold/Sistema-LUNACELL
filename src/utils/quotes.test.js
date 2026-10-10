@@ -240,26 +240,31 @@ describe("buildSaleDraftFromQuote", () => {
 })
 
 describe("findUnavailableItems", () => {
+  // `stock` es el total global del catálogo: no debe decidir nada.
   const inventario = [
     { id: "p1", stock: 10 },
-    { id: "p2", stock: 1 },
+    { id: "p2", stock: 10 },
   ]
+
+  // Lo que hay en la ubicación operativa de quien convierte.
+  const enMiUbicacion = { p1: 10, p2: 1 }
+  const existenciaDe = (producto) => enMiUbicacion[producto.id] ?? 0
 
   it("no reporta nada cuando alcanza el stock", () => {
     const lineas = [{ id: "p1", name: "Martillo", quantity: 2 }]
-    expect(findUnavailableItems(lineas, inventario)).toEqual([])
+    expect(findUnavailableItems(lineas, inventario, existenciaDe)).toEqual([])
   })
 
   it("reporta el producto que ya no existe", () => {
     const lineas = [{ id: "borrado", name: "Fantasma", quantity: 1 }]
-    const faltantes = findUnavailableItems(lineas, inventario)
+    const faltantes = findUnavailableItems(lineas, inventario, existenciaDe)
 
     expect(faltantes[0].reason).toBe("no-existe")
   })
 
   it("reporta el stock insuficiente con las cantidades", () => {
     const lineas = [{ id: "p2", name: "Cemento", quantity: 5 }]
-    const faltantes = findUnavailableItems(lineas, inventario)
+    const faltantes = findUnavailableItems(lineas, inventario, existenciaDe)
 
     expect(faltantes[0]).toMatchObject({
       reason: "stock-insuficiente",
@@ -270,6 +275,15 @@ describe("findUnavailableItems", () => {
 
   it("acepta exactamente el stock disponible", () => {
     const lineas = [{ id: "p2", name: "Cemento", quantity: 1 }]
-    expect(findUnavailableItems(lineas, inventario)).toEqual([])
+    expect(findUnavailableItems(lineas, inventario, existenciaDe)).toEqual([])
+  })
+
+  it("compara contra la ubicación, no contra el total del catálogo", () => {
+    const lineas = [{ id: "p2", name: "Cemento", quantity: 3 }]
+
+    expect(findUnavailableItems(lineas, inventario, existenciaDe)[0]).toMatchObject({
+      reason: "stock-insuficiente",
+      available: 1,
+    })
   })
 })
