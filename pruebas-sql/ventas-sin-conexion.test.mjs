@@ -336,10 +336,33 @@ describe("lo que no se puede aplicar queda en conciliación, sin perderse", () =
   })
 })
 
+/*
+  La fecha oficial es la que declaró el teléfono, nunca una calculada. Un
+  desfase importante del reloj no se corrige solo: la venta va a
+  conciliación y un administrador decide. Siempre se guarda el desfase
+  medido al recibirla.
+*/
 describe("reloj del teléfono", () => {
-  it("23. con el reloj desfasado 2 horas corrige la fecha y conserva la declarada", async () => {
+  it("23. con el reloj desfasado 2 horas no corrige nada: va a conciliación con la fecha declarada", async () => {
     const esc = await escenarioSinConexion(db)
     const desfase = 2 * 3600000
+    const venta = ventaSinConexion(esc, {
+      registrada_en: new Date(Date.now() - desfase - 10 * 60000).toISOString(),
+      reloj_dispositivo: new Date(Date.now() - desfase).toISOString(),
+    })
+
+    const r = await sincronizar(db, esc.vendedor.authId, venta)
+    const fila = await filaPorConciliar(r.conciliacion_id)
+
+    expect(r).toMatchObject({ estado: "en_conciliacion", motivo: "reloj-desfasado" })
+    expect(segundos(fila.registrada_en, venta.registrada_en)).toBeLessThan(1)
+    expect(Math.abs(fila.desfase_segundos - 7200)).toBeLessThan(30)
+    expect(await contar(db, "ventas", "empresa_id = $1", [esc.empresa])).toBe(0)
+  })
+
+  it("24. con un desfase pequeño aplica con la fecha declarada, sin tocarla, y guarda el desfase", async () => {
+    const esc = await escenarioSinConexion(db)
+    const desfase = 4 * 60000
     const venta = ventaSinConexion(esc, {
       registrada_en: new Date(Date.now() - desfase - 10 * 60000).toISOString(),
       reloj_dispositivo: new Date(Date.now() - desfase).toISOString(),
@@ -349,14 +372,14 @@ describe("reloj del teléfono", () => {
     const fila = await filaDeVenta(r.venta_id)
 
     expect(r.estado).toBe("registrada")
-    expect(fila.reloj_corregido).toBe(true)
+    expect(segundos(fila.fecha, venta.registrada_en)).toBeLessThan(1)
     expect(segundos(fila.registrada_en, venta.registrada_en)).toBeLessThan(1)
-    expect(segundos(fila.fecha, new Date(Date.now() - 10 * 60000))).toBeLessThan(30)
+    expect(Math.abs(fila.desfase_segundos - 240)).toBeLessThan(30)
   })
 })
 
 describe("errores que no se guardan: el teléfono conserva la venta", () => {
-  it("24. un anónimo no puede ejecutarla", async () => {
+  it("25. un anónimo no puede ejecutarla", async () => {
     const esc = await escenarioSinConexion(db)
 
     const error = await fallo(sincronizar(db, null, ventaSinConexion(esc)))
@@ -364,7 +387,7 @@ describe("errores que no se guardan: el teléfono conserva la venta", () => {
     expect(error.code).toBe("42501")
   })
 
-  it("25. con la sesión de otro usuario es OF002 y no guarda nada", async () => {
+  it("26. con la sesión de otro usuario es OF002 y no guarda nada", async () => {
     const esc = await escenarioSinConexion(db)
     const otro = await crearVendedor(db, { empresa: esc.empresa, ubicacion: esc.camion1, permisos: ["pos"] })
 
@@ -374,7 +397,7 @@ describe("errores que no se guardan: el teléfono conserva la venta", () => {
     expect(await contar(db, "ventas_por_conciliar", "empresa_id = $1", [esc.empresa])).toBe(0)
   })
 
-  it("26. contenido mal formado es OF001: cantidad cero, total incoherente o clave inválida", async () => {
+  it("27. contenido mal formado es OF001: cantidad cero, total incoherente o clave inválida", async () => {
     const esc = await escenarioSinConexion(db)
     const base = ventaSinConexion(esc)
     const malas = [
@@ -392,7 +415,7 @@ describe("errores que no se guardan: el teléfono conserva la venta", () => {
     expect(await contar(db, "ventas_por_conciliar", "empresa_id = $1", [esc.empresa])).toBe(0)
   })
 
-  it("27. una ubicación de otra empresa es OF001", async () => {
+  it("28. una ubicación de otra empresa es OF001", async () => {
     const esc = await escenarioSinConexion(db)
     const ajena = await escenarioSinConexion(db)
 
@@ -401,7 +424,7 @@ describe("errores que no se guardan: el teléfono conserva la venta", () => {
     expect(error.code).toBe("OF001")
   })
 
-  it("28. una identidad sin fila en usuarios es 42501", async () => {
+  it("29. una identidad sin fila en usuarios es 42501", async () => {
     const esc = await escenarioSinConexion(db)
     const huerfano = (await db.query("insert into auth.users (email) values ('huerfano-off@prueba.local') returning id")).rows[0].id
 
@@ -419,7 +442,7 @@ describe("ventas_por_conciliar es inmutable", () => {
     return { esc, id: r.conciliacion_id }
   }
 
-  it("29. nadie la borra, ni siquiera el dueño de la base", async () => {
+  it("30. nadie la borra, ni siquiera el dueño de la base", async () => {
     const { id } = await unaEnConciliacion()
 
     const error = await fallo(db.query("delete from ventas_por_conciliar where id = $1", [id]))
@@ -427,7 +450,7 @@ describe("ventas_por_conciliar es inmutable", () => {
     expect(error.message).toMatch(/no se borran/i)
   })
 
-  it("30. los datos de la venta no se pueden cambiar", async () => {
+  it("31. los datos de la venta no se pueden cambiar", async () => {
     const { id } = await unaEnConciliacion()
 
     const error = await fallo(db.query("update ventas_por_conciliar set total_cobrado = 1 where id = $1", [id]))
@@ -435,7 +458,7 @@ describe("ventas_por_conciliar es inmutable", () => {
     expect(error.message).toMatch(/no se pueden modificar/i)
   })
 
-  it("31. la aplicación no escribe en ella directamente", async () => {
+  it("32. la aplicación no escribe en ella directamente", async () => {
     const { esc, id } = await unaEnConciliacion()
 
     const borrar = await fallo(consultarComo(db, esc.admin.authId, "delete from ventas_por_conciliar where id = $1", [id]))
@@ -447,7 +470,7 @@ describe("ventas_por_conciliar es inmutable", () => {
     expect(cambiar.code).toBe("42501")
   })
 
-  it("32. el vendedor ve sus filas, otro vendedor no, el administrador todas", async () => {
+  it("33. el vendedor ve sus filas, otro vendedor no, el administrador todas", async () => {
     const { esc, id } = await unaEnConciliacion()
     const otro = await crearVendedor(db, { empresa: esc.empresa, ubicacion: esc.camion1, permisos: ["pos"] })
     const ver = (authId) => consultarComo(db, authId, "select id from ventas_por_conciliar where id = $1", [id])
@@ -459,7 +482,7 @@ describe("ventas_por_conciliar es inmutable", () => {
 })
 
 describe("la marca vende_sin_conexion", () => {
-  it("33. nace apagada", async () => {
+  it("34. nace apagada", async () => {
     const { empresa } = await crearEmpresa(db)
     const r = await db.query(
       "insert into ubicaciones (empresa_id, nombre, tipo) values ($1, 'Nueva', 'camion') returning vende_sin_conexion",
@@ -469,7 +492,7 @@ describe("la marca vende_sin_conexion", () => {
     expect(r.rows[0].vende_sin_conexion).toBe(false)
   })
 
-  it("34. solo el administrador la cambia", async () => {
+  it("35. solo el administrador la cambia", async () => {
     const esc = await escenarioSinConexion(db)
     const encargado = await crearVendedor(db, { empresa: esc.empresa, ubicacion: esc.camion2, permisos: ["locations"] })
     const cambiar = (authId) =>
@@ -482,7 +505,7 @@ describe("la marca vende_sin_conexion", () => {
     expect((await db.query("select vende_sin_conexion from ubicaciones where id = $1", [esc.camion2])).rows[0].vende_sin_conexion).toBe(true)
   })
 
-  it("35. una ubicación fiscal no puede vender sin conexión", async () => {
+  it("36. una ubicación fiscal no puede vender sin conexión", async () => {
     const esc = await escenarioSinConexion(db)
     await db.query("update ubicaciones set emite_fiscal = true where id = $1", [esc.tienda])
 

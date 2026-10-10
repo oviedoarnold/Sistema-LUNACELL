@@ -106,6 +106,25 @@ describe("aplicar", () => {
   })
 })
 
+describe("aplicar una venta con el reloj desfasado", () => {
+  it("4b. la aplica con la fecha que declaró el teléfono, sin corregirla", async () => {
+    const esc = await escenarioSinConexion(db)
+    const desfase = 2 * 3600000
+    const venta = ventaSinConexion(esc, {
+      registrada_en: new Date(Date.now() - desfase - 10 * 60000).toISOString(),
+      reloj_dispositivo: new Date(Date.now() - desfase).toISOString(),
+    })
+    const r = await sincronizar(db, esc.vendedor.authId, venta)
+
+    const aplicada = await conciliar(db, esc.admin.authId, r.conciliacion_id, "aplicar", "El vendedor confirmó la hora")
+    const v = await fila("ventas", aplicada.venta_id)
+
+    expect(r.motivo).toBe("reloj-desfasado")
+    expect(segundos(v.fecha, venta.registrada_en)).toBeLessThan(1)
+    expect(Math.abs(v.desfase_segundos - 7200)).toBeLessThan(30)
+  })
+})
+
 describe("aplicar con ajuste", () => {
   it("5. ajusta exactamente lo que falta, con la justificación, y nunca deja negativos", async () => {
     const esc = await escenarioSinConexion(db, { enCamion1: 1 })
