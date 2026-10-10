@@ -386,8 +386,15 @@ describe("USR-1 sin cambiar la contraseña no se opera", () => {
 
     await comoServicio("select public.acceso_contrasena_cambiada($1)", [e.chofer.authId])
 
-    // Después: su ubicación, su permiso y solo la existencia de su camión.
+    // Después: su ubicación, sus permisos (y ninguno más) y solo la existencia de su camión.
     expect((await como(e.chofer.authId, "select public.ubicacion_del_usuario() as x")).rows[0].x).toBe(e.camion1)
+    const permisos = (
+      await como(
+        e.chofer.authId,
+        "select public.usuario_tiene_permiso('pos') as pos, public.usuario_tiene_permiso('inventory-own') as propio, public.usuario_tiene_permiso('settings') as ajustes, public.usuario_tiene_permiso('products') as productos"
+      )
+    ).rows[0]
+    expect(permisos).toEqual({ pos: true, propio: true, ajustes: false, productos: false })
     const visibles = (await como(e.chofer.authId, "select ubicacion_id, cantidad from inventario_ubicacion")).rows
     expect(visibles).toEqual([{ ubicacion_id: e.camion1, cantidad: 5 }])
   })
