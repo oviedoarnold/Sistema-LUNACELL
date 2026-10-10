@@ -50,9 +50,25 @@ export async function perfilSinConexion(authId) {
   }
 }
 
-export async function olvidarPerfil() {
+/*
+  Al cerrar sesión, o cuando el servidor dice que la cuenta ya no tiene
+  acceso, se borra el perfil y la copia local de ese usuario (catálogo,
+  precios y clientes): ya no sirven para nada y son datos de la empresa.
+  Sus ventas sin sincronizar NO se borran: se envían cuando vuelva a entrar.
+*/
+export async function olvidarPerfil(authId = null) {
   try {
-    await borrarPerfilLocal(await almacenDeLaApp())
+    const almacen = await almacenDeLaApp()
+
+    await borrarPerfilLocal(almacen)
+
+    if (authId) {
+      await almacen.transaccion(["copias"], "readwrite", async (t) => {
+        for (const copia of await t.todos("copias")) {
+          if (copia.usuarioAuth === authId) await t.borrar("copias", copia.id)
+        }
+      })
+    }
   } catch {
     // Nada que borrar.
   }

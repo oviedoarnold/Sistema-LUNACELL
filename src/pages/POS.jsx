@@ -529,6 +529,12 @@ function POS() {
         nombreCliente: getCustomerName(),
         rtnComprador: buyerRTN.trim() || selectedClient?.rtn || "",
         fechaVencimiento: paymentType === "credito" ? dueDate : null,
+        /*
+          Si nace de un intento en línea sin respuesta, queda escrito: si el
+          vendedor cambia de ubicación antes de sincronizar, no se puede
+          comprobar ese intento y un administrador lo revisa en conciliación.
+        */
+        nota: claveEnLinea ? `Intento en línea sin respuesta: ${claveEnLinea}` : "",
         claveEnLinea,
       })
 

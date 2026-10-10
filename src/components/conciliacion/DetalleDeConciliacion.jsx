@@ -117,6 +117,12 @@ function DetalleDeConciliacion({ venta, nombreDelVendedor, nombreDeUbicacion, on
             {venta.nombreCliente || "Consumidor Final"}
             {venta.rtnComprador ? ` · RTN ${venta.rtnComprador}` : ""}
           </dd>
+          {venta.nota && (
+            <>
+              <dt>Nota</dt>
+              <dd>{venta.nota}</dd>
+            </>
+          )}
           <dt>Estado</dt>
           <dd>{ESTADO[venta.estado] || venta.estado}</dd>
         </dl>

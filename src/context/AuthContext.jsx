@@ -240,7 +240,7 @@ export function AuthProvider({ children }) {
           perfil, desactivada): el perfil guardado deja de valer en el
           acto, para que no sirva para entrar sin conexión.
         */
-        await olvidarPerfil()
+        await olvidarPerfil(sesion.user.id)
         borrarMarcaDeSesion()
       } else {
         perfil = await perfilParaSinConexion(sesion, fallo)
@@ -323,6 +323,8 @@ export function AuthProvider({ children }) {
     Las ventas sin sincronizar NO se borran: siguen en el teléfono y se
     envían cuando su vendedor vuelva a iniciar sesión.
   */
+  const authIdEnSesion = user?.authId || null
+
   const logout = useCallback(async () => {
     if (supabase) {
       const resultado = await supabase.auth.signOut()
@@ -332,9 +334,9 @@ export function AuthProvider({ children }) {
       }
     }
 
-    await olvidarPerfil()
+    await olvidarPerfil(authIdEnSesion)
     setUser(null)
-  }, [])
+  }, [authIdEnSesion])
 
   /*
     Vuelve a preguntar quién es al servidor. Lo usa el modo sin conexión al
@@ -357,7 +359,7 @@ export function AuthProvider({ children }) {
 
     // El servidor respondió que ya no tiene acceso: fuera, y sin perfil guardado.
     if (!esFalloDeRed(error)) {
-      await olvidarPerfil()
+      await olvidarPerfil(data.session.user.id)
       borrarMarcaDeSesion()
       setUser(null)
     }
