@@ -7,11 +7,17 @@
   ocurre en la Edge Function `acceso`. Aquí se prueba la mitad que vive en
   la base y que la función usa con service_role:
 
-  - acceso_reservar_intento(): cuenta el intento ANTES de comprobar la
-    contraseña, bajo candado, así que dos intentos simultáneos no pasan del
-    límite. A los 5 queda bloqueado 15 minutos.
-  - registrar_empleado() / preparar_restablecimiento(): validan al
-    administrador, su empresa y al empleado, en una sola transacción.
+  - acceso_reservar_intento() / acceso_registrar_resultado(): cada
+    comprobación de contraseña ocupa un lugar ANTES de hacerse, bajo
+    candado; fallidos más en curso nunca pasan de 5, así que ni muchas
+    solicitudes simultáneas evaden el límite. A los 5 fallidos queda
+    bloqueado 15 minutos, y un acierto que llega con el bloqueo puesto no
+    se acepta.
+  - registrar_empleado(): valida al administrador, su empresa y al
+    empleado, en una sola transacción.
+  - validar_restablecimiento() / confirmar_restablecimiento(): primero se
+    valida sin cambiar nada; solo después de que Auth confirma la nueva
+    contraseña se exige el cambio, se desbloquea y se audita.
   - desbloquear_usuario(): la llama el administrador desde el navegador; la
     función valida todo y deja auditoría.
   - debe_cambiar_contrasena: mientras esté activo, las funciones de las que
@@ -20,7 +26,7 @@
 
 import { describe, it, expect, beforeAll, afterAll } from "vitest"
 
-import { levantarBase, consultarComo } from "./arnes.mjs"
+import { levantarBase, consultarComo, esperarBloqueo } from "./arnes.mjs"
 import { crearEmpresa, crearVendedor, contar } from "./fixtures.mjs"
 
 let base
@@ -54,7 +60,27 @@ let serie = 0
 const reservar = async (identificador, cliente = db) =>
   (await comoServicio("select * from public.acceso_reservar_intento($1)", [identificador], cliente)).rows[0]
 
-const exito = (usuario) => comoServicio("select public.acceso_registrar_exito($1)", [usuario])
+const resultado = async (reserva, exito, cliente = db) =>
+  (await comoServicio("select public.acceso_registrar_resultado($1, $2) as aceptado", [reserva, exito], cliente)).rows[0]
+    .aceptado
+
+/* Un intento completo con la contraseña equivocada, como lo hace la Edge Function. */
+async function fallar(identificador) {
+  const intento = await reservar(identificador)
+  expect(intento.permitido).toBe(true)
+  await resultado(intento.reserva, false)
+}
+
+/* N conexiones de verdad, cada una con su sesión de PostgreSQL. */
+async function enParalelo(cantidad, hacer) {
+  const conexiones = await Promise.all(Array.from({ length: cantidad }, () => base.conectar()))
+
+  try {
+    return await Promise.all(conexiones.map((cliente, i) => hacer(cliente, i)))
+  } finally {
+    await Promise.all(conexiones.map((c) => c.end()))
+  }
+}
 
 const bloqueo = async (usuario) =>
   (await db.query("select intentos, bloqueado_hasta from bloqueos_de_acceso where usuario_id = $1", [usuario])).rows[0]
@@ -122,30 +148,28 @@ describe("USR-1 bloqueo por intentos fallidos", () => {
   it("B1. cinco intentos fallidos bloquean; el sexto no se permite", async () => {
     const e = await escenario()
 
-    for (let i = 1; i <= 5; i++) {
-      expect((await reservar(e.usuarioChofer)).permitido).toBe(true)
-    }
+    for (let i = 1; i <= 5; i++) await fallar(e.usuarioChofer)
 
     const sexto = await reservar(e.usuarioChofer)
 
-    expect(sexto.permitido).toBe(false)
+    expect(sexto).toMatchObject({ permitido: false, reserva: null })
     expect((await bloqueo(e.chofer.usuario)).bloqueado_hasta).not.toBeNull()
   })
 
-  it("B2. un intento correcto antes del límite limpia el contador", async () => {
+  it("B2. un acierto antes del límite limpia el contador", async () => {
     const e = await escenario()
 
-    for (let i = 1; i <= 4; i++) await reservar(e.usuarioChofer)
-    await exito(e.chofer.usuario)
+    for (let i = 1; i <= 4; i++) await fallar(e.usuarioChofer)
+    const intento = await reservar(e.usuarioChofer)
 
+    expect(await resultado(intento.reserva, true)).toBe(true)
     expect((await bloqueo(e.chofer.usuario)).intentos).toBe(0)
-    expect((await reservar(e.usuarioChofer)).permitido).toBe(true)
   })
 
   it("B3. el bloqueo expira a los 15 minutos", async () => {
     const e = await escenario()
 
-    for (let i = 1; i <= 5; i++) await reservar(e.usuarioChofer)
+    for (let i = 1; i <= 5; i++) await fallar(e.usuarioChofer)
     const { bloqueado_hasta } = await bloqueo(e.chofer.usuario)
     const minutos = (new Date(bloqueado_hasta) - Date.now()) / 60000
 
@@ -157,40 +181,108 @@ describe("USR-1 bloqueo por intentos fallidos", () => {
       e.chofer.usuario,
     ])
 
-    expect((await reservar(e.usuarioChofer)).permitido).toBe(true)
-    expect((await bloqueo(e.chofer.usuario)).intentos).toBe(1)
+    const nuevo = await reservar(e.usuarioChofer)
+    expect(nuevo.permitido).toBe(true)
+    await resultado(nuevo.reserva, false)
+    expect(await bloqueo(e.chofer.usuario)).toMatchObject({ intentos: 1, bloqueado_hasta: null })
   })
 
-  it("B4. dos intentos simultáneos no evaden el límite", async () => {
+  it("B4. doce solicitudes simultáneas: solo cinco llegan a comprobar la contraseña", async () => {
     const e = await escenario()
 
-    for (let i = 1; i <= 4; i++) await reservar(e.usuarioChofer)
+    const intentos = await enParalelo(12, (cliente) => reservar(e.usuarioChofer, cliente))
+    const permitidos = intentos.filter((i) => i.permitido)
 
-    const uno = await base.conectar()
-    const dos = await base.conectar()
+    expect(permitidos).toHaveLength(5)
+
+    // Las cinco fallan a la vez: queda bloqueado y nadie más pasa.
+    await enParalelo(5, (cliente, i) => resultado(permitidos[i].reserva, false, cliente))
+
+    expect((await bloqueo(e.chofer.usuario)).intentos).toBe(5)
+    expect((await bloqueo(e.chofer.usuario)).bloqueado_hasta).not.toBeNull()
+    expect((await reservar(e.usuarioChofer)).permitido).toBe(false)
+  })
+
+  it("B5. con fallidos previos, las solicitudes simultáneas solo usan los lugares que quedan", async () => {
+    const e = await escenario()
+    for (let i = 1; i <= 3; i++) await fallar(e.usuarioChofer)
+
+    const intentos = await enParalelo(6, (cliente) => reservar(e.usuarioChofer, cliente))
+
+    expect(intentos.filter((i) => i.permitido)).toHaveLength(2)
+  })
+
+  it("B6. la reserva se toma bajo candado: la segunda sesión espera a la primera", async () => {
+    const e = await escenario()
+    const [primera, segunda] = [await base.conectar(), await base.conectar()]
 
     try {
-      const [r1, r2] = await Promise.all([reservar(e.usuarioChofer, uno), reservar(e.usuarioChofer, dos)])
+      for (const c of [primera, segunda]) await c.query("set role service_role")
+      const pid = (await segunda.query("select pg_backend_pid() as pid")).rows[0].pid
 
-      expect([r1.permitido, r2.permitido].filter(Boolean)).toHaveLength(1)
-      expect((await bloqueo(e.chofer.usuario)).intentos).toBe(5)
+      await primera.query("begin")
+      await primera.query("select * from public.acceso_reservar_intento($1)", [e.usuarioChofer])
+
+      const deLaSegunda = segunda.query("select * from public.acceso_reservar_intento($1)", [e.usuarioChofer])
+      const espera = await esperarBloqueo(db, pid)
+
+      await primera.query("commit")
+
+      expect(espera).toMatch(/^Lock/)
+      expect((await deLaSegunda).rows[0].permitido).toBe(true)
     } finally {
-      await uno.end()
-      await dos.end()
+      await primera.end()
+      await segunda.end()
     }
   })
 
-  it("B5. resuelve por correo y por nombre de usuario; nunca devuelve el correo si no se permite", async () => {
+  it("B7. un acierto que llega cuando ya hay bloqueo no se acepta ni lo levanta", async () => {
+    const e = await escenario()
+    const pendiente = await reservar(e.usuarioChofer)
+
+    // Mientras se comprobaba la contraseña, la cuenta quedó bloqueada.
+    await db.query("update bloqueos_de_acceso set intentos = 5, bloqueado_hasta = now() + interval '15 minutes' where usuario_id = $1", [
+      e.chofer.usuario,
+    ])
+
+    expect(await resultado(pendiente.reserva, true)).toBe(false)
+    expect((await bloqueo(e.chofer.usuario)).bloqueado_hasta).not.toBeNull()
+  })
+
+  it("B8. una reserva se usa una sola vez", async () => {
+    const e = await escenario()
+    for (let i = 1; i <= 2; i++) await fallar(e.usuarioChofer)
+    const intento = await reservar(e.usuarioChofer)
+
+    expect(await resultado(intento.reserva, false)).toBe(false)
+    expect(await resultado(intento.reserva, true)).toBe(false)
+    expect((await bloqueo(e.chofer.usuario)).intentos).toBe(3)
+  })
+
+  it("B9. una reserva abandonada vence y libera su lugar", async () => {
+    const e = await escenario()
+    for (let i = 1; i <= 5; i++) await reservar(e.usuarioChofer)
+
+    expect((await reservar(e.usuarioChofer)).permitido).toBe(false)
+
+    await db.query("update reservas_de_acceso set creada_en = now() - interval '3 minutes' where usuario_id = $1", [
+      e.chofer.usuario,
+    ])
+
+    expect((await reservar(e.usuarioChofer)).permitido).toBe(true)
+  })
+
+  it("B10. resuelve por correo y por nombre de usuario; nunca devuelve el correo si no se permite", async () => {
     const e = await escenario()
 
     const porCorreo = await reservar(e.correoChofer.toUpperCase())
     expect(porCorreo).toMatchObject({ usuario_id: e.chofer.usuario, email: e.correoChofer, permitido: true })
 
     const inexistente = await reservar("nadie.existe")
-    expect(inexistente).toEqual({ usuario_id: null, email: null, permitido: false })
+    expect(inexistente).toEqual({ usuario_id: null, email: null, permitido: false, reserva: null })
 
     await db.query("update usuarios set activo = false where id = $1", [e.chofer.usuario])
-    expect(await reservar(e.usuarioChofer)).toEqual({ usuario_id: null, email: null, permitido: false })
+    expect(await reservar(e.usuarioChofer)).toEqual({ usuario_id: null, email: null, permitido: false, reserva: null })
   })
 })
 
@@ -198,7 +290,7 @@ describe("USR-1 bloqueo por intentos fallidos", () => {
 
 describe("USR-1 desbloqueo por el administrador", () => {
   const bloquear = async (e) => {
-    for (let i = 1; i <= 5; i++) await reservar(e.usuarioChofer)
+    for (let i = 1; i <= 5; i++) await fallar(e.usuarioChofer)
   }
 
   it("D1. el administrador desbloquea al instante, limpia el contador y deja auditoría", async () => {
@@ -333,34 +425,52 @@ describe("USR-1 alta de empleados (desde la Edge Function)", () => {
 // ── RESTABLECER Y CAMBIAR ─────────────────────────────────
 
 describe("USR-1 restablecer y cambiar contraseña", () => {
-  const PREPARAR = "select public.preparar_restablecimiento($1, $2, $3) as auth_id"
+  const VALIDAR = "select public.validar_restablecimiento($1, $2) as auth_id"
+  const CONFIRMAR = "select public.confirmar_restablecimiento($1, $2, $3)"
+  const debeCambiar = async (usuario) =>
+    (await db.query("select debe_cambiar_contrasena from usuarios where id = $1", [usuario])).rows[0].debe_cambiar_contrasena
 
-  it("R1. restablecer exige cambiarla, puede desbloquear y deja auditoría", async () => {
+  it("R1. validar no cambia nada: si Auth falla después, el empleado sigue vendiendo", async () => {
     const e = await escenario()
-    for (let i = 1; i <= 5; i++) await reservar(e.usuarioChofer)
 
-    const authId = (await comoServicio(PREPARAR, [e.a.authId, e.chofer.usuario, true])).rows[0].auth_id
+    const authId = (await comoServicio(VALIDAR, [e.a.authId, e.chofer.usuario])).rows[0].auth_id
 
     expect(authId).toBe(e.chofer.authId)
-    expect((await db.query("select debe_cambiar_contrasena from usuarios where id = $1", [e.chofer.usuario])).rows[0].debe_cambiar_contrasena).toBe(true)
+    expect(await debeCambiar(e.chofer.usuario)).toBe(false)
+    expect(await contar(db, "auditoria_accesos", "usuario_id = $1", [e.chofer.usuario])).toBe(0)
+    expect((await como(e.chofer.authId, "select public.empresa_del_usuario() as x")).rows[0].x).toBe(e.a.empresa)
+    expect((await como(e.chofer.authId, "select 1 from inventario_ubicacion")).rowCount).toBe(1)
+  })
+
+  it("R2. confirmar, después de que Auth guardó la temporal, exige cambiarla, desbloquea y audita", async () => {
+    const e = await escenario()
+    for (let i = 1; i <= 5; i++) await fallar(e.usuarioChofer)
+
+    await comoServicio(CONFIRMAR, [e.a.authId, e.chofer.usuario, true])
+
+    expect(await debeCambiar(e.chofer.usuario)).toBe(true)
     expect((await bloqueo(e.chofer.usuario)).bloqueado_hasta).toBeNull()
     expect(await contar(db, "auditoria_accesos", "usuario_id = $1 and accion = 'restablecimiento'", [e.chofer.usuario])).toBe(1)
   })
 
-  it("R2. ni un empleado ni el administrador de otra empresa restablecen", async () => {
+  it("R3. ni un empleado ni el administrador de otra empresa validan o confirman", async () => {
     const e = await escenario()
 
-    await expect(comoServicio(PREPARAR, [e.chofer.authId, e.chofer.usuario, true])).rejects.toMatchObject(RECHAZO)
-    await expect(comoServicio(PREPARAR, [e.b.authId, e.chofer.usuario, true])).rejects.toMatchObject(RECHAZO)
+    for (const quien of [e.chofer.authId, e.b.authId]) {
+      await expect(comoServicio(VALIDAR, [quien, e.chofer.usuario])).rejects.toMatchObject(RECHAZO)
+      await expect(comoServicio(CONFIRMAR, [quien, e.chofer.usuario, true])).rejects.toMatchObject(RECHAZO)
+    }
+    expect(await debeCambiar(e.chofer.usuario)).toBe(false)
   })
 
-  it("R3. el cambio de contraseña confirmado por el servidor levanta la exigencia", async () => {
+  it("R4. el cambio de contraseña confirmado por el servidor levanta la exigencia, y repetirlo no daña", async () => {
     const e = await escenario()
     await db.query("update usuarios set debe_cambiar_contrasena = true where id = $1", [e.chofer.usuario])
 
     await comoServicio("select public.acceso_contrasena_cambiada($1)", [e.chofer.authId])
+    await comoServicio("select public.acceso_contrasena_cambiada($1)", [e.chofer.authId])
 
-    expect((await db.query("select debe_cambiar_contrasena from usuarios where id = $1", [e.chofer.usuario])).rows[0].debe_cambiar_contrasena).toBe(false)
+    expect(await debeCambiar(e.chofer.usuario)).toBe(false)
   })
 })
 
@@ -406,7 +516,7 @@ describe("USR-1 sin cambiar la contraseña no se opera", () => {
     expect((await como(e.a.authId, "select public.usuario_es_admin() as x")).rows[0].x).toBe(false)
     await expect(como(e.a.authId, "select public.desbloquear_usuario($1)", [e.chofer.usuario])).rejects.toMatchObject(RECHAZO)
     await expect(
-      comoServicio("select public.preparar_restablecimiento($1, $2, true)", [e.a.authId, e.chofer.usuario])
+      comoServicio("select public.validar_restablecimiento($1, $2)", [e.a.authId, e.chofer.usuario])
     ).rejects.toMatchObject(RECHAZO)
   })
 })
@@ -480,9 +590,10 @@ describe("USR-1 caminos cerrados", () => {
     const e = await escenario()
     const llamadas = [
       ["select * from public.acceso_reservar_intento($1)", [e.usuarioChofer]],
-      ["select public.acceso_registrar_exito($1)", [e.chofer.usuario]],
+      ["select public.acceso_registrar_resultado(gen_random_uuid(), true)", []],
       ["select public.acceso_contrasena_cambiada($1)", [e.chofer.authId]],
-      ["select public.preparar_restablecimiento($1, $2, true)", [e.a.authId, e.chofer.usuario]],
+      ["select public.validar_restablecimiento($1, $2)", [e.a.authId, e.chofer.usuario]],
+      ["select public.confirmar_restablecimiento($1, $2, true)", [e.a.authId, e.chofer.usuario]],
       ["select public.validar_alta_empleado($1, $2, $3, $4)", [e.a.authId, "q.q", "q@q.q", null]],
       ["select public.vincular_usuario_invitado()", []],
     ]
@@ -499,7 +610,7 @@ describe("USR-1 caminos cerrados", () => {
       `select t, has_table_privilege('anon', 'public.' || t, 'INSERT')
                or has_table_privilege('anon', 'public.' || t, 'UPDATE')
                or has_table_privilege('anon', 'public.' || t, 'DELETE') as escribe
-         from unnest(array['usuarios', 'permisos_usuario', 'bloqueos_de_acceso', 'auditoria_accesos']) t`
+         from unnest(array['usuarios', 'permisos_usuario', 'bloqueos_de_acceso', 'reservas_de_acceso', 'auditoria_accesos']) t`
     )
 
     expect(rows.filter((r) => r.escribe).map((r) => r.t)).toEqual([])
