@@ -485,8 +485,14 @@ describe("SEC-1 y SEC-2: los flujos legítimos siguen", () => {
   it("cada empresa sigue leyendo sus ventas y cobros, y no las de otra", async () => {
     const x = await ventasYCobros()
 
+    /*
+      Lo propio se lee como el administrador de la empresa: desde la 0029
+      un vendedor solo ve las ventas, abonos y pagos de su ubicación, y las
+      de este escenario no tienen ubicación. Lo que se comprueba aquí es el
+      límite entre empresas, que no cambia.
+    */
     for (const tabla of Object.keys(ESCRITURAS)) {
-      const propia = await como(x.vendedorA.authId, `select count(*)::int as n from ${tabla}`)
+      const propia = await como(x.a.authId, `select count(*)::int as n from ${tabla}`)
       expect(propia.rows[0].n).toBeGreaterThan(0)
 
       const ajena = await como(x.vendedorB.authId, `select count(*)::int as n from ${tabla}`)

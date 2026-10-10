@@ -31,6 +31,9 @@ duda de si ya se aplicó, correrla de nuevo es seguro.
 | 0024 | Seguridad (SEC-3a, storage): las imágenes de producto se suben, reemplazan, mueven y borran solo con `products` y en la carpeta de la propia empresa; el bucket deja de poder listarse sin iniciar sesión |
 | 0025 | Seguridad (SEC-3b): clientes se dan de alta con `clients`, `pos` o `quotes`, se cambian con `clients` y no se borran nunca; proveedores se crean y cambian con `suppliers` y solo el administrador los borra; una cotización la crea quien tiene `quotes` a su nombre y solo su autor o un administrador la cambia o la borra, con su detalle |
 | 0026 | Usuarios (USR-1): nombre de usuario único, cambio obligatorio de contraseña que bloquea toda operación en la base, bloqueo a los 5 intentos fallidos durante 15 minutos (también con solicitudes simultáneas) con desbloqueo por el administrador y auditoría, alta validada y restablecimiento en dos fases (no cambia nada si Auth falla) para la Edge Function `acceso`, permisos todo o nada, usuarios sin borrado y último administrador protegido |
+| 0027 | Ventas sin conexión (OFF-1.1): marca `vende_sin_conexion` por ubicación (nunca junto con `emite_fiscal`), trazabilidad en `ventas`, recepción idempotente por clave y huella que aplica con `registrar_venta_ubicacion` o guarda en `ventas_por_conciliar` (inmutable) sin perder la venta, y rescate administrativo auditado |
+| 0028 | Conciliación (OFF-1.1): `conciliar_venta` aplica una venta por conciliar con su vendedor, ubicación, fecha y precio cobrados (siempre documento interno), la aplica con un ajuste explícito y justificado de lo que falte (sin existencias negativas) o la anula con su motivo; solo administradores, serializada por fila |
+| 0029 | Historial y cobros por ubicación (OFF-1.1): un vendedor lee solo las ventas, el detalle, los abonos y los pagos de su ubicación y `registrar_pago_cliente` reparte su cobro solo entre las facturas de su ubicación (LC005 sin ubicación); cobrar exige `sales-history`, el permiso de Cuentas por cobrar; el administrador ve y cobra todo, como antes. Los pagos guardan la ubicación de quien cobró |
 
 ## Instalación en una base vacía
 
@@ -66,6 +69,9 @@ LUNACELL.
 | 0024 | **Correr, antes de invitar al primer empleado.** No toca ningún archivo ni el bucket: solo cambia las políticas de `storage.objects`. Las imágenes se siguen viendo por su URL pública |
 | 0025 | **Correr, antes de invitar al primer empleado.** No toca ningún dato: cambia políticas, agrega `usuario_actual()` y retira el borrado de clientes y la escritura de `anon` |
 | 0026 | **Correr, antes de desplegar la Edge Function `acceso` y el frontend de USR-1.** No toca ningún dato: agrega columnas, el contador de intentos y la auditoría, funciones para la Edge Function, el bloqueo por contraseña temporal, la protección del último administrador, y retira el borrado de usuarios y la vinculación por correo |
+| 0027 | **Correr antes de activar ventas sin conexión.** No toca ningún dato ni modifica `registrar_venta_ubicacion`: agrega la marca `vende_sin_conexion` (apagada en todas las ubicaciones), columnas de trazabilidad en `ventas` (las existentes quedan `en_linea`), `ventas_por_conciliar` y `auditoria_rescates` inmutables, y las RPC `sincronizar_venta_sin_conexion` y `rescatar_venta_sin_conexion` |
+| 0028 | **Correr después de la 0027 y antes de activar ventas sin conexión.** No toca ningún dato: solo crea `conciliar_venta` |
+| 0029 | **Correr antes de que un vendedor use el historial o cobre.** No toca ningún dato: reemplaza políticas de lectura de `ventas`, `detalle_venta`, `abonos` y `pagos`, agrega `pagos.ubicacion_id` y redefine `registrar_pago_cliente` con el mismo contrato. Las ventas sin ubicación solo las verá el administrador |
 
 Ninguna de las que se corren borra datos: solo la 0010 tiene un `delete`,
 y es de las que se omiten. Lo que sí hacen varias es recrear vistas y

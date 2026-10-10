@@ -52,7 +52,26 @@ function puertoLibre() {
   return 55000 + (process.pid % 2000)
 }
 
-export async function levantarBase() {
+/*
+  Aplica una migración del proyecto tal cual está en el repositorio.
+  Separada para poder aplicar las últimas a mano sobre una base que ya
+  tiene datos, que es como llegan a producción.
+*/
+export async function aplicarMigracion(cliente, archivo) {
+  const sql = await readFile(path.join(MIGRACIONES, archivo), "utf8")
+
+  try {
+    await cliente.query(sql)
+  } catch (problema) {
+    throw new Error(`La migración ${archivo} falló: ${problema.message}`)
+  }
+}
+
+/*
+  `hasta`: el nombre de la última migración a aplicar (incluida). Sin él
+  se aplican todas.
+*/
+export async function levantarBase({ hasta = null } = {}) {
   const port = puertoLibre()
   const databaseDir = path.join(
     os.tmpdir(),
@@ -107,13 +126,9 @@ export async function levantarBase() {
   await admin.query(preludio)
 
   for (const archivo of await listarMigraciones()) {
-    const sql = await readFile(path.join(MIGRACIONES, archivo), "utf8")
+    if (hasta && archivo > hasta) break
 
-    try {
-      await admin.query(sql)
-    } catch (problema) {
-      throw new Error(`La migración ${archivo} falló: ${problema.message}`)
-    }
+    await aplicarMigracion(admin, archivo)
   }
 
   return {
