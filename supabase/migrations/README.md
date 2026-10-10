@@ -30,7 +30,7 @@ duda de si ya se aplicó, correrla de nuevo es seguro.
 | 0023 | Seguridad (SEC-3a): productos y ubicaciones se crean y cambian solo con `products` y `locations`, no se borran desde la aplicación, solo el administrador decide qué ubicación vende o es fiscal, y el disparador de ubicación operativa cuenta a todos los usuarios y no solo a los visibles |
 | 0024 | Seguridad (SEC-3a, storage): las imágenes de producto se suben, reemplazan, mueven y borran solo con `products` y en la carpeta de la propia empresa; el bucket deja de poder listarse sin iniciar sesión |
 | 0025 | Seguridad (SEC-3b): clientes se dan de alta con `clients`, `pos` o `quotes`, se cambian con `clients` y no se borran nunca; proveedores se crean y cambian con `suppliers` y solo el administrador los borra; una cotización la crea quien tiene `quotes` a su nombre y solo su autor o un administrador la cambia o la borra, con su detalle |
-| 0026 | Usuarios (USR-1): nombre de usuario único, cambio obligatorio de contraseña que bloquea toda operación en la base, bloqueo a los 5 intentos fallidos durante 15 minutos con desbloqueo por el administrador y auditoría, alta y restablecimiento validados para la Edge Function `acceso`, permisos todo o nada, usuarios sin borrado y último administrador protegido |
+| 0026 | Usuarios (USR-1): nombre de usuario único, cambio obligatorio de contraseña que bloquea toda operación en la base, bloqueo a los 5 intentos fallidos durante 15 minutos (también con solicitudes simultáneas) con desbloqueo por el administrador y auditoría, alta validada y restablecimiento en dos fases (no cambia nada si Auth falla) para la Edge Function `acceso`, permisos todo o nada, usuarios sin borrado y último administrador protegido |
 
 ## Instalación en una base vacía
 

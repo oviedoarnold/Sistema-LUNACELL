@@ -8,7 +8,8 @@
 --
 -- Ahora la identidad la crea la Edge Function `acceso`, con privilegios que
 -- solo existen en el servidor, y la vincula por su id. Esta migración es la
--- mitad que vive en la base: las columnas, el contador de intentos, las
+-- mitad que vive en la base: las columnas, el contador y las reservas de
+-- intentos (seguros ante solicitudes simultáneas), las
 -- funciones que la Edge Function llama con service_role, el desbloqueo que
 -- el administrador llama desde la aplicación, y el bloqueo de toda
 -- operación mientras no se cambie la contraseña temporal.
@@ -149,8 +150,27 @@ create table if not exists public.auditoria_accesos (
   creado_en        timestamptz not null default now()
 );
 
+/*
+  Cada comprobación de contraseña en curso ocupa un lugar aquí desde antes
+  de hacerse hasta que se registra su resultado. Fallidos más en curso
+  nunca pasan de 5: así, muchas solicitudes simultáneas no consiguen más
+  intentos que una sola. Un lugar abandonado (la función se cayó a mitad)
+  vence a los 2 minutos y deja de contar.
+*/
+create table if not exists public.reservas_de_acceso (
+  id         uuid primary key default gen_random_uuid(),
+  usuario_id uuid not null references public.usuarios (id) on delete cascade,
+  creada_en  timestamptz not null default now()
+);
+
+create index if not exists reservas_de_acceso_usuario on public.reservas_de_acceso (usuario_id);
+
 alter table public.bloqueos_de_acceso enable row level security;
 alter table public.auditoria_accesos enable row level security;
+alter table public.reservas_de_acceso enable row level security;
+
+revoke all on public.reservas_de_acceso from public, anon, authenticated;
+grant all on public.reservas_de_acceso to service_role;
 
 revoke all on public.bloqueos_de_acceso, public.auditoria_accesos from public, anon, authenticated;
 grant select on public.bloqueos_de_acceso, public.auditoria_accesos to authenticated;
@@ -179,28 +199,28 @@ create policy auditoria_lectura_admin on public.auditoria_accesos
 -- INTENTOS DE ACCESO (solo la Edge Function, con service_role)
 -- ─────────────────────────────────────────────────────────
 /*
-  Se llama ANTES de comprobar la contraseña y cuenta el intento bajo
-  candado sobre la fila del usuario: dos intentos simultáneos se forman en
-  fila, así que nadie pasa del límite. El quinto intento todavía se
-  evalúa; si falla, el usuario queda bloqueado 15 minutos, y si acierta,
-  acceso_registrar_exito() lo limpia.
+  Se llama ANTES de comprobar la contraseña. Bajo candado sobre la fila del
+  usuario, mira cuántos intentos fallaron y cuántos están en curso; si entre
+  los dos ya son 5, no deja comprobar otra contraseña. Si queda lugar, lo
+  ocupa con una reserva que la Edge Function devuelve con el resultado.
 
-  Para un usuario inexistente, inactivo o bloqueado responde lo mismo y sin
-  correo: la Edge Function contesta igual en los tres casos.
+  Para un usuario inexistente, inactivo, bloqueado o sin lugar responde lo
+  mismo y sin correo: la Edge Function contesta igual en todos los casos.
 */
 create or replace function public.acceso_reservar_intento(p_identificador text)
-returns table (usuario_id uuid, email text, permitido boolean)
+returns table (usuario_id uuid, email text, permitido boolean, reserva uuid)
 language plpgsql
 security definer
 set search_path = ''
 as $$
 #variable_conflict use_column
 declare
-  v_ident   text := lower(btrim(coalesce(p_identificador, '')));
-  v_usuario uuid;
-  v_correo  text;
-  v_previo  record;
-  v_cuenta  integer;
+  v_ident      text := lower(btrim(coalesce(p_identificador, '')));
+  v_usuario    uuid;
+  v_correo     text;
+  v_previo     record;
+  v_pendientes integer;
+  v_reserva    uuid;
 begin
   select u.id, a.email
     into v_usuario, v_correo
@@ -214,7 +234,7 @@ begin
    limit 1;
 
   if v_usuario is null then
-    return query select null::uuid, null::text, false;
+    return query select null::uuid, null::text, false, null::uuid;
     return;
   end if;
 
@@ -228,36 +248,101 @@ begin
      for update;
 
   if v_previo.bloqueado_hasta is not null and v_previo.bloqueado_hasta > now() then
-    return query select null::uuid, null::text, false;
+    return query select null::uuid, null::text, false, null::uuid;
     return;
   end if;
 
   -- Un bloqueo vencido empieza la cuenta de nuevo.
-  v_cuenta := case when v_previo.bloqueado_hasta is not null then 1 else v_previo.intentos + 1 end;
+  if v_previo.bloqueado_hasta is not null then
+    update public.bloqueos_de_acceso b
+       set intentos = 0, bloqueado_hasta = null, actualizado_en = now()
+     where b.usuario_id = v_usuario;
+    v_previo.intentos := 0;
+  end if;
 
-  update public.bloqueos_de_acceso b
-     set intentos = v_cuenta,
-         bloqueado_hasta = case when v_cuenta >= 5 then now() + interval '15 minutes' end,
-         actualizado_en = now()
-   where b.usuario_id = v_usuario;
+  delete from public.reservas_de_acceso r
+   where r.usuario_id = v_usuario and r.creada_en < now() - interval '2 minutes';
 
-  return query select v_usuario, v_correo, true;
+  select count(*) into v_pendientes
+    from public.reservas_de_acceso r
+   where r.usuario_id = v_usuario;
+
+  if v_previo.intentos + v_pendientes >= 5 then
+    return query select null::uuid, null::text, false, null::uuid;
+    return;
+  end if;
+
+  insert into public.reservas_de_acceso (usuario_id) values (v_usuario)
+  returning id into v_reserva;
+
+  return query select v_usuario, v_correo, true, v_reserva;
 end
 $$;
 
-create or replace function public.acceso_registrar_exito(p_usuario uuid)
-returns void
-language sql
+/*
+  El resultado de una comprobación, con el mismo candado. Devuelve true solo
+  si se acepta un acierto: un acierto que llega cuando la cuenta ya está
+  bloqueada no se acepta ni levanta el bloqueo, y la Edge Function no
+  entrega la sesión. Una reserva solo se usa una vez.
+*/
+create or replace function public.acceso_registrar_resultado(p_reserva uuid, p_exito boolean)
+returns boolean
+language plpgsql
 security definer
 set search_path = ''
 as $$
-  update public.bloqueos_de_acceso
-     set intentos = 0, bloqueado_hasta = null, actualizado_en = now()
-   where usuario_id = p_usuario;
+declare
+  v_usuario uuid;
+  v_bloqueo record;
+  v_cuenta  integer;
+begin
+  select r.usuario_id into v_usuario
+    from public.reservas_de_acceso r
+   where r.id = p_reserva;
 
-  update public.usuarios
-     set entro_en = coalesce(entro_en, now())
-   where id = p_usuario;
+  if v_usuario is null then
+    return false;
+  end if;
+
+  select b.intentos, b.bloqueado_hasta
+    into v_bloqueo
+    from public.bloqueos_de_acceso b
+   where b.usuario_id = v_usuario
+     for update;
+
+  delete from public.reservas_de_acceso r where r.id = p_reserva;
+
+  -- Otra solicitud la usó primero.
+  if not found then
+    return false;
+  end if;
+
+  if p_exito then
+    if v_bloqueo.bloqueado_hasta is not null and v_bloqueo.bloqueado_hasta > now() then
+      return false;
+    end if;
+
+    update public.bloqueos_de_acceso
+       set intentos = 0, bloqueado_hasta = null, actualizado_en = now()
+     where usuario_id = v_usuario;
+
+    update public.usuarios
+       set entro_en = coalesce(entro_en, now())
+     where id = v_usuario;
+
+    return true;
+  end if;
+
+  v_cuenta := v_bloqueo.intentos + 1;
+
+  update public.bloqueos_de_acceso
+     set intentos = v_cuenta,
+         bloqueado_hasta = case when v_cuenta >= 5 then now() + interval '15 minutes' else bloqueado_hasta end,
+         actualizado_en = now()
+   where usuario_id = v_usuario;
+
+  return false;
+end
 $$;
 
 -- La Edge Function la llama solo después de que Supabase Auth guardó la nueva.
@@ -405,18 +490,24 @@ end
 $$;
 
 /*
-  Antes de que la Edge Function ponga la contraseña temporal nueva: valida,
-  exige el cambio y, si se pide, desbloquea. Va primero a propósito: si
-  después Supabase Auth fallara, el empleado conserva su contraseña y solo
-  se le pide cambiarla, que es seguro.
+  Restablecer en dos fases, para que un fallo de Supabase Auth no deje al
+  empleado sin poder trabajar:
+
+  1. validar_restablecimiento(): solo comprueba (administrador, empresa,
+     cuenta) y devuelve la identidad. No cambia nada.
+  2. La Edge Function pone la contraseña temporal en Auth.
+  3. confirmar_restablecimiento(): solo si Auth la guardó. Exige el cambio,
+     desbloquea si se pide y audita, en una transacción.
+
+  Si Auth falla, nada cambió: el empleado sigue entrando y vendiendo con su
+  contraseña. Si Auth la guardó y la confirmación falla, la contraseña
+  anterior ya no sirve y el administrador repite «Restablecer», que genera
+  otra temporal y confirma.
 */
-create or replace function public.preparar_restablecimiento(
-  p_admin_auth  uuid,
-  p_usuario     uuid,
-  p_desbloquear boolean
-)
+create or replace function public.validar_restablecimiento(p_admin_auth uuid, p_usuario uuid)
 returns uuid
 language plpgsql
+stable
 security definer
 set search_path = ''
 as $$
@@ -440,18 +531,37 @@ begin
     raise exception 'Ese usuario no tiene una cuenta de acceso.' using errcode = '23514';
   end if;
 
-  update public.usuarios set debe_cambiar_contrasena = true where id = v_empleado.id;
+  return v_empleado.auth_id;
+end
+$$;
+
+create or replace function public.confirmar_restablecimiento(
+  p_admin_auth  uuid,
+  p_usuario     uuid,
+  p_desbloquear boolean
+)
+returns void
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  v_admin public.usuarios := public.acceso_administrador(p_admin_auth);
+begin
+  perform public.validar_restablecimiento(p_admin_auth, p_usuario);
+
+  update public.usuarios set debe_cambiar_contrasena = true where id = p_usuario;
 
   if p_desbloquear then
     update public.bloqueos_de_acceso
        set intentos = 0, bloqueado_hasta = null, actualizado_en = now()
-     where usuario_id = v_empleado.id;
+     where usuario_id = p_usuario;
+
+    delete from public.reservas_de_acceso where usuario_id = p_usuario;
   end if;
 
   insert into public.auditoria_accesos (empresa_id, usuario_id, administrador_id, accion)
-  values (v_admin.empresa_id, v_empleado.id, v_admin.id, 'restablecimiento');
-
-  return v_empleado.auth_id;
+  values (v_admin.empresa_id, p_usuario, v_admin.id, 'restablecimiento');
 end
 $$;
 
@@ -482,6 +592,8 @@ begin
      set intentos = 0, bloqueado_hasta = null, actualizado_en = now()
    where usuario_id = v_empleado;
 
+  delete from public.reservas_de_acceso where usuario_id = v_empleado;
+
   insert into public.auditoria_accesos (empresa_id, usuario_id, administrador_id, accion)
   values (v_admin.empresa_id, v_empleado, v_admin.id, 'desbloqueo');
 end
@@ -507,23 +619,25 @@ $$;
 
 revoke execute on function
   public.acceso_reservar_intento(text),
-  public.acceso_registrar_exito(uuid),
+  public.acceso_registrar_resultado(uuid, boolean),
   public.acceso_contrasena_cambiada(uuid),
   public.acceso_administrador(uuid),
   public.validar_alta_empleado(uuid, text, text, uuid),
   public.registrar_empleado(uuid, uuid, text, text, text, text, text[], uuid, boolean),
-  public.preparar_restablecimiento(uuid, uuid, boolean),
+  public.validar_restablecimiento(uuid, uuid),
+  public.confirmar_restablecimiento(uuid, uuid, boolean),
   public.desbloquear_usuario(uuid),
   public.guardar_permisos_usuario(uuid, text[])
 from public, anon, authenticated;
 
 grant execute on function
   public.acceso_reservar_intento(text),
-  public.acceso_registrar_exito(uuid),
+  public.acceso_registrar_resultado(uuid, boolean),
   public.acceso_contrasena_cambiada(uuid),
   public.validar_alta_empleado(uuid, text, text, uuid),
   public.registrar_empleado(uuid, uuid, text, text, text, text, text[], uuid, boolean),
-  public.preparar_restablecimiento(uuid, uuid, boolean)
+  public.validar_restablecimiento(uuid, uuid),
+  public.confirmar_restablecimiento(uuid, uuid, boolean)
 to service_role;
 
 grant execute on function

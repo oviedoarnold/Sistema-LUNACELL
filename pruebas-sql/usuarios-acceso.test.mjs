@@ -174,7 +174,8 @@ describe("USR-1 bloqueo por intentos fallidos", () => {
     const minutos = (new Date(bloqueado_hasta) - Date.now()) / 60000
 
     expect(minutos).toBeGreaterThan(14)
-    expect(minutos).toBeLessThanOrEqual(15)
+    // PostgreSQL guarda microsegundos y JavaScript los trunca a milisegundos.
+    expect(minutos).toBeLessThanOrEqual(15.001)
 
     // Pasaron los 15 minutos.
     await db.query("update bloqueos_de_acceso set bloqueado_hasta = now() - interval '1 second' where usuario_id = $1", [
