@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
-import { render, screen, waitFor } from "@testing-library/react"
+import { render, screen, waitFor, fireEvent } from "@testing-library/react"
 import { MemoryRouter, Routes, Route } from "react-router-dom"
 
 import {
@@ -278,5 +278,67 @@ describe("ProtectedRoute · Existencias", () => {
 
     expect(await screen.findByText(/sin acceso/i)).toBeInTheDocument()
     expect(screen.queryByText("Existencias")).not.toBeInTheDocument()
+  })
+})
+
+/*
+  USR-1: con contraseña temporal no se entra a ninguna pantalla hasta
+  cambiarla. La base ya no le deja operar (0026); esto evita mostrarle
+  pantallas vacías y le pide lo único que puede hacer.
+*/
+describe("cambio obligatorio de contraseña", () => {
+  const conTemporal = () =>
+    montarSupabaseFalso({
+      usuarios: [{ ...usuarioDePrueba(), debe_cambiar_contrasena: true }],
+      permisos: permisosDe("u-1", ["dashboard"]),
+      cuentas: [{ id: "auth-1", email: "persona@ferreteria.test", password: "Temporal#2026" }],
+      sesionInicial: sesionDe("auth-1"),
+    })
+
+  const cambiar = (actual, nueva, confirmacion = nueva) => {
+    fireEvent.change(screen.getByLabelText(/contraseña temporal/i), { target: { value: actual } })
+    fireEvent.change(screen.getByLabelText(/^contraseña nueva$/i), { target: { value: nueva } })
+    fireEvent.change(screen.getByLabelText(/confirma/i), { target: { value: confirmacion } })
+    fireEvent.click(screen.getByRole("button", { name: /cambiar contraseña/i }))
+  }
+
+  it("solo muestra el cambio de contraseña, no la pantalla", async () => {
+    conTemporal()
+    await renderEnRuta("/dashboard")
+
+    expect(await screen.findByRole("heading", { name: /cambia tu contraseña/i })).toBeInTheDocument()
+    expect(screen.queryByText("Dashboard")).not.toBeInTheDocument()
+  })
+
+  it("después de cambiarla entra a la pantalla pedida", async () => {
+    conTemporal()
+    await renderEnRuta("/dashboard")
+    await screen.findByRole("heading", { name: /cambia tu contraseña/i })
+
+    cambiar("Temporal#2026", "Nueva-Clave-2026")
+
+    expect(await screen.findByText("Dashboard")).toBeInTheDocument()
+  })
+
+  it("avisa si la confirmación no coincide, sin llamar al servidor", async () => {
+    const falso = conTemporal()
+    await renderEnRuta("/dashboard")
+    await screen.findByRole("heading", { name: /cambia tu contraseña/i })
+
+    cambiar("Temporal#2026", "Nueva-Clave-2026", "Otra-Clave-2026")
+
+    expect(await screen.findByText(/no coinciden/i)).toBeInTheDocument()
+    expect(falso.functions.invoke).not.toHaveBeenCalled()
+  })
+
+  it("muestra el motivo si la contraseña temporal no es la correcta", async () => {
+    conTemporal()
+    await renderEnRuta("/dashboard")
+    await screen.findByRole("heading", { name: /cambia tu contraseña/i })
+
+    cambiar("Equivocada#1", "Nueva-Clave-2026")
+
+    expect(await screen.findByText("La contraseña actual no es correcta.")).toBeInTheDocument()
+    expect(screen.queryByText("Dashboard")).not.toBeInTheDocument()
   })
 })

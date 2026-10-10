@@ -17,7 +17,7 @@ vi.mock("../lib/supabase", () => ({
 }))
 
 const CUENTAS = [
-  { id: "auth-1", email: "vendedor@ferreteria.test", password: "Vende2026" },
+  { id: "auth-1", email: "vendedor@ferreteria.test", usuario: "vendedor01", password: "Vende2026" },
   { id: "auth-huerfano", email: "huerfano@ferreteria.test", password: "Huerf2026" },
 ]
 
@@ -68,11 +68,11 @@ async function renderLogin() {
     </AuthProvider>
   )
 
-  await screen.findByLabelText(/^correo$/i)
+  await screen.findByLabelText(/usuario o correo/i)
 }
 
 const escribir = (correo, clave) => {
-  fireEvent.change(screen.getByLabelText(/^correo$/i), {
+  fireEvent.change(screen.getByLabelText(/usuario o correo/i), {
     target: { value: correo },
   })
 
@@ -88,14 +88,22 @@ describe("Login", () => {
   it("muestra el formulario", async () => {
     await renderLogin()
 
-    expect(screen.getByLabelText(/^correo$/i)).toBeInTheDocument()
+    expect(screen.getByLabelText(/usuario o correo/i)).toBeInTheDocument()
     expect(screen.getByLabelText(/^contraseña$/i)).toBeInTheDocument()
   })
 
-  it("pide un correo, no un nombre de usuario", async () => {
+  it("acepta nombre de usuario o correo", async () => {
     await renderLogin()
 
-    expect(screen.getByLabelText(/^correo$/i)).toHaveAttribute("type", "email")
+    expect(screen.getByLabelText(/usuario o correo/i)).toHaveAttribute("type", "text")
+  })
+
+  it("entra al panel con su nombre de usuario", async () => {
+    await renderLogin()
+    escribir("vendedor01", "Vende2026")
+    enviar()
+
+    expect(await screen.findByText("Dashboard")).toBeInTheDocument()
   })
 
   it("entra al panel con las credenciales correctas", async () => {
