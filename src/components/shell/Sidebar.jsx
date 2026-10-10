@@ -27,13 +27,13 @@ import { GRUPOS_DEL_MENU } from "./menuDelPanel"
   elegir su color. El logo oficial no se recolorea.
 */
 function Sidebar({ abierto = false, onCerrar = () => {} }) {
-  const { user, logout, hasPermission } = useAuth()
+  const { user, logout, hasPermission, isAdmin } = useAuth()
   const sinConexion = useSinConexion()
   const navigate = useNavigate()
 
   const gruposVisibles = GRUPOS_DEL_MENU.map((grupo) => ({
     ...grupo,
-    modulos: grupo.modulos.filter((modulo) => hasPermission(modulo.permiso)),
+    modulos: grupo.modulos.filter((modulo) => hasPermission(modulo.permiso) && (!modulo.soloAdmin || isAdmin)),
   })).filter((grupo) => grupo.modulos.length > 0)
 
   /*

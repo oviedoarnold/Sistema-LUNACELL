@@ -5,6 +5,7 @@ import ModalShell from "../forms/ModalShell"
 import StatusBadge from "../crud/StatusBadge"
 import { formatMoney } from "../../utils/format"
 import ModalDeRespaldo from "./ModalDeRespaldo"
+import { motivoDeConciliacion } from "../../lib/sinConexion/textos"
 
 /*
   Las ventas que este teléfono guardó sin conexión, con su estado real:
@@ -26,19 +27,6 @@ const ESTADO_DE_VENTA = {
   error: { texto: "Error", variante: "overdue", Icono: FaExclamationCircle },
 }
 
-const MOTIVOS = {
-  "existencia-insuficiente": "No había existencia suficiente en el servidor.",
-  "precio-distinto": "El precio o el impuesto cambiaron desde la venta.",
-  "reloj-desfasado": "La hora del teléfono no coincidía con la del servidor.",
-  "ubicacion-cambiada": "Tu ubicación cambió después de la venta.",
-  "ubicacion-no-habilitada": "La ubicación ya no está habilitada para vender sin conexión.",
-  "fecha-fuera-de-rango": "La venta es demasiado antigua o tiene una fecha imposible.",
-  "usuario-inactivo": "Tu usuario estaba desactivado o con la contraseña por cambiar.",
-  "sin-permiso": "Tu usuario ya no tiene permiso para facturar.",
-  "cliente-invalido": "El cliente ya no existe.",
-  "producto-invalido": "Uno de los productos ya no existe o está inactivo.",
-  rescate: "Subida por un administrador desde un respaldo.",
-}
 
 function detalleDe(venta) {
   if (venta.estado === "registrada") {
@@ -46,7 +34,7 @@ function detalleDe(venta) {
   }
 
   if (venta.estado === "en_conciliacion") {
-    return MOTIVOS[venta.motivo] || "Un administrador la revisará."
+    return `${motivoDeConciliacion(venta.motivo)} Un administrador la revisará.`
   }
 
   if (venta.estado === "error") {

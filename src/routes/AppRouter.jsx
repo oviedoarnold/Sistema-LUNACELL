@@ -20,6 +20,7 @@ import Locations from "../pages/Locations"
 import Clients from "../pages/Clients"
 import Suppliers from "../pages/Suppliers"
 import Settings from "../pages/Settings"
+import Conciliacion from "../pages/Conciliacion"
 import MainLayout from "../layouts/MainLayout"
 import ProtectedRoute from "./ProtectedRoute"
 import { PERMISSIONS } from "../context/permissions"
@@ -190,6 +191,21 @@ function AppRouter() {
             <ProtectedRoute permission={PERMISSIONS.SETTINGS}>
               <MainLayout>
                 <Settings />
+              </MainLayout>
+            </ProtectedRoute>
+          }
+        />
+
+        {/*
+          CONCILIACIÓN DE VENTAS SIN CONEXIÓN. La página además exige ser
+          administrador, igual que la base.
+        */}
+        <Route
+          path="/reconciliation"
+          element={
+            <ProtectedRoute permission={PERMISSIONS.SETTINGS}>
+              <MainLayout>
+                <Conciliacion />
               </MainLayout>
             </ProtectedRoute>
           }
