@@ -124,6 +124,8 @@ function Settings() {
   const {
     user,
     users,
+    errorUsuarios,
+    recargarUsuarios,
     addUser,
     updateUser,
     resetUserPassword,
@@ -1055,16 +1057,29 @@ function Settings() {
 
           </div>
 
-          {users.length === 0 ? (
+          {/* Un error de carga no es lo mismo que una empresa sin usuarios. */}
+          {errorUsuarios && (
+            <div className="empty-state" role="alert">
+              <strong>{errorUsuarios}</strong>
+
+              <button type="button" className="btn btn-secondary" onClick={() => recargarUsuarios()}>
+                Reintentar
+              </button>
+            </div>
+          )}
+
+          {!errorUsuarios && users.length === 0 && (
             <div className="empty-state">
               <strong>
                 No hay usuarios
               </strong>
             </div>
-          ) : (
+          )}
+
+          {users.length > 0 && (
             <div className="table-wrap">
 
-              <table>
+              <table aria-label="Usuarios">
 
                 <thead>
                   <tr>
