@@ -208,3 +208,61 @@ describe("perfil sin conexión vencido", () => {
     expect(vista.result.current.pendientes).toBe(1)
   })
 })
+
+describe("contingencia: ventas de otro usuario en el teléfono", () => {
+  it("las cuenta para avisar, sin mostrarlas ni mezclarlas", async () => {
+    await venderEnElTelefono({ usuarioAuth: "auth-otro" })
+
+    const vista = montar()
+
+    await waitFor(() => expect(vista.result.current.ventasDeOtrosUsuarios).toBe(1))
+    expect(vista.result.current.ventas).toEqual([])
+    expect(vista.result.current.puedeRespaldarTodo).toBe(false)
+  })
+
+  it("un administrador puede respaldarlas todas desde ese teléfono", async () => {
+    await venderEnElTelefono({ usuarioAuth: "auth-otro" })
+    const admin = usuario({ authId: "auth-admin", role: "admin", locationId: "" })
+
+    const vista = montar({ user: admin })
+    await waitFor(() => expect(vista.result.current.ventasDeOtrosUsuarios).toBe(1))
+    expect(vista.result.current.puedeRespaldarTodo).toBe(true)
+
+    const { cantidad } = await vista.result.current.exportarRespaldo("frase-de-contingencia")
+
+    expect(cantidad).toBe(1)
+  })
+})
+
+describe("sin espacio en el teléfono", () => {
+  it("lo dice con palabras del vendedor y no pierde nada de lo guardado", async () => {
+    await venderEnElTelefono()
+    const abrirSinEspacio = async () => {
+      const real = await abrirAlmacen({ indexedDB: navegador })
+
+      return {
+        ...real,
+        transaccion: (almacenes, modo, trabajo) =>
+          almacenes.includes("ventas") && modo === "readwrite" && almacenes.includes("copias")
+            ? Promise.reject(new DOMException("Quota exceeded", "QuotaExceededError"))
+            : real.transaccion(almacenes, modo, trabajo),
+      }
+    }
+    const auth = { user: usuario(), hasPermission: () => true, revalidarSesion: vi.fn() }
+    const vista = renderHook(() => useSinConexion(), {
+      wrapper: ({ children }) => (
+        <AuthContext.Provider value={auth}>
+          <SinConexionProvider abrir={abrirSinEspacio} cliente={clienteFalso()} comprobarServidor={async () => false} descargar={vi.fn(async () => null)}>
+            {children}
+          </SinConexionProvider>
+        </AuthContext.Provider>
+      ),
+    })
+    await waitFor(() => expect(vista.result.current.copia).not.toBeNull())
+
+    await expect(
+      vista.result.current.guardarVentaSinConexion({ carrito: [{ productoId: CARGADOR.id, cantidad: 1 }] })
+    ).rejects.toThrow(/no tiene espacio/i)
+    expect(vista.result.current.pendientes).toBe(1)
+  })
+})
