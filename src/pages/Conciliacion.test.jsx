@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
-import { screen, fireEvent, waitFor, within } from "@testing-library/react"
+import { screen, fireEvent, within } from "@testing-library/react"
 import { MemoryRouter } from "react-router-dom"
 
 import { AuthProvider } from "../context/AuthContext"
