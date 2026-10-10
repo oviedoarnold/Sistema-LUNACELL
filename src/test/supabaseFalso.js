@@ -311,7 +311,7 @@ export function crearSupabaseFalso({
       Lo que devuelve supabase-js: las filas, o el error de PostgREST si la
       consulta misma no se puede resolver (como una relación ambigua).
     */
-    const resolver = () => {
+    const resultadoDeLaConsulta = () => {
       try {
         return { data: ejecutar(), error: null }
       } catch (falla) {
@@ -437,7 +437,7 @@ export function crearSupabaseFalso({
         const falla = fallaDe(nombreTabla, estado.accion)
         if (falla) return Promise.resolve({ data: null, error: falla })
 
-        const { data: filas, error } = resolver()
+        const { data: filas, error } = resultadoDeLaConsulta()
         if (error) return Promise.resolve({ data: null, error })
 
         return Promise.resolve({ data: filas[0] || null, error: null })
@@ -446,7 +446,7 @@ export function crearSupabaseFalso({
         const falla = fallaDe(nombreTabla, estado.accion)
         if (falla) return Promise.resolve({ data: null, error: falla })
 
-        const { data: filas, error } = resolver()
+        const { data: filas, error } = resultadoDeLaConsulta()
         if (error) return Promise.resolve({ data: null, error })
 
         return Promise.resolve(
@@ -455,12 +455,12 @@ export function crearSupabaseFalso({
             : { data: null, error: { message: "sin filas" } }
         )
       },
-      then(alResolver) {
+      then(resolver) {
         const falla = fallaDe(nombreTabla, estado.accion)
 
         return Promise.resolve(
-          falla ? { data: null, error: falla } : resolver()
-        ).then(alResolver)
+          falla ? { data: null, error: falla } : resultadoDeLaConsulta()
+        ).then(resolver)
       },
     }
 

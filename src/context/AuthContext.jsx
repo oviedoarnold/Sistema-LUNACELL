@@ -292,7 +292,7 @@ export function AuthProvider({ children }) {
 
     let vigente = true
 
-    leerUsuariosDeLaEmpresa().then((resultado) => {
+    void leerUsuariosDeLaEmpresa().then((resultado) => {
       if (vigente) {
         aplicarUsuarios(resultado)
       }
