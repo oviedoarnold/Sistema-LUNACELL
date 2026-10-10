@@ -4,6 +4,7 @@ import {
 } from "react-router-dom"
 
 import { useAuth } from "../hooks/useAuth"
+import CambiarContrasena from "../pages/CambiarContrasena"
 import { NAV_ROUTES } from "./navigation"
 
 /*
@@ -112,6 +113,14 @@ function ProtectedRoute({
         }}
       />
     )
+  }
+
+  /*
+    Con contraseña temporal no se muestra ninguna pantalla: la base ya no
+    le deja operar (USR-1), y lo único que puede hacer es cambiarla.
+  */
+  if (user.debeCambiar) {
+    return <CambiarContrasena />
   }
 
   if (
