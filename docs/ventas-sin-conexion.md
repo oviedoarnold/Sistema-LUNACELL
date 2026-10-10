@@ -184,6 +184,46 @@ cerrar sesión. Para **enviar** ventas hace falta una sesión real del mismo
 usuario: el sincronizador la pide a Supabase y el servidor vuelve a comprobarla.
 Al volver la conexión, el perfil se confirma solo.
 
+### Revocaciones mientras no hay conexión (límite inevitable)
+
+Sin conexión no hay forma de saber si a un vendedor le quitaron el acceso: el
+teléfono no puede preguntarle al servidor. Para que el perfil guardado no se
+convierta en una forma de conservar permisos revocados:
+
+- **Vigencia corta:** el perfil vale 7 días desde la última vez que el servidor
+  lo confirmó. Se comprueba al entrar y también con la aplicación abierta: al
+  vencer, deja de facturar sin necesidad de recargar.
+- **El servidor manda en cuanto responde:**
+  - si dice que la cuenta ya no tiene acceso (desactivada o sin perfil), se
+    borran en el acto el perfil guardado y la copia local de ese usuario, y la
+    sesión se cierra;
+  - si le quitaron el permiso de POS, el perfil guardado se actualiza y sin
+    conexión ya no puede facturar.
+- **El perfil no da acceso al servidor:**
+  - no es una sesión ni un token: solo abre el POS local;
+  - cada RPC sigue usando la sesión real de Supabase y el servidor comprueba
+    quién envía;
+  - una venta hecha con un acceso revocado llega a conciliación (por ejemplo,
+    "usuario-inactivo", "sin-permiso" o "ubicacion-cambiada") y no se aplica
+    sola.
+- **Riesgo que queda:** hasta 7 días de ventas sin conexión de alguien a quien
+  se le revocó el acceso mientras estaba sin red. Todas quedan registradas y
+  van a conciliación.
+- **Mitigación operativa:**
+  - al retirar a un vendedor, desactivarlo y pedirle el teléfono;
+  - si no se puede, rescatar sus ventas con un respaldo cifrado.
+- **Reloj del teléfono:** la vigencia se mide con ese reloj. Atrasarlo no sirve
+  para alargarla sin control, porque el servidor rechaza a conciliación las
+  ventas con el reloj desfasado o con más de 7 días.
+
+### Datos al cerrar sesión
+
+- **Se borran:** el perfil sin conexión y la copia local del usuario (catálogo,
+  precios y clientes).
+- **Se conservan:** sus ventas sin sincronizar. Se envían cuando vuelva a entrar
+  con conexión, o un administrador las rescata con un respaldo cifrado.
+
+
 ### Venta en línea sin respuesta
 
 `crearVenta` distingue "sin respuesta" (red caída o tiempo agotado) de un
