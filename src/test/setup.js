@@ -12,7 +12,13 @@ import "@testing-library/jest-dom/vitest"
   omisión de un navegador sin preferencias especiales. Una prueba que
   necesite lo contrario puede sobrescribirlo.
 */
-if (!window.matchMedia) {
+/*
+  Las pruebas del motor sin conexión corren en Node (`@vitest-environment
+  node`), donde no hay window ni localStorage: lo de abajo es solo para jsdom.
+*/
+const hayNavegador = typeof window !== "undefined"
+
+if (hayNavegador && !window.matchMedia) {
   window.matchMedia = (query) => ({
     matches: false,
     media: query,
@@ -31,5 +37,5 @@ if (!window.matchMedia) {
   almacenamiento limpio para que no se contaminen entre sí.
 */
 beforeEach(() => {
-  localStorage.clear()
+  if (hayNavegador) localStorage.clear()
 })
