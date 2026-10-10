@@ -1,5 +1,5 @@
 // @vitest-environment node
-import { describe, it, expect } from "vitest"
+import { describe, it, expect, vi } from "vitest"
 
 import { CARGADOR, DUENO, copiaDePrueba, sesionDe, nuevoNavegador, ahoraDePrueba, OTRO_VENDEDOR } from "./pruebas/ayudas"
 import { crearServidorFalso } from "./pruebas/servidorFalso"
@@ -329,5 +329,93 @@ describe("envíos que no responden y candado vencido", () => {
     expect(resultadoA.omitido).toBeUndefined()
     expect(await a.estados()).toEqual([ESTADOS.REGISTRADA, ESTADOS.REGISTRADA])
     expect(servidor.registradas().length).toBe(2)
+  })
+})
+
+/*
+  Una venta en línea que se quedó sin respuesta pudo haberse registrado. Si
+  el vendedor la guarda sin conexión, antes de enviarla se pregunta al
+  servidor por la clave del intento en línea: nunca se registra dos veces.
+*/
+describe("ventas guardadas tras un intento en línea sin respuesta", () => {
+  async function conIntentoEnLinea({ verificar, servidor }) {
+    const almacen = await nuevoNavegador().abrir()
+    const copia = copiaDePrueba()
+    await guardarCopia(almacen, copia)
+    const id = await idDelDispositivo(almacen)
+    const venta = await guardarVenta(
+      almacen,
+      construirVentaLocal({
+        copia,
+        sesion: sesionDe(),
+        dispositivo: id,
+        carrito: [{ productoId: CARGADOR.id, cantidad: 1 }],
+        ahora: ahoraDePrueba(),
+        claveEnLinea: "mf2abc-1234567890abcdef",
+      })
+    )
+    const sincronizador = crearSincronizador({
+      almacen,
+      enviar: (v) => servidor.enviar(v),
+      verificarEnLinea: verificar,
+      sesionActual: async () => sesionDe(),
+      ahora: ahoraDePrueba,
+      locks: null,
+    })
+
+    return { almacen, venta, sincronizador }
+  }
+
+  it("si el servidor ya la tenía, queda registrada con su factura y no se envía otra vez", async () => {
+    const servidor = crearServidorFalso({ existencias: { [CARGADOR.id]: 10 } })
+    const verificar = vi.fn(async () => ({ data: { id: "venta-en-linea", numero_factura: "000-001-01-00000042" }, error: null, status: 200 }))
+    const { almacen, venta, sincronizador } = await conIntentoEnLinea({ verificar, servidor })
+
+    const resumen = await sincronizador.sincronizar()
+
+    expect(verificar).toHaveBeenCalledWith("mf2abc-1234567890abcdef", expect.anything())
+    expect(servidor.recibidas).toEqual([])
+    expect(resumen.registradas).toBe(1)
+    expect(await almacen.leer("ventas", venta.clave)).toMatchObject({
+      estado: ESTADOS.REGISTRADA,
+      ventaId: "venta-en-linea",
+      numeroFactura: "000-001-01-00000042",
+      registradaEnLinea: true,
+    })
+  })
+
+  it("si no la tenía, se envía como venta sin conexión", async () => {
+    const servidor = crearServidorFalso({ existencias: { [CARGADOR.id]: 10 } })
+    const verificar = vi.fn(async () => ({ data: null, error: null, status: 200 }))
+    const { almacen, venta, sincronizador } = await conIntentoEnLinea({ verificar, servidor })
+
+    await sincronizador.sincronizar()
+
+    expect(servidor.recibidas).toEqual([venta.clave])
+    expect((await almacen.leer("ventas", venta.clave)).estado).toBe(ESTADOS.REGISTRADA)
+  })
+
+  it("si no se puede comprobar, no se envía: queda pendiente", async () => {
+    const servidor = crearServidorFalso({ existencias: { [CARGADOR.id]: 10 } })
+    const verificar = vi.fn(async () => {
+      throw new TypeError("Failed to fetch")
+    })
+    const { almacen, venta, sincronizador } = await conIntentoEnLinea({ verificar, servidor })
+
+    const resumen = await sincronizador.sincronizar()
+
+    expect(resumen.detenidoPor).toBe("red")
+    expect(servidor.recibidas).toEqual([])
+    expect((await almacen.leer("ventas", venta.clave)).estado).toBe(ESTADOS.PENDIENTE)
+  })
+
+  it("sin forma de comprobarla, no se envía nunca a ciegas", async () => {
+    const servidor = crearServidorFalso({ existencias: { [CARGADOR.id]: 10 } })
+    const { almacen, venta, sincronizador } = await conIntentoEnLinea({ verificar: undefined, servidor })
+
+    await sincronizador.sincronizar()
+
+    expect(servidor.recibidas).toEqual([])
+    expect((await almacen.leer("ventas", venta.clave)).estado).toBe(ESTADOS.PENDIENTE)
   })
 })

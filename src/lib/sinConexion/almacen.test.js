@@ -70,3 +70,23 @@ describe("dispositivo", () => {
     expect(codigoCorto(id)).toMatch(/^[A-Z0-9]{4}$/)
   })
 })
+
+describe("actualizaciones del almacén en otra pestaña", () => {
+  it("al pedir otra versión, esta pestaña cierra su conexión y avisa: la actualización no queda bloqueada", async () => {
+    const navegador = nuevoNavegador()
+    let avisos = 0
+    const { abrirAlmacen } = await import("./almacen")
+    await abrirAlmacen({ indexedDB: navegador.indexedDB, alCambiarVersion: () => (avisos += 1) })
+
+    const nueva = await new Promise((resolver, rechazar) => {
+      const pedido = navegador.indexedDB.open("lunacell-sin-conexion", VERSION_DEL_ALMACEN + 1)
+      pedido.onblocked = () => rechazar(new Error("bloqueada"))
+      pedido.onerror = () => rechazar(pedido.error)
+      pedido.onsuccess = () => resolver(pedido.result)
+    })
+
+    expect(nueva.version).toBe(VERSION_DEL_ALMACEN + 1)
+    expect(avisos).toBe(1)
+    nueva.close()
+  })
+})
