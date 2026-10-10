@@ -49,6 +49,8 @@ administradores de LUNACELL.
 | Sincronizando | Se está enviando. |
 | Registrada | El servidor la registró; se ve su número de factura. |
 | En conciliación | El servidor la guardó, pero un administrador debe revisarla (por ejemplo, faltaba existencia). Está a salvo: **no la vuelvas a hacer**. |
+| Aplicada en conciliación | El administrador la aplicó: ya está en los libros. |
+| Anulada en conciliación | El administrador la anuló. Si crees que es un error, consúltalo con él. |
 | Error | El servidor no la aceptó tal como está. Avisa al administrador; sigue guardada. |
 
 ### Si la venta en línea se queda "pensando"
@@ -145,6 +147,14 @@ Lo que ya rescataste en la sesión no se vuelve a enviar.
 
 **3. Auditoría de rescates.** Cada intento de rescate queda registrado,
 incluidos los rechazados. Este registro no se puede modificar.
+
+### Ventas de otro usuario en un teléfono
+
+Si un vendedor dejó ventas pendientes y no puede volver a entrar, un
+administrador puede entrar en ese mismo teléfono con conexión y abrir
+**Facturar → Ventas sin conexión → Respaldo cifrado**. Como administrador, el
+respaldo incluye las ventas de todos los usuarios del teléfono. Después las
+rescata en **Conciliación → Rescate**.
 
 ### Cambiar la ubicación de un vendedor
 
