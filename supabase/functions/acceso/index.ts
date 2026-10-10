@@ -35,6 +35,8 @@ const manejar = crearAcceso({
       servicio.auth.admin.createUser({ email, password, email_confirm: true }),
     borrarUsuario: (id: string) => servicio.auth.admin.deleteUser(id),
     cambiarContrasena: (id: string, password: string) => servicio.auth.admin.updateUserById(id, { password }),
+    // Cierra solo esa sesión: la que se abrió para comprobar y no se entrega.
+    cerrarSesion: (accessToken: string) => servicio.auth.admin.signOut(accessToken, "local"),
   },
 })
 

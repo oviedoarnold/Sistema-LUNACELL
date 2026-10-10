@@ -90,24 +90,53 @@ const primeraFila = (data) => (Array.isArray(data) ? data[0] : data) || {}
 export function crearAcceso({ rpc, auth }) {
   const quien = async (token) => (token ? auth.usuarioDelToken(token) : null)
 
-  async function iniciar({ identificador, contrasena }) {
+  /*
+    Comprueba una contraseña ocupando antes un lugar (la reserva) y
+    registrando después el resultado con esa misma reserva. Devuelve:
+    - { aceptado: true, sesion }: acertó y la base lo aceptó;
+    - { aceptado: false }: falló, no había lugar, o la cuenta quedó
+      bloqueada mientras tanto;
+    - { averia: true }: no se pudo registrar el resultado.
+    Una sesión que no se va a entregar se cierra siempre.
+  */
+  async function comprobar(identificador, contrasena) {
     const { data, error } = await rpc("acceso_reservar_intento", { p_identificador: String(identificador || "") })
     const intento = primeraFila(data)
 
     if (error || !intento.permitido) {
       await auth.iniciar(CORREO_FICTICIO, String(contrasena || ""))
-      return responder(401, INCORRECTOS)
+      return { aceptado: false }
     }
 
     const { data: acceso, error: rechazo } = await auth.iniciar(intento.email, String(contrasena || ""))
+    const sesion = rechazo ? null : acceso?.session || null
 
-    if (rechazo || !acceso?.session) return responder(401, INCORRECTOS)
+    const registro = await rpc("acceso_registrar_resultado", { p_reserva: intento.reserva, p_exito: Boolean(sesion) })
 
-    await rpc("acceso_registrar_exito", { p_usuario: intento.usuario_id })
+    if (registro.error) {
+      if (sesion) await auth.cerrarSesion(sesion.access_token)
+      return { averia: true }
+    }
+
+    if (!sesion) return { aceptado: false }
+
+    if (registro.data !== true) {
+      await auth.cerrarSesion(sesion.access_token)
+      return { aceptado: false }
+    }
+
+    return { aceptado: true, sesion }
+  }
+
+  async function iniciar({ identificador, contrasena }) {
+    const resultado = await comprobar(identificador, contrasena)
+
+    if (resultado.averia) return responder(500, { error: "No se pudo completar la operación. Intenta de nuevo." })
+    if (!resultado.aceptado) return responder(401, INCORRECTOS)
 
     return responder(200, {
-      access_token: acceso.session.access_token,
-      refresh_token: acceso.session.refresh_token,
+      access_token: resultado.sesion.access_token,
+      refresh_token: resultado.sesion.refresh_token,
     })
   }
 
@@ -152,23 +181,52 @@ export function crearAcceso({ rpc, auth }) {
     return responder(200, { usuario_id: registro.data, contrasena_temporal: temporal })
   }
 
+  /*
+    En dos fases, para que un fallo de Auth no deje al empleado sin trabajar:
+    se valida sin cambiar nada, se pone la temporal en Auth y solo si Auth la
+    guardó se confirma en la base (exigir el cambio, desbloquear, auditar).
+  */
   async function restablecer(token, { usuario_id, desbloquear }) {
     const admin = await quien(token)
     if (!admin) return responder(401, { error: "Inicia sesión como administrador." })
 
-    const preparado = await rpc("preparar_restablecimiento", {
+    const validado = await rpc("validar_restablecimiento", { p_admin_auth: admin.id, p_usuario: usuario_id })
+    if (validado.error) return desdeLaBase(validado.error)
+
+    const temporal = generarContrasenaTemporal()
+    const cambio = await auth.cambiarContrasena(validado.data, temporal)
+
+    if (cambio.error) {
+      return responder(500, { error: "No se pudo poner la contraseña temporal. No cambió nada: intenta de nuevo." })
+    }
+
+    const confirmado = await rpc("confirmar_restablecimiento", {
       p_admin_auth: admin.id,
       p_usuario: usuario_id,
       p_desbloquear: desbloquear !== false,
     })
-    if (preparado.error) return desdeLaBase(preparado.error)
 
-    const temporal = generarContrasenaTemporal()
-    const cambio = await auth.cambiarContrasena(preparado.data, temporal)
-
-    if (cambio.error) return responder(500, { error: "No se pudo poner la contraseña temporal. Intenta de nuevo." })
+    if (confirmado.error) {
+      return responder(500, {
+        error: "La contraseña anterior ya no sirve, pero no se pudo terminar. Vuelve a pulsar «Restablecer contraseña».",
+      })
+    }
 
     return responder(200, { contrasena_temporal: temporal })
+  }
+
+  /*
+    Levantar la exigencia después de que Auth guardó la nueva. Se reintenta:
+    repetirlo no daña. Si aun así falla, la persona no queda atrapada: entra
+    con su nueva contraseña y repite el cambio usándola como actual.
+  */
+  async function levantarExigencia(authId) {
+    for (let intento = 1; intento <= 3; intento++) {
+      const { error } = await rpc("acceso_contrasena_cambiada", { p_auth_id: authId })
+      if (!error) return true
+    }
+
+    return false
   }
 
   async function cambiar(token, { actual, nueva }) {
@@ -179,22 +237,23 @@ export function crearAcceso({ rpc, auth }) {
     if (motivo) return responder(400, { error: motivo })
 
     // La actual también cuenta para el bloqueo por intentos.
-    const reserva = await rpc("acceso_reservar_intento", { p_identificador: usuario.email })
-    const intento = primeraFila(reserva.data)
-    const comprobada = intento.permitido ? await auth.iniciar(usuario.email, String(actual || "")) : null
+    const resultado = await comprobar(usuario.email, actual)
 
-    if (!comprobada || comprobada.error || !comprobada.data?.session) {
-      return responder(401, { error: "La contraseña actual no es correcta." })
-    }
+    if (resultado.averia) return responder(500, { error: "No se pudo comprobar tu contraseña. Intenta de nuevo." })
+    if (!resultado.aceptado) return responder(401, { error: "La contraseña actual no es correcta." })
 
-    await rpc("acceso_registrar_exito", { p_usuario: intento.usuario_id })
+    // Esa sesión solo servía para comprobar la actual.
+    await auth.cerrarSesion(resultado.sesion.access_token)
 
     const cambio = await auth.cambiarContrasena(usuario.id, String(nueva))
     if (cambio.error) return responder(500, { error: "No se pudo cambiar la contraseña. Intenta de nuevo." })
 
-    // Solo después de que Supabase Auth la guardó.
-    const levantada = await rpc("acceso_contrasena_cambiada", { p_auth_id: usuario.id })
-    if (levantada.error) return responder(500, { error: "Se cambió la contraseña, pero falta confirmarlo. Vuelve a intentarlo." })
+    if (!(await levantarExigencia(usuario.id))) {
+      return responder(500, {
+        error:
+          "Tu contraseña nueva ya quedó guardada, pero no se pudo terminar. Vuelve a intentarlo escribiendo la nueva como contraseña actual.",
+      })
+    }
 
     return responder(200, { ok: true })
   }
