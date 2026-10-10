@@ -47,7 +47,7 @@ const DATOS_BASE = {
 
 const CUENTAS = [
   { id: "auth-admin", email: "admin@ferreteria.test", password: "Admin2026" },
-  { id: "auth-vendedor", email: "vendedor@ferreteria.test", password: "Vende2026" },
+  { id: "auth-vendedor", email: "vendedor@ferreteria.test", usuario: "vendedor.mostrador", password: "Vende2026" },
   { id: "auth-huerfano", email: "huerfano@ferreteria.test", password: "Huerf2026" },
 ]
 
@@ -196,6 +196,79 @@ describe("login", () => {
     expect(falso.auth.signOut).toHaveBeenCalled()
     expect(result.current.user).toBeNull()
   })
+
+  it("entra con su nombre de usuario, sin escribir el correo", async () => {
+    const { result } = await renderAuth()
+
+    let respuesta
+    await act(async () => {
+      respuesta = await result.current.login("  Vendedor.Mostrador ", "Vende2026")
+    })
+
+    expect(respuesta.ok).toBe(true)
+    expect(result.current.user.name).toBe("Vendedor de mostrador")
+  })
+
+  /*
+    El bloqueo por intentos vive en el servidor: el navegador nunca habla
+    directo con Supabase Auth para iniciar sesión.
+  */
+  it("inicia sesión a través de la función de acceso, no directo con Auth", async () => {
+    const { result } = await renderAuth()
+
+    await act(async () => {
+      await result.current.login("vendedor@ferreteria.test", "Vende2026")
+    })
+
+    expect(falso.functions.invoke).toHaveBeenCalledWith("acceso", {
+      body: { accion: "iniciar", identificador: "vendedor@ferreteria.test", contrasena: "Vende2026" },
+    })
+    expect(falso.auth.signInWithPassword).not.toHaveBeenCalled()
+  })
+
+  it("muestra el mensaje genérico del servidor cuando no puede entrar", async () => {
+    const { result } = await renderAuth()
+
+    let respuesta
+    await act(async () => {
+      respuesta = await result.current.login("nadie", "x")
+    })
+
+    expect(respuesta).toEqual({ ok: false, mensaje: "Usuario o contraseña incorrectos." })
+  })
+})
+
+describe("cambio obligatorio de contraseña", () => {
+  const conTemporal = {
+    ...DATOS_BASE,
+    usuarios: DATOS_BASE.usuarios.map((u) =>
+      u.id === "u-vendedor" ? { ...u, debe_cambiar_contrasena: true } : u
+    ),
+  }
+
+  it("el perfil avisa que debe cambiar la contraseña", async () => {
+    const { result } = await renderAuth({ sesionInicial: { user: { id: "auth-vendedor" } }, tablas: conTemporal })
+
+    expect(result.current.user.debeCambiar).toBe(true)
+  })
+
+  it("después de cambiarla, el perfil ya no lo exige", async () => {
+    const { result } = await renderAuth({ sesionInicial: { user: { id: "auth-vendedor" } }, tablas: conTemporal })
+
+    await act(async () => {
+      await result.current.changePassword("Vende2026", "Nueva-Clave-2026")
+    })
+
+    expect(result.current.user.debeCambiar).toBe(false)
+  })
+
+  it("si la contraseña actual no es la correcta, lo dice", async () => {
+    const { result } = await renderAuth({ sesionInicial: { user: { id: "auth-vendedor" } }, tablas: conTemporal })
+
+    await expect(result.current.changePassword("mal", "Nueva-Clave-2026")).rejects.toThrow(
+      "La contraseña actual no es correcta."
+    )
+  })
 })
 
 describe("logout", () => {
@@ -334,26 +407,122 @@ describe("administración de usuarios", () => {
     expect(result.current.users).toEqual([])
   })
 
-  it("invita a un usuario nuevo por correo", async () => {
+  it("da de alta un empleado por la función de acceso y devuelve su contraseña temporal", async () => {
     const { result } = await renderAuth({
       sesionInicial: { user: { id: "auth-admin" } },
     })
 
+    let temporal
     await act(async () => {
-      await result.current.addUser({
+      temporal = await result.current.addUser({
         name: "Nuevo Cajero",
+        username: " Cajero.Nuevo ",
         email: "  NUEVO@ferreteria.test ",
         role: "vendedor",
         permissions: ["pos"],
+        locationId: "ubic-tienda",
       })
     })
 
-    const creado = falso.datos.usuarios.find(
-      (u) => u.email === "nuevo@ferreteria.test"
-    )
+    expect(temporal).toBe("Temporal#2026abc")
+    expect(falso.functions.invoke).toHaveBeenCalledWith("acceso", {
+      body: {
+        accion: "crear",
+        nombre: "Nuevo Cajero",
+        usuario: "cajero.nuevo",
+        email: "nuevo@ferreteria.test",
+        rol: "vendedor",
+        secciones: ["pos"],
+        ubicacion: "ubic-tienda",
+        activo: true,
+      },
+    })
+    await waitFor(() => expect(result.current.users.some((u) => u.username === "cajero.nuevo")).toBe(true))
+  })
 
-    expect(creado).toBeTruthy()
-    expect(creado.nombre).toBe("Nuevo Cajero")
+  it("exige un nombre de usuario válido antes de llamar al servidor", async () => {
+    const { result } = await renderAuth({
+      sesionInicial: { user: { id: "auth-admin" } },
+    })
+
+    await expect(
+      result.current.addUser({ name: "Alguien", username: "con espacios", email: "a@b.test" })
+    ).rejects.toThrow(/nombre de usuario/i)
+    expect(falso.functions.invoke).not.toHaveBeenCalled()
+  })
+
+  it("muestra el motivo que da el servidor si no puede dar de alta", async () => {
+    const { result } = await renderAuth({ sesionInicial: { user: { id: "auth-admin" } } })
+    falso.functions.invoke.mockResolvedValueOnce({
+      data: null,
+      error: { name: "FunctionsHttpError", context: { json: async () => ({ error: "Ese nombre de usuario ya está en uso." }) } },
+    })
+
+    await expect(
+      result.current.addUser({ name: "Alguien", username: "repetido", email: "a@b.test" })
+    ).rejects.toThrow("Ese nombre de usuario ya está en uso.")
+  })
+
+  it("restablecer devuelve una contraseña temporal nueva", async () => {
+    const { result } = await renderAuth({ sesionInicial: { user: { id: "auth-admin" } } })
+
+    let temporal
+    await act(async () => {
+      temporal = await result.current.resetUserPassword("u-vendedor")
+    })
+
+    expect(temporal).toBe("Temporal#2026xyz")
+    expect(falso.functions.invoke).toHaveBeenCalledWith("acceso", {
+      body: { accion: "restablecer", usuario_id: "u-vendedor", desbloquear: true },
+    })
+  })
+
+  it("muestra quién está bloqueado y hasta cuándo, y lo desbloquea", async () => {
+    const hasta = new Date(Date.now() + 10 * 60000).toISOString()
+    const { result } = await renderAuth({
+      sesionInicial: { user: { id: "auth-admin" } },
+      tablas: { ...DATOS_BASE, bloqueos_de_acceso: [{ usuario_id: "u-vendedor", intentos: 5, bloqueado_hasta: hasta }] },
+    })
+
+    await waitFor(() => expect(result.current.users.find((u) => u.id === "u-vendedor")?.bloqueadoHasta).toBe(hasta))
+
+    await act(async () => {
+      await result.current.unlockUser("u-vendedor")
+    })
+
+    expect(falso.rpc).toHaveBeenCalledWith("desbloquear_usuario", { p_usuario: "u-vendedor" })
+    await waitFor(() => expect(result.current.users.find((u) => u.id === "u-vendedor").bloqueadoHasta).toBeNull())
+  })
+
+  it("un bloqueo vencido no se muestra", async () => {
+    const { result } = await renderAuth({
+      sesionInicial: { user: { id: "auth-admin" } },
+      tablas: { ...DATOS_BASE, bloqueos_de_acceso: [{ usuario_id: "u-vendedor", intentos: 5, bloqueado_hasta: "2020-01-01T00:00:00Z" }] },
+    })
+
+    await waitFor(() => expect(result.current.users.length).toBe(3))
+    expect(result.current.users.find((u) => u.id === "u-vendedor").bloqueadoHasta).toBeNull()
+  })
+
+  it("guarda los permisos de una vez, con la RPC", async () => {
+    const { result } = await renderAuth({ sesionInicial: { user: { id: "auth-admin" } } })
+
+    await act(async () => {
+      await result.current.updateUser("u-vendedor", { permissions: ["pos", "quotes"] })
+    })
+
+    expect(falso.rpc).toHaveBeenCalledWith("guardar_permisos_usuario", {
+      p_usuario: "u-vendedor",
+      p_secciones: ["pos", "quotes"],
+    })
+  })
+
+  it("si los permisos no se guardan, lo dice", async () => {
+    falso = null
+    const { result } = await renderAuth({ sesionInicial: { user: { id: "auth-admin" } } })
+    falso.rpc.mockResolvedValueOnce({ data: null, error: { code: "23514", message: "check" } })
+
+    await expect(result.current.updateUser("u-vendedor", { permissions: ["pos"] })).rejects.toThrow(/permisos/i)
   })
 
   it("exige nombre", async () => {
@@ -362,7 +531,7 @@ describe("administración de usuarios", () => {
     })
 
     await expect(
-      result.current.addUser({ name: "  ", email: "x@y.test" })
+      result.current.addUser({ name: "  ", username: "alguien", email: "x@y.test" })
     ).rejects.toThrow(/nombre/i)
   })
 
@@ -372,7 +541,7 @@ describe("administración de usuarios", () => {
     })
 
     await expect(
-      result.current.addUser({ name: "Alguien", email: "no-es-correo" })
+      result.current.addUser({ name: "Alguien", username: "alguien", email: "no-es-correo" })
     ).rejects.toThrow(/correo/i)
   })
 
@@ -390,17 +559,12 @@ describe("administración de usuarios", () => {
     expect(fila.activo).toBe(false)
   })
 
-  it("elimina un usuario", async () => {
+  // D2: los usuarios no se borran, se desactivan.
+  it("no ofrece eliminar usuarios", async () => {
     const { result } = await renderAuth({
       sesionInicial: { user: { id: "auth-admin" } },
     })
 
-    await act(async () => {
-      await result.current.deleteUser("u-invitado")
-    })
-
-    expect(
-      falso.datos.usuarios.some((u) => u.id === "u-invitado")
-    ).toBe(false)
+    expect(result.current.deleteUser).toBeUndefined()
   })
 })

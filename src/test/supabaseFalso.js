@@ -248,6 +248,7 @@ export function crearSupabaseFalso({
   sesionInicial = null,
   fallarEn = {},
   fallarAlmacenamiento = {},
+  funciones = {},
 } = {}) {
   const datos = JSON.parse(JSON.stringify(tablas))
   let sesion = sesionInicial
@@ -995,15 +996,134 @@ export function crearSupabaseFalso({
     })),
   })
 
+  /*
+    La Edge Function `acceso` (USR-1), con el mismo contrato que la real: en
+    un fallo, supabase-js entrega un FunctionsHttpError cuya respuesta trae
+    { error }. funciones.acceso permite reemplazarla en una prueba.
+  */
+  const respuestaDeFuncion = (data) => ({ data, error: null })
+  const fallaDeFuncion = (status, mensaje) => ({
+    data: null,
+    error: { name: "FunctionsHttpError", context: { status, json: async () => ({ error: mensaje }) } },
+  })
+  const usuarioDeLaSesion = () =>
+    (datos.usuarios || []).find((u) => sesion?.user && u.auth_id === sesion.user.id)
+
+  const accesoPorOmision = ({ accion, ...cuerpo }) => {
+    if (accion === "iniciar") {
+      const ident = String(cuerpo.identificador || "").trim().toLowerCase()
+      const cuenta = cuentas.find(
+        (c) => (c.email === ident || c.usuario === ident) && c.password === cuerpo.contrasena
+      )
+
+      return cuenta
+        ? respuestaDeFuncion({ access_token: `tok:${cuenta.id}`, refresh_token: "renovar" })
+        : fallaDeFuncion(401, "Usuario o contraseña incorrectos.")
+    }
+
+    if (accion === "crear") {
+      const admin = usuarioDeLaSesion()
+      const id = siguienteId()
+
+      datos.usuarios = [
+        ...(datos.usuarios || []),
+        {
+          id,
+          auth_id: `auth-${id}`,
+          empresa_id: admin?.empresa_id,
+          email: String(cuerpo.email).trim().toLowerCase(),
+          nombre: cuerpo.nombre,
+          nombre_usuario: cuerpo.usuario,
+          rol: cuerpo.rol,
+          activo: cuerpo.activo !== false,
+          ubicacion_id: cuerpo.ubicacion || null,
+          debe_cambiar_contrasena: true,
+          entro_en: null,
+        },
+      ]
+      datos.permisos_usuario = [
+        ...(datos.permisos_usuario || []),
+        ...(cuerpo.secciones || []).map((seccion) => ({ usuario_id: id, empresa_id: admin?.empresa_id, seccion })),
+      ]
+
+      return respuestaDeFuncion({ usuario_id: id, contrasena_temporal: "Temporal#2026abc" })
+    }
+
+    if (accion === "restablecer") {
+      datos.usuarios = (datos.usuarios || []).map((u) =>
+        u.id === cuerpo.usuario_id ? { ...u, debe_cambiar_contrasena: true } : u
+      )
+      datos.bloqueos_de_acceso = (datos.bloqueos_de_acceso || []).map((b) =>
+        b.usuario_id === cuerpo.usuario_id ? { ...b, intentos: 0, bloqueado_hasta: null } : b
+      )
+
+      return respuestaDeFuncion({ contrasena_temporal: "Temporal#2026xyz" })
+    }
+
+    if (accion === "cambiar") {
+      const cuenta = cuentas.find((c) => sesion?.user && c.id === sesion.user.id)
+
+      if (!cuenta || cuenta.password !== cuerpo.actual) {
+        return fallaDeFuncion(401, "La contraseña actual no es correcta.")
+      }
+
+      cuenta.password = cuerpo.nueva
+      datos.usuarios = (datos.usuarios || []).map((u) =>
+        u.auth_id === cuenta.id ? { ...u, debe_cambiar_contrasena: false } : u
+      )
+
+      return respuestaDeFuncion({ ok: true })
+    }
+
+    return fallaDeFuncion(400, "Acción desconocida.")
+  }
+
   return {
     datos,
     archivos,
+
+    functions: {
+      invoke: vi.fn((nombre, { body } = {}) => {
+        if (funciones[nombre]) return Promise.resolve(funciones[nombre](body || {}))
+        if (nombre === "acceso") return Promise.resolve(accesoPorOmision(body || {}))
+
+        return Promise.resolve(fallaDeFuncion(404, "función desconocida"))
+      }),
+    },
 
     storage: { from: vi.fn(cubeta) },
 
     from: vi.fn(consulta),
 
     rpc: vi.fn((nombre, argumentos = {}) => {
+      if (nombre === "guardar_permisos_usuario") {
+        const falla = fallaDe(nombre, "rpc")
+        if (falla) return Promise.resolve({ data: null, error: falla })
+
+        const usuario = (datos.usuarios || []).find((u) => u.id === argumentos.p_usuario)
+        datos.permisos_usuario = [
+          ...(datos.permisos_usuario || []).filter((p) => p.usuario_id !== argumentos.p_usuario),
+          ...[...new Set(argumentos.p_secciones || [])].map((seccion) => ({
+            usuario_id: argumentos.p_usuario,
+            empresa_id: usuario?.empresa_id,
+            seccion,
+          })),
+        ]
+
+        return Promise.resolve({ data: null, error: null })
+      }
+
+      if (nombre === "desbloquear_usuario") {
+        const falla = fallaDe(nombre, "rpc")
+        if (falla) return Promise.resolve({ data: null, error: falla })
+
+        datos.bloqueos_de_acceso = (datos.bloqueos_de_acceso || []).map((b) =>
+          b.usuario_id === argumentos.p_usuario ? { ...b, intentos: 0, bloqueado_hasta: null } : b
+        )
+
+        return Promise.resolve({ data: null, error: null })
+      }
+
       if (nombre === "siguiente_correlativo") {
         return Promise.resolve(siguienteCorrelativo(argumentos.p_tipo))
       }
@@ -1105,6 +1225,20 @@ export function crearSupabaseFalso({
         avisar()
 
         return Promise.resolve({ data: { user: sesion.user }, error: null })
+      }),
+
+      setSession: vi.fn(({ access_token } = {}) => {
+        const id = String(access_token || "").replace(/^tok:/, "")
+        const cuenta = cuentas.find((c) => c.id === id)
+
+        if (!cuenta) {
+          return Promise.resolve({ data: { user: null, session: null }, error: { message: "Invalid token" } })
+        }
+
+        sesion = { user: { id: cuenta.id, email: cuenta.email } }
+        avisar()
+
+        return Promise.resolve({ data: { user: sesion.user, session: sesion }, error: null })
       }),
 
       signOut: vi.fn(() => {

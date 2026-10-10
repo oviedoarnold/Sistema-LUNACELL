@@ -30,12 +30,14 @@ function FormularioDeLogin({
 
         <form onSubmit={onSubmit}>
           <div className="field">
-            <label htmlFor="login-correo">Correo</label>
+            <label htmlFor="login-correo">Usuario o correo</label>
             <input
               id="login-correo"
-              name="email"
-              type="email"
+              name="usuario"
+              type="text"
               autoComplete="username"
+              autoCapitalize="none"
+              spellCheck={false}
               required
               value={email}
               onChange={(e) => onEmailChange(e.target.value)}

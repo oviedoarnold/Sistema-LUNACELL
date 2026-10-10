@@ -50,10 +50,13 @@ async function renderSettings({
   empresa = EMPRESA,
   correlativo = 1000,
   ubicaciones = UBICACIONES,
+  usuariosExtra = [],
+  bloqueos = [],
 } = {}) {
-  montarSupabaseFalso({
+  const falso = montarSupabaseFalso({
     usuarios: [
       usuarioDePrueba({ rol: "admin", nombre: "Administrador" }),
+      ...usuariosExtra,
     ],
     permisos: permisosDe("u-1", ["settings"]),
     sesionInicial: sesionDe("auth-1"),
@@ -68,6 +71,7 @@ async function renderSettings({
       ventas: [],
       detalle_venta: [],
       abonos: [],
+      bloqueos_de_acceso: bloqueos,
       /*
         Settings ofrece la ubicación operativa, así que necesita las
         ubicaciones activas de la empresa.
@@ -107,6 +111,8 @@ async function renderSettings({
   await waitFor(() => {
     expect(campo("name")).toHaveValue(empresa.name)
   })
+
+  return falso
 }
 
 const campo = (nombre) => document.querySelector(`[name="${nombre}"]`)
@@ -249,6 +255,144 @@ describe("Settings: usuarios", () => {
 
     expect(within(modal).getByText("Facturar")).toBeInTheDocument()
     expect(within(modal).getByText("Inventario")).toBeInTheDocument()
+  })
+})
+
+/*
+  USR-1: el administrador crea al empleado con nombre de usuario y correo;
+  la contraseña temporal la genera el servidor y se muestra una sola vez.
+  Ninguna acción dice que salió bien antes de que el servidor lo confirme.
+*/
+describe("Settings: alta y acceso de empleados", () => {
+  const VENDEDOR = usuarioDePrueba({ id: "u-2", authId: "auth-2", nombre: "Chofer Camión 01", email: "chofer@ferreteria.test" })
+  const dialogo = async () => (await import("sweetalert2")).default
+  const textosDe = (Swal) => Swal.fire.mock.calls.map(([o]) => JSON.stringify(o)).join("\n")
+
+  const llenarAlta = () => {
+    fireEvent.click(screen.getByRole("button", { name: /nuevo usuario/i }))
+    escribir("username", "camion01")
+    fireEvent.change(document.querySelector('.modal [name="name"]'), { target: { value: "Chofer Nuevo" } })
+    escribir("email", "nuevo@ferreteria.test")
+  }
+
+  it("pide nombre de usuario y correo, y no pide contraseña", async () => {
+    await renderSettings()
+
+    fireEvent.click(screen.getByRole("button", { name: /nuevo usuario/i }))
+    const modal = document.querySelector(".modal")
+
+    expect(within(modal).getByLabelText(/nombre de usuario/i)).toBeInTheDocument()
+    expect(within(modal).getByLabelText(/^correo/i)).toHaveAttribute("type", "email")
+    expect(within(modal).queryByLabelText(/contraseña/i)).toBeNull()
+  })
+
+  it("crea al empleado con su correo y muestra la contraseña temporal una sola vez", async () => {
+    const falso = await renderSettings()
+    llenarAlta()
+
+    fireEvent.submit(document.querySelector("#form-usuario"))
+
+    await waitFor(() =>
+      expect(falso.functions.invoke).toHaveBeenCalledWith(
+        "acceso",
+        expect.objectContaining({
+          body: expect.objectContaining({ accion: "crear", usuario: "camion01", email: "nuevo@ferreteria.test", nombre: "Chofer Nuevo" }),
+        })
+      )
+    )
+    const Swal = await dialogo()
+    await waitFor(() => expect(textosDe(Swal)).toContain("Temporal#2026abc"))
+    expect(textosDe(Swal).split("Temporal#2026abc")).toHaveLength(2)
+  })
+
+  it("si el servidor rechaza el alta, muestra su motivo y no dice que se creó", async () => {
+    const falso = await renderSettings()
+    falso.functions.invoke.mockResolvedValueOnce({
+      data: null,
+      error: { name: "FunctionsHttpError", context: { json: async () => ({ error: "Ese nombre de usuario ya está en uso." }) } },
+    })
+    llenarAlta()
+
+    fireEvent.submit(document.querySelector("#form-usuario"))
+
+    const Swal = await dialogo()
+    await waitFor(() => expect(textosDe(Swal)).toContain("Ese nombre de usuario ya está en uso."))
+    expect(textosDe(Swal)).not.toMatch(/usuario creado/i)
+  })
+
+  it("al editar no se cambian el nombre de usuario ni el correo", async () => {
+    await renderSettings({ usuariosExtra: [{ ...VENDEDOR, nombre_usuario: "chofer01" }] })
+
+    const fila = (await screen.findByText("Chofer Camión 01")).closest("tr")
+    fireEvent.click(within(fila).getByRole("button", { name: /editar/i }))
+    const modal = document.querySelector(".modal")
+
+    expect(within(modal).getByLabelText(/nombre de usuario/i)).toHaveAttribute("readonly")
+    expect(within(modal).getByLabelText(/^correo/i)).toHaveAttribute("readonly")
+  })
+
+  it("no ofrece eliminar usuarios: se desactivan", async () => {
+    await renderSettings({ usuariosExtra: [VENDEDOR] })
+
+    const fila = (await screen.findByText("Chofer Camión 01")).closest("tr")
+
+    expect(within(fila).queryByRole("button", { name: /eliminar/i })).toBeNull()
+    expect(within(fila).getByRole("button", { name: /desactivar/i })).toBeInTheDocument()
+  })
+
+  it("desactivar espera al servidor y muestra el error si falla", async () => {
+    const falso = await renderSettings({ usuariosExtra: [VENDEDOR] })
+    const fila = (await screen.findByText("Chofer Camión 01")).closest("tr")
+    falso.from.mockImplementationOnce(() => ({
+      update: () => ({ eq: () => Promise.resolve({ error: { code: "P0001", message: "La empresa no puede quedarse sin un administrador activo." } }) }),
+    }))
+
+    fireEvent.click(within(fila).getByRole("button", { name: /desactivar/i }))
+
+    const Swal = await dialogo()
+    await waitFor(() => expect(textosDe(Swal)).toContain("La empresa no puede quedarse sin un administrador activo."))
+    expect(textosDe(Swal)).not.toMatch(/usuario desactivado/i)
+  })
+
+  it("muestra el bloqueo con el tiempo restante y lo desbloquea al confirmar el servidor", async () => {
+    const hasta = new Date(Date.now() + 12 * 60000 + 5000).toISOString()
+    const falso = await renderSettings({
+      usuariosExtra: [VENDEDOR],
+      bloqueos: [{ usuario_id: "u-2", intentos: 5, bloqueado_hasta: hasta }],
+    })
+    const fila = (await screen.findByText("Chofer Camión 01")).closest("tr")
+
+    expect(await within(fila).findByText(/bloqueado/i)).toBeInTheDocument()
+    expect(within(fila).getByText(/13 min/i)).toBeInTheDocument()
+
+    fireEvent.click(within(fila).getByRole("button", { name: /desbloquear usuario/i }))
+
+    await waitFor(() => expect(falso.rpc).toHaveBeenCalledWith("desbloquear_usuario", { p_usuario: "u-2" }))
+    const Swal = await dialogo()
+    await waitFor(() => expect(textosDe(Swal)).toMatch(/desbloqueado/i))
+  })
+
+  it("sin bloqueo no aparece «Desbloquear usuario»", async () => {
+    await renderSettings({ usuariosExtra: [VENDEDOR] })
+    const fila = (await screen.findByText("Chofer Camión 01")).closest("tr")
+
+    expect(within(fila).queryByRole("button", { name: /desbloquear usuario/i })).toBeNull()
+  })
+
+  it("restablecer contraseña, al confirmar, muestra la temporal nueva una sola vez", async () => {
+    const falso = await renderSettings({ usuariosExtra: [VENDEDOR] })
+    const fila = (await screen.findByText("Chofer Camión 01")).closest("tr")
+    const Swal = await dialogo()
+    Swal.fire.mockResolvedValueOnce({ isConfirmed: true })
+
+    fireEvent.click(within(fila).getByRole("button", { name: /restablecer contraseña/i }))
+
+    await waitFor(() =>
+      expect(falso.functions.invoke).toHaveBeenCalledWith("acceso", {
+        body: { accion: "restablecer", usuario_id: "u-2", desbloquear: true },
+      })
+    )
+    await waitFor(() => expect(textosDe(Swal)).toContain("Temporal#2026xyz"))
   })
 })
 

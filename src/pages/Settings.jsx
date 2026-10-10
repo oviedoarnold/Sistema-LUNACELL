@@ -1,5 +1,6 @@
 import {
   useContext,
+  useEffect,
   useState,
 } from "react"
 
@@ -29,7 +30,7 @@ const EMPTY_USER_FORM = {
   id: null,
   name: "",
   username: "",
-  password: "",
+  email: "",
   role: "vendedor",
   active: true,
   locationId: "",
@@ -125,7 +126,8 @@ function Settings() {
     users,
     addUser,
     updateUser,
-    deleteUser,
+    resetUserPassword,
+    unlockUser,
     permissions,
     sellerPermissions,
   } = useAuth()
@@ -297,6 +299,18 @@ function Settings() {
     Boolean(userForm.id)
 
   /*
+    La hora con la que se calcula cuánto le queda a un bloqueo. Se renueva
+    cada medio minuto para que el tiempo restante baje solo.
+  */
+  const [ahora, setAhora] = useState(() => Date.now())
+
+  useEffect(() => {
+    const reloj = setInterval(() => setAhora(Date.now()), 30000)
+
+    return () => clearInterval(reloj)
+  }, [])
+
+  /*
    * Los vendedores pueden recibir
    * permisos de módulos operativos.
    *
@@ -395,14 +409,9 @@ function Settings() {
         selectedUser.username ||
         "",
 
-      /*
-       * Nunca cargamos la
-       * contraseña anterior.
-       *
-       * Si queda vacío al editar,
-       * no se modifica.
-       */
-      password: "",
+      email:
+        selectedUser.email ||
+        "",
 
       role:
         selectedUser.role ||
@@ -541,193 +550,133 @@ function Settings() {
     )
   }
 
+  /*
+    Cada acción espera la respuesta del servidor y solo entonces dice que
+    salió bien; si falla, muestra el motivo. La contraseña temporal la
+    genera el servidor y se muestra aquí una sola vez: no queda guardada.
+  */
+  const avisarError = (titulo, error) =>
+    Swal.fire({
+      icon: "error",
+      title: titulo,
+      text: error.message,
+    })
+
+  const mostrarTemporal = (titulo, nombre, temporal) =>
+    Swal.fire({
+      icon: "success",
+      title: titulo,
+      text: `Entrégale a ${nombre} esta contraseña temporal: ${temporal} — Solo se muestra esta vez. Al entrar deberá cambiarla.`,
+    })
+
   const saveUser = async (
     event
   ) => {
     event.preventDefault()
 
+    const permisos =
+      userForm.role === "admin"
+        ? ADMIN_PERMISSIONS
+        : userForm.permissions
+
     try {
       if (isEditingUser) {
-        const changes = {
-          name:
-            userForm.name,
+        await updateUser(userForm.id, {
+          name: userForm.name,
+          role: userForm.role,
+          active: userForm.active,
+          locationId: userForm.locationId,
+          permissions: permisos,
+        })
 
-          username:
-            userForm.username,
-
-          role:
-            userForm.role,
-
-          active:
-            userForm.active,
-
-          locationId:
-            userForm.locationId,
-
-          permissions:
-            userForm.role ===
-            "admin"
-              ? ADMIN_PERMISSIONS
-              : userForm.permissions,
-        }
-
-        /*
-         * Contraseña vacía =
-         * conservar contraseña actual.
-         */
-        if (
-          userForm.password.trim()
-        ) {
-          changes.password =
-            userForm.password
-        }
-
-        updateUser(
-          userForm.id,
-          changes
-        )
+        closeUserModal()
 
         await Swal.fire({
           icon: "success",
-          title:
-            "Usuario actualizado",
-          text:
-            "Los cambios fueron guardados correctamente.",
-        })
-      } else {
-        addUser({
-          name:
-            userForm.name,
-
-          username:
-            userForm.username,
-
-          password:
-            userForm.password,
-
-          role:
-            userForm.role,
-
-          active:
-            userForm.active,
-
-          locationId:
-            userForm.locationId,
-
-          permissions:
-            userForm.role ===
-            "admin"
-              ? ADMIN_PERMISSIONS
-              : userForm.permissions,
+          title: "Usuario actualizado",
+          text: "Los cambios fueron guardados correctamente.",
         })
 
-        await Swal.fire({
-          icon: "success",
-          title:
-            "Usuario creado",
-          text:
-            "El usuario ya puede iniciar sesión.",
-        })
-      }
-
-      closeUserModal()
-    } catch (error) {
-      Swal.fire({
-        icon: "error",
-        title:
-          "No se pudo guardar",
-        text:
-          error.message,
-      })
-    }
-  }
-
-  const handleDeleteUser =
-    async (
-      selectedUser
-    ) => {
-      const result =
-        await Swal.fire({
-          icon: "warning",
-
-          title:
-            "¿Eliminar usuario?",
-
-          html: `
-            Se eliminará el usuario
-            <b>${selectedUser.name}</b>.
-          `,
-
-          showCancelButton: true,
-
-          confirmButtonText:
-            "Sí, eliminar",
-
-          cancelButtonText:
-            "Cancelar",
-
-          confirmButtonColor:
-            "#d33",
-        })
-
-      if (
-        !result.isConfirmed
-      ) {
         return
       }
 
-      try {
-        deleteUser(
-          selectedUser.id
-        )
+      const temporal = await addUser({
+        name: userForm.name,
+        username: userForm.username,
+        email: userForm.email,
+        role: userForm.role,
+        active: userForm.active,
+        locationId: userForm.locationId,
+        permissions: permisos,
+      })
 
-        Swal.fire({
-          icon: "success",
-          title:
-            "Usuario eliminado",
-        })
-      } catch (error) {
-        Swal.fire({
-          icon: "error",
-          title:
-            "No se puede eliminar",
-          text:
-            error.message,
-        })
-      }
+      closeUserModal()
+
+      await mostrarTemporal("Usuario creado", userForm.name, temporal)
+    } catch (error) {
+      avisarError("No se pudo guardar", error)
     }
+  }
 
   const handleToggleActive =
     async (
       selectedUser
     ) => {
       try {
-        updateUser(
-          selectedUser.id,
-          {
-            active:
-              !selectedUser.active,
-          }
-        )
+        await updateUser(selectedUser.id, {
+          active: !selectedUser.active,
+        })
 
         Swal.fire({
           icon: "success",
-
-          title:
-            selectedUser.active
-              ? "Usuario desactivado"
-              : "Usuario activado",
+          title: selectedUser.active
+            ? "Usuario desactivado"
+            : "Usuario activado",
         })
       } catch (error) {
-        Swal.fire({
-          icon: "error",
-          title:
-            "No se pudo cambiar el estado",
-          text:
-            error.message,
-        })
+        avisarError("No se pudo cambiar el estado", error)
       }
     }
+
+  /* Limpia el bloqueo por intentos; no cambia la contraseña ni reactiva. */
+  const handleUnlock = async (selectedUser) => {
+    try {
+      await unlockUser(selectedUser.id)
+
+      Swal.fire({
+        icon: "success",
+        title: "Usuario desbloqueado",
+        text: `${selectedUser.name} ya puede entrar con su contraseña actual.`,
+      })
+    } catch (error) {
+      avisarError("No se pudo desbloquear", error)
+    }
+  }
+
+  /* Contraseña temporal nueva: invalida la anterior y desbloquea. */
+  const handleResetPassword = async (selectedUser) => {
+    const respuesta = await Swal.fire({
+      icon: "warning",
+      title: "¿Restablecer contraseña?",
+      text: `${selectedUser.name} dejará de poder entrar con su contraseña actual y deberá cambiar la temporal al entrar.`,
+      showCancelButton: true,
+      confirmButtonText: "Sí, restablecer",
+      cancelButtonText: "Cancelar",
+    })
+
+    if (!respuesta.isConfirmed) return
+
+    try {
+      const temporal = await resetUserPassword(selectedUser.id)
+
+      await mostrarTemporal("Contraseña restablecida", selectedUser.name, temporal)
+    } catch (error) {
+      avisarError("No se pudo restablecer", error)
+    }
+  }
+
+  const minutosDeBloqueo = (hasta) =>
+    Math.max(1, Math.ceil((new Date(hasta) - ahora) / 60000))
 
   const getRoleLabel = (
     role
@@ -1177,10 +1126,18 @@ function Settings() {
                         </td>
 
                         <td>
-                          @
-                          {
-                            systemUser.username
-                          }
+                          {systemUser.username
+                            ? `@${systemUser.username}`
+                            : systemUser.email}
+
+                          {systemUser.bloqueadoHasta && (
+                            <div>
+                              <span className="badge badge-out">
+                                <span className="badge-dot" />
+                                Bloqueado · quedan {minutosDeBloqueo(systemUser.bloqueadoHasta)} min
+                              </span>
+                            </div>
+                          )}
                         </td>
 
                         <td>
@@ -1285,16 +1242,22 @@ function Settings() {
                                   : "Activar"}
                               </button>
 
+                              {systemUser.bloqueadoHasta && (
+                                <button
+                                  type="button"
+                                  className="btn btn-primary btn-sm"
+                                  onClick={() => handleUnlock(systemUser)}
+                                >
+                                  Desbloquear usuario
+                                </button>
+                              )}
+
                               <button
                                 type="button"
-                                className="btn btn-danger btn-sm"
-                                onClick={() =>
-                                  handleDeleteUser(
-                                    systemUser
-                                  )
-                                }
+                                className="btn btn-secondary btn-sm"
+                                onClick={() => handleResetPassword(systemUser)}
                               >
-                                Eliminar
+                                Restablecer contraseña
                               </button>
                             </>
                           )}
@@ -1379,60 +1342,49 @@ function Settings() {
                     />
                   </div>
 
-                  {/* USUARIO */}
+                  {/* NOMBRE DE USUARIO */}
                   <div className="field">
                     <label htmlFor="settings-usuario">
-                      Usuario
+                      Nombre de usuario
                     </label>
 
                     <input id="settings-usuario"
                       type="text"
                       name="username"
-                      value={
-                        userForm.username
-                      }
-                      onChange={
-                        handleUserChange
-                      }
-                      placeholder="Ej. jperez"
+                      value={userForm.username}
+                      onChange={handleUserChange}
+                      placeholder="Ej. camion01"
                       autoComplete="off"
+                      readOnly={isEditingUser}
                       required
                     />
                   </div>
 
-                  {/* CONTRASEÑA */}
+                  {/* CORREO */}
                   <div className="field">
-                    <label htmlFor="settings-contrasena-opcional">
-                      Contraseña
-
-                      {isEditingUser && (
-                        <span className="config-etiqueta-opcional">
-                          {" "}
-                          (opcional)
-                        </span>
-                      )}
+                    <label htmlFor="settings-correo">
+                      Correo
                     </label>
 
-                    <input id="settings-contrasena-opcional"
-                      type="password"
-                      name="password"
-                      value={
-                        userForm.password
-                      }
-                      onChange={
-                        handleUserChange
-                      }
-                      placeholder={
-                        isEditingUser
-                          ? "Déjala vacía para conservarla"
-                          : "Mínimo 4 caracteres"
-                      }
-                      autoComplete="new-password"
-                      required={
-                        !isEditingUser
-                      }
+                    <input id="settings-correo"
+                      type="email"
+                      name="email"
+                      value={userForm.email}
+                      onChange={handleUserChange}
+                      placeholder="empleado@correo.com"
+                      autoComplete="off"
+                      readOnly={isEditingUser}
+                      required
                     />
                   </div>
+
+                  {!isEditingUser && (
+                    <p className="sub config-nota-acceso">
+                      Al guardar se genera una contraseña temporal que verás una
+                      sola vez. El empleado entra con su nombre de usuario y
+                      debe cambiarla en su primer inicio de sesión.
+                    </p>
+                  )}
 
                   {/* ROL */}
                   <div className="field">

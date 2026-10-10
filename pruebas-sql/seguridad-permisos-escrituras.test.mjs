@@ -227,8 +227,8 @@ describe("SEC-1: solo el administrador reparte permisos", () => {
       )
     ).rejects.toMatchObject({ code: "42501" })
 
-    const borrados = await como(null, "delete from permisos_usuario")
-    expect(borrados.rowCount).toBe(0)
+    // Desde 0026 anon ni siquiera tiene el privilegio: el intento es un error.
+    await expect(como(null, "delete from permisos_usuario")).rejects.toMatchObject({ code: "42501" })
   })
 
   it("11. el administrador de A no administra permisos de B", async () => {
@@ -554,14 +554,16 @@ describe("SEC-1 y SEC-2: los flujos legítimos siguen", () => {
     expect(estado.rows[0].estado).toBe("pagada")
   })
 
-  it("el administrador sigue borrando un usuario con ventas: la referencia queda en nulo", async () => {
+  // USR-1 (0026): los usuarios no se borran, se desactivan; la venta conserva a su autor.
+  it("el administrador ya no borra un usuario con ventas: la venta conserva su autor", async () => {
     const x = await ventasYCobros()
 
-    const r = await como(x.a.authId, "delete from usuarios where id = $1", [x.vendedorA.usuario])
+    await expect(como(x.a.authId, "delete from usuarios where id = $1", [x.vendedorA.usuario])).rejects.toMatchObject({
+      code: "42501",
+    })
 
-    expect(r.rowCount).toBe(1)
     const venta = await db.query("select usuario_id from ventas where id = $1", [x.venta])
-    expect(venta.rows[0].usuario_id).toBeNull()
+    expect(venta.rows[0].usuario_id).toBe(x.vendedorA.usuario)
   })
 
   it("un vendedor con inventory-own legítimo sigue viendo su ubicación", async () => {
