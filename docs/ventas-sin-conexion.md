@@ -250,7 +250,8 @@ El vendedor ve las ventas de su ubicación (0029), que es donde quedó el intent
 - **Venta en línea interrumpida y reasignación de ubicación:** si el vendedor
   cambia de ubicación antes de sincronizar, la verificación no ve la venta
   original. La venta local llega al servidor y queda en conciliación ("ubicación
-  cambiada"); el administrador la anula si estaba duplicada.
+  cambiada"). Su nota dice "Intento en línea sin respuesta: <clave>", y el
+  administrador la anula si estaba duplicada.
 - **Entrar sin conexión:** solo funciona si el usuario ya entró con conexión en
   ese teléfono durante los últimos 7 días.
 - **Navegador y PWA:** valen los límites de arriba (almacenamiento que el
