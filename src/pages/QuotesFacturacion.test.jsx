@@ -65,7 +65,13 @@ function SondaDelPuntoDeVenta() {
   )
 }
 
-function renderQuotes() {
+/*
+  Desde dónde trabaja quien cotiza: la bodega, con las mismas 7 unidades
+  del Cargador. Facturar compara contra esto, no contra el catálogo.
+*/
+const EN_BODEGA = [{ locationId: "bodega", productId: CARGADOR.id, quantity: 7 }]
+
+function renderQuotes({ existencias = EN_BODEGA, fallarEn = {} } = {}) {
   return renderizarPantalla(
     <AuthProvider>
       <ProductProvider>
@@ -81,7 +87,15 @@ function renderQuotes() {
         </ClientsProvider>
       </ProductProvider>
     </AuthProvider>,
-    { productos: PRODUCTOS, cotizaciones: [], esperar: ["cotizaciones"] }
+    {
+      productos: PRODUCTOS,
+      cotizaciones: [],
+      ubicaciones: [{ id: "bodega", name: "Lunacell Bodega", type: "bodega" }],
+      existencias,
+      ubicacionOperativa: "bodega",
+      fallarEn,
+      esperar: ["cotizaciones"],
+    }
   )
 }
 
@@ -102,8 +116,8 @@ const avisoDeProblemas = () =>
   Deja una cotización con el producto ya guardada y devuelve el doble de
   la base, para poder mirar la fila que quedó escrita.
 */
-const guardarCotizacionCon = async (nombre) => {
-  const { falso } = await renderQuotes()
+const guardarCotizacionCon = async (nombre, opciones) => {
+  const { falso } = await renderQuotes(opciones)
 
   agregarAlCarrito(nombre)
   guardarCotizacion()
@@ -216,5 +230,32 @@ describe("facturar una cotización recién guardada", () => {
       .reduce((suma, m) => suma + m.cantidad, 0)
 
     expect(existencia).toBe(7)
+  })
+})
+
+/*
+  Los faltantes se cuentan en la ubicación desde la que se va a facturar,
+  no en el total del catálogo (que aquí sigue diciendo 7).
+*/
+describe("facturar una cotización: existencias de la ubicación", () => {
+  it("avisa el faltante cuando la bodega no tiene, aunque el catálogo diga 7", async () => {
+    await guardarCotizacionCon("Cargador", { existencias: [] })
+    Swal.fire.mockClear()
+
+    facturar()
+
+    await waitFor(() => expect(avisoDeProblemas()).toBeTruthy())
+    expect(avisoDeProblemas()[0].text).toMatch(/cargador: se piden 1 y hay 0/i)
+  })
+
+  it("si no se pudo cargar la existencia, no deja pasar al punto de venta", async () => {
+    await guardarCotizacionCon("Cargador", { fallarEn: { existencias_por_ubicacion: { message: "sin red" } } })
+    Swal.fire.mockClear()
+
+    facturar()
+
+    await waitFor(() => expect(Swal.fire).toHaveBeenCalled())
+    expect(Swal.fire.mock.calls[0][0].text).toMatch(/no se pudo cargar la existencia/i)
+    expect(screen.queryByTestId("pos")).not.toBeInTheDocument()
   })
 })

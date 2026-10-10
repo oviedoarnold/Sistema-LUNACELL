@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest"
-import { screen, fireEvent, waitFor } from "@testing-library/react"
+import { screen, fireEvent, waitFor, within, cleanup } from "@testing-library/react"
 import { MemoryRouter } from "react-router-dom"
 import Swal from "sweetalert2"
 
@@ -49,7 +49,19 @@ const existenciasEnBodega = (cambios = {}) =>
     quantity: cambios[p.id] ?? p.stock,
   }))
 
-function renderPOS({ saleDraft = null, existencias = existenciasEnBodega() } = {}) {
+const BODEGA = { id: "bodega", name: "Lunacell Bodega", type: "bodega" }
+const CAMION_01 = { id: "camion-01", name: "Camión 01", type: "camion" }
+
+function renderPOS({
+  saleDraft = null,
+  productos = PRODUCTOS,
+  existencias = existenciasEnBodega(),
+  ubicaciones = [BODEGA],
+  ubicacionOperativa = "bodega",
+  fallarEn = {},
+  rolDelUsuario = "admin",
+  permisosDelUsuario = [],
+} = {}) {
   const entrada = saleDraft
     ? [{ pathname: "/pos", state: { saleDraft } }]
     : ["/pos"]
@@ -67,11 +79,14 @@ function renderPOS({ saleDraft = null, existencias = existenciasEnBodega() } = {
       </ProductProvider>
     </AuthProvider>,
     {
-      productos: PRODUCTOS,
+      productos,
       clientes: CLIENTES,
-      ubicaciones: [{ id: "bodega", name: "Lunacell Bodega", type: "bodega" }],
+      ubicaciones,
       existencias,
-      ubicacionOperativa: "bodega",
+      ubicacionOperativa,
+      fallarEn,
+      rolDelUsuario,
+      permisosDelUsuario,
       esperar: ["ventas"],
     }
   )
@@ -446,16 +461,130 @@ describe("POS: venta registrada por el servidor", () => {
     expect(falso.datos.ventas[0].ubicacion_id).toBe("bodega")
   })
 
+  /*
+    La pantalla ya no deja agregar lo que la ubicación no tiene, así que el
+    servidor solo rechaza si la existencia cambia entre la carga y el cobro:
+    otra venta se llevó la última unidad. Su validación sigue mandando.
+  */
   it("si la ubicación no alcanza, muestra el motivo del servidor y no emite", async () => {
-    const { falso } = await renderPOS({ existencias: existenciasEnBodega({ p1: 0 }) })
+    const { falso } = await renderPOS({ existencias: existenciasEnBodega({ p1: 1 }) })
     Swal.fire.mockClear()
 
     agregar("Martillo de uña")
+
+    falso.datos.inventario_ubicacion = falso.datos.inventario_ubicacion.map((c) =>
+      c.producto_id === "p1" ? { ...c, cantidad: 0 } : c
+    )
+
     generarFactura()
 
     await waitFor(() => expect(avisoDeError()).toBeTruthy())
 
     expect(avisoDeError()[0].text).toMatch(/no hay suficiente «martillo de uña» en lunacell bodega/i)
     expect(falso.datos.ventas).toHaveLength(0)
+  })
+})
+
+/*
+  Cada ubicación vende lo suyo. El catálogo trae además un `stock` global
+  (la suma de todo el libro de movimientos) que el punto de venta no debe
+  usar para nada: aquí vale 10 en los dos productos y las pruebas ponen en
+  la ubicación cantidades distintas para notar si se cuela.
+*/
+describe("POS: existencias de la ubicación operativa", () => {
+  const filaDe = (nombre) => screen.getAllByText(nombre)[0].closest(".picker-item")
+  const disponibleDe = (nombre) => within(filaDe(nombre)).getByText(/disp\./).textContent
+  const botonAgregar = (nombre) => within(filaDe(nombre)).getAllByRole("button", { name: /agregar/i })[0]
+  const botonFacturar = () => screen.getByRole("button", { name: /generar factura/i })
+
+  const catalogoCon10 = PRODUCTOS.map((p) => ({ ...p, stock: 10 }))
+  const celda = (locationId, productId, quantity) => ({ locationId, productId, quantity })
+
+  it("Camión 01 con 0 y la bodega con 10: muestra 0 disponibles y no deja agregar", async () => {
+    await renderPOS({
+      productos: catalogoCon10,
+      ubicaciones: [BODEGA, CAMION_01],
+      existencias: [celda("bodega", "p1", 10), celda("bodega", "p2", 10)],
+      ubicacionOperativa: "camion-01",
+      rolDelUsuario: "vendedor",
+      permisosDelUsuario: ["pos", "inventory-own"],
+    })
+
+    await waitFor(() => expect(disponibleDe("Martillo de uña")).toBe("0 disp."))
+    expect(disponibleDe("Cemento gris")).toBe("0 disp.")
+    expect(botonAgregar("Martillo de uña")).toBeDisabled()
+    expect(botonAgregar("Cemento gris")).toBeDisabled()
+  })
+
+  it("el administrador de la bodega ve solo lo de la bodega, no el total ni lo de un camión", async () => {
+    await renderPOS({
+      productos: catalogoCon10,
+      ubicaciones: [BODEGA, CAMION_01],
+      existencias: [celda("bodega", "p1", 3), celda("camion-01", "p1", 7), celda("bodega", "p2", 2)],
+    })
+
+    await waitFor(() => expect(disponibleDe("Martillo de uña")).toBe("3 disp."))
+    expect(disponibleDe("Cemento gris")).toBe("2 disp.")
+  })
+
+  it("después de un traslado, cada ubicación ve su propia cantidad", async () => {
+    // Se trasladaron 4 martillos de la bodega (tenía 10) al Camión 01.
+    const trasLaEntrega = [celda("bodega", "p1", 6), celda("camion-01", "p1", 4)]
+
+    await renderPOS({ ubicaciones: [BODEGA, CAMION_01], existencias: trasLaEntrega, ubicacionOperativa: "camion-01" })
+    await waitFor(() => expect(disponibleDe("Martillo de uña")).toBe("4 disp."))
+    cleanup()
+
+    await renderPOS({ ubicaciones: [BODEGA, CAMION_01], existencias: trasLaEntrega, ubicacionOperativa: "bodega" })
+    await waitFor(() => expect(disponibleDe("Martillo de uña")).toBe("6 disp."))
+  })
+
+  it("si no se pudo cargar la existencia, lo dice, no muestra el total global y no deja facturar", async () => {
+    await renderPOS({
+      saleDraft: borradorDeCotizacion(1),
+      productos: catalogoCon10,
+      fallarEn: { existencias_por_ubicacion: { message: "sin red" } },
+    })
+
+    expect(await screen.findByText(/no se pudo cargar la existencia/i)).toBeInTheDocument()
+    expect(disponibleDe("Martillo de uña")).toBe("0 disp.")
+    expect(screen.queryByText("10 disp.")).not.toBeInTheDocument()
+    expect(botonFacturar()).toBeDisabled()
+  })
+
+  it("sin ubicación operativa lo dice y no deja facturar", async () => {
+    await renderPOS({ saleDraft: borradorDeCotizacion(1), ubicacionOperativa: null })
+
+    expect(await screen.findByText(/no tienes una ubicación operativa/i)).toBeInTheDocument()
+    expect(disponibleDe("Martillo de uña")).toBe("0 disp.")
+    expect(botonFacturar()).toBeDisabled()
+  })
+
+  it("después de vender, la existencia de la ubicación baja en pantalla", async () => {
+    const { falso } = await renderPOS({ existencias: [celda("bodega", "p1", 10), celda("bodega", "p2", 2)] })
+
+    await waitFor(() => expect(disponibleDe("Martillo de uña")).toBe("10 disp."))
+
+    agregar("Martillo de uña")
+    fireEvent.click(botonFacturar())
+
+    await waitFor(() => expect(falso.datos.ventas).toHaveLength(1))
+    await waitFor(() => expect(disponibleDe("Martillo de uña")).toBe("9 disp."))
+  })
+
+  it("con el catálogo en 10 y la ubicación en 0, la validación previa no deja facturar", async () => {
+    await renderPOS({
+      saleDraft: borradorDeCotizacion(1),
+      productos: catalogoCon10,
+      ubicaciones: [BODEGA, CAMION_01],
+      existencias: [celda("bodega", "p2", 10)],
+      ubicacionOperativa: "camion-01",
+    })
+    Swal.fire.mockClear()
+
+    fireEvent.click(botonFacturar())
+
+    await waitFor(() => expect(Swal.fire).toHaveBeenCalled())
+    expect(Swal.fire.mock.calls[0][0].text).toMatch(/cemento gris solo tiene 0 unidades/i)
   })
 })

@@ -22,6 +22,7 @@ import QuoteTemplate from "../components/QuoteTemplate"
 import ClientAutocomplete from "../components/documents/ClientAutocomplete"
 import ModalDeCliente from "../components/documents/ModalDeCliente"
 import { useCarrito } from "../hooks/useCarrito"
+import { useExistenciaDeMiUbicacion } from "../hooks/useExistenciaDeMiUbicacion"
 import { useClienteDelDocumento } from "../hooks/useClienteDelDocumento"
 import DocumentPreviewModal from "../components/documents/DocumentPreviewModal"
 
@@ -115,6 +116,9 @@ function Quotes() {
     vaciar: vaciarCarrito,
     cantidadEnCarrito: cartQuantityFor,
   } = useCarrito({ productos: products })
+
+  // Facturar descuenta de la ubicación operativa: los faltantes se cuentan ahí.
+  const existenciasDeMiUbicacion = useExistenciaDeMiUbicacion()
 
   const {
     busqueda: clientSearch,
@@ -377,13 +381,24 @@ function Quotes() {
   const convertQuoteToSale = async (
     quote
   ) => {
+    if (!existenciasDeMiUbicacion.lista) {
+      Swal.fire({
+        icon: "warning",
+        title: "No se puede facturar todavía",
+        text: existenciasDeMiUbicacion.motivo,
+      })
+
+      return
+    }
+
     const draft =
       buildSaleDraftFromQuote(quote)
 
     const unavailable =
       findUnavailableItems(
         draft.cart,
-        products
+        products,
+        existenciasDeMiUbicacion.existenciaDe
       )
 
     if (unavailable.length > 0) {
