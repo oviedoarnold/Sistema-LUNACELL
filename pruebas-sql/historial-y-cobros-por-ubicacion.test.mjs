@@ -141,7 +141,32 @@ describe("cobros por ubicación", () => {
     expect(error.code).toBe("LC005")
   })
 
-  it("9. el administrador cobra sobre todas las ubicaciones, de la más vieja a la más nueva", async () => {
+  /*
+    Cobrar exige el permiso de la pantalla de Cuentas por cobrar, que es
+    sales-history (la misma sección del historial). Ser usuario activo de
+    la empresa ya no basta.
+  */
+  it("9. un usuario activo sin sales-history no cobra, aunque tenga ubicación", async () => {
+    const e = await escenario()
+    const soloFactura = await crearVendedor(db, { empresa: e.empresa, ubicacion: e.camion1, permisos: ["pos"] })
+
+    const error = await fallo(pagar(soloFactura.authId, e.clienteId, 10))
+
+    expect(error.code).toBe("42501")
+    expect((await db.query("select count(*)::int as n from pagos where empresa_id = $1", [e.empresa])).rows[0].n).toBe(0)
+  })
+
+  it("10. el administrador cobra aunque no tenga filas de permiso", async () => {
+    const e = await escenario()
+    const filas = await db.query("select count(*)::int as n from permisos_usuario where usuario_id = $1", [e.admin.usuario])
+
+    const r = await pagar(e.admin.authId, e.clienteId, 10)
+
+    expect(filas.rows[0].n).toBe(0)
+    expect(r.repetido).toBe(false)
+  })
+
+  it("11. el administrador cobra sobre todas las ubicaciones, de la más vieja a la más nueva", async () => {
     const e = await escenario()
 
     const r = await pagar(e.admin.authId, e.clienteId, 280)
