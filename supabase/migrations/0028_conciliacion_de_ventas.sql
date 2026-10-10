@@ -108,6 +108,17 @@ begin
       using errcode = 'CV003';
   end if;
 
+  /*
+    Una ubicación fiscal emite factura con numeración autorizada, y un
+    número fiscal no se emite a posteriori desde aquí. La conciliación
+    registra documentos internos, así que esa venta se anula y se emite
+    por el procedimiento fiscal que corresponda.
+  */
+  if exists (select 1 from ubicaciones where id = v_c.ubicacion_id and emite_fiscal) then
+    raise exception 'La venta es de una ubicación fiscal: no se registra como documento interno. Anúlala y emítela por el procedimiento fiscal'
+      using errcode = 'CV007';
+  end if;
+
   v_credito := v_c.forma_pago = 'credito';
 
   select c.id into v_cliente from clientes c
@@ -164,10 +175,18 @@ begin
     end if;
   end loop;
 
-  -- Los importes, con lo que se cobró. Deben dar el total cobrado.
-  select coalesce(sum(round((r->>'precio_unitario')::numeric * (r->>'cantidad')::int, 2)), 0)
+  /*
+    Los importes, con lo que se cobró, agrupados por producto y precio como
+    los agrupa registrar_venta_ubicacion(): mismo redondeo por línea, mismo
+    ISV sobre el subtotal. Deben dar el total cobrado.
+  */
+  select coalesce(sum(l.subtotal), 0)
     into v_subtotal
-    from jsonb_array_elements(v_c.renglones) r;
+    from (
+      select round((r->>'precio_unitario')::numeric * sum((r->>'cantidad')::int), 2) as subtotal
+        from jsonb_array_elements(v_c.renglones) r
+       group by r->>'producto_id', (r->>'precio_unitario')::numeric
+    ) l;
 
   v_isv   := round(v_subtotal * v_c.tasa_isv / 100, 2);
   v_total := v_subtotal + v_isv;
@@ -205,13 +224,15 @@ begin
   )
   returning id into v_venta;
 
+  -- Una línea por producto y precio, como en la venta en línea.
   insert into detalle_venta (empresa_id, venta_id, producto_id, nombre, codigo, cantidad, precio, subtotal)
   select v_c.empresa_id, v_venta, p.id,
-         coalesce(nullif(r->>'nombre', ''), p.nombre), coalesce(r->>'codigo', ''),
-         (r->>'cantidad')::int, (r->>'precio_unitario')::numeric,
-         round((r->>'precio_unitario')::numeric * (r->>'cantidad')::int, 2)
+         coalesce(nullif(min(r->>'nombre'), ''), p.nombre), coalesce(min(r->>'codigo'), ''),
+         sum((r->>'cantidad')::int), (r->>'precio_unitario')::numeric,
+         round((r->>'precio_unitario')::numeric * sum((r->>'cantidad')::int), 2)
     from jsonb_array_elements(v_c.renglones) r
-    join productos p on p.id = (r->>'producto_id')::uuid;
+    join productos p on p.id = (r->>'producto_id')::uuid
+   group by p.id, p.nombre, (r->>'precio_unitario')::numeric;
 
   for v_item in
     select (r->>'producto_id')::uuid as producto_id, sum((r->>'cantidad')::int)::int as cantidad
