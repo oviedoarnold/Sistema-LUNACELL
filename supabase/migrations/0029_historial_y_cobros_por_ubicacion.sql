@@ -79,8 +79,14 @@ create policy pagos_lectura on public.pagos
 -- ─────────────────────────────────────────────────────────
 /*
   Mismo contrato, mismas respuestas y mismas reglas que la 0013 (candado
-  del cliente, idempotencia, FIFO, sobrepago rechazado entero). Lo único
-  que cambia es qué facturas entran:
+  del cliente, idempotencia, FIFO, sobrepago rechazado entero). Cambian
+  dos cosas:
+
+  Quién cobra: hace falta el permiso de la pantalla de Cuentas por cobrar,
+  que es sales-history (el administrador lo tiene siempre). Hasta aquí
+  bastaba con ser usuario activo de la empresa.
+
+  Qué facturas entran:
   - administrador: todas las del cliente, como hasta ahora;
   - vendedor: solo las de su ubicación operativa. La deuda, el reparto y
     el mensaje de sobrepago se miden contra esas facturas. Sin ubicación
@@ -122,6 +128,11 @@ begin
    where auth_id = auth.uid()
      and activo
    limit 1;
+
+  if not usuario_tiene_permiso('sales-history') then
+    raise exception 'No tienes permiso para registrar cobros'
+      using errcode = '42501';
+  end if;
 
   -- Null = todas las ubicaciones (administrador).
   if not usuario_es_admin() then
