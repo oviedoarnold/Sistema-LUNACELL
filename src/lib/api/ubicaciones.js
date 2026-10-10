@@ -17,6 +17,8 @@ export const aUbicacionDeApp = (fila) => ({
   name: fila.nombre,
   type: fila.tipo,
   active: fila.activa,
+  // Solo la decide un administrador en la base (0027); aquí se lee.
+  offline: fila.vende_sin_conexion === true,
   createdAt: fila.creada_en || "",
 })
 

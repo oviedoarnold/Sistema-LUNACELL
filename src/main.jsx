@@ -10,6 +10,7 @@ import SalesProvider from './context/SalesContext'
 import ClientsProvider from './context/ClientsContext'
 import LocationsProvider from './context/LocationsContext'
 import QuotesProvider from './context/QuotesContext'
+import SinConexionProvider from './context/SinConexionContext'
 
 import { registrarServiceWorker } from './registrarServiceWorker'
 
@@ -19,17 +20,23 @@ ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
 
     <AuthProvider>
-      <ProductProvider>
-        <ClientsProvider>
-          <LocationsProvider>
-            <SalesProvider>
-              <QuotesProvider>
-                <App />
-              </QuotesProvider>
-            </SalesProvider>
-          </LocationsProvider>
-        </ClientsProvider>
-      </ProductProvider>
+      {/*
+        El modo sin conexión necesita saber quién está en sesión y lo
+        consultan el POS y el cierre de sesión.
+      */}
+      <SinConexionProvider>
+        <ProductProvider>
+          <ClientsProvider>
+            <LocationsProvider>
+              <SalesProvider>
+                <QuotesProvider>
+                  <App />
+                </QuotesProvider>
+              </SalesProvider>
+            </LocationsProvider>
+          </ClientsProvider>
+        </ProductProvider>
+      </SinConexionProvider>
     </AuthProvider>
 
   </React.StrictMode>

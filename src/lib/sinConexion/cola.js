@@ -117,6 +117,20 @@ export function marcar(almacen, clave, cambios) {
 }
 
 /*
+  Las ventas que el servidor todavía no confirmó (pendientes, enviándose o
+  con error): las que van al archivo de emergencia. De un usuario, o todas
+  las del teléfono si se pide sin usuario (un administrador).
+*/
+export async function ventasNoConfirmadas(almacen, { usuarioAuth = null } = {}) {
+  const todas = await almacen.todos("ventas")
+
+  return todas
+    .filter((v) => !FINALES.has(v.estado))
+    .filter((v) => !usuarioAuth || v.usuarioAuth === usuarioAuth)
+    .sort(porFecha)
+}
+
+/*
   Toma una venta para enviarla: en una sola transacción comprueba que siga
   en un estado enviable y la pasa a «sincronizando». Si otra pestaña ya la
   tomó o el servidor ya la confirmó, devuelve null y no se envía.

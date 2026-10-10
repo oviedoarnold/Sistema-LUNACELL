@@ -11,3 +11,5 @@ export const LocationsContext = createContext(null)
 export const ProductContext = createContext(null)
 export const QuotesContext = createContext(null)
 export const SalesContext = createContext(null)
+// Sin proveedor vale null: la pantalla funciona como siempre, solo en línea.
+export const SinConexionContext = createContext(null)

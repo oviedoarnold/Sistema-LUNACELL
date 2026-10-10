@@ -26,6 +26,11 @@ import { useCarrito } from "../hooks/useCarrito"
 import { useExistenciaDeMiUbicacion } from "../hooks/useExistenciaDeMiUbicacion"
 import { useClienteDelDocumento } from "../hooks/useClienteDelDocumento"
 import DocumentPreviewModal from "../components/documents/DocumentPreviewModal"
+import ComprobanteProvisional from "../components/sinConexion/ComprobanteProvisional"
+import EstadoSinConexion from "../components/sinConexion/EstadoSinConexion"
+import PanelDeVentasLocales from "../components/sinConexion/PanelDeVentasLocales"
+import { useAuth } from "../hooks/useAuth"
+import { useSinConexion } from "../hooks/useSinConexion"
 
 import {
   formatMoney,
@@ -41,6 +46,45 @@ import {
 
 const ISV_POR_OMISION = 15
 
+// Una venta en línea sin respuesta que el cajero decide reintentar.
+const REINTENTAR = Symbol("reintentar")
+
+const aProductoDeLaCopia = (p) => ({
+  id: p.id,
+  code: p.codigo,
+  name: p.nombre,
+  price: p.precio,
+  category: p.categoria,
+  imageUrl: "",
+})
+
+const aClienteDeLaCopia = (c) => ({
+  id: c.id,
+  name: c.nombre,
+  rtn: c.rtn,
+  phone: c.telefono,
+  address: c.direccion,
+  email: "",
+})
+
+/*
+  Qué decirle al cajero cuando no hay servidor y la ubicación no puede
+  vender sin conexión.
+*/
+function motivoDelBloqueo(copia) {
+  if (copia?.ubicacion?.emiteFiscal) {
+    return "Sin conexión con el servidor. Esta ubicación emite facturas fiscales y no vende sin conexión: podrás facturar cuando vuelva la conexión."
+  }
+
+  return "Sin conexión con el servidor. Esta ubicación no está habilitada para vender sin conexión: podrás facturar cuando vuelva la conexión."
+}
+
+function textoDelBotonDeVenta(facturando, modoSinConexion) {
+  if (facturando) return modoSinConexion ? "Guardando…" : "Registrando…"
+
+  return modoSinConexion ? "Guardar venta sin conexión" : "Generar factura"
+}
+
 function POS() {
   const { products = [], company } = useContext(ProductContext)
   const { addSale } = useContext(SalesContext)
@@ -54,10 +98,48 @@ function POS() {
   const existenciasDeMiUbicacion = useExistenciaDeMiUbicacion()
 
   /*
+    El modo sin conexión (OFF-1.3). Sin su proveedor vale null y la
+    pantalla es exactamente la de siempre.
+
+    Sin servidor (o con un perfil todavía sin confirmar) y con la ubicación
+    habilitada, se vende con la copia local: productos, precios, clientes y
+    existencia tal como se descargaron, menos lo que este teléfono ya vendió
+    y el servidor no confirmó. La venta se guarda en el teléfono con un
+    comprobante provisional; nunca se presenta como factura.
+  */
+  const sinConexion = useSinConexion()
+  const { user } = useAuth()
+  const sinServidor =
+    Boolean(sinConexion) &&
+    (Boolean(user?.sinConexion) || sinConexion.conexion === "sin_red" || sinConexion.conexion === "sin_servidor")
+  const modoSinConexion = sinServidor && Boolean(sinConexion?.ubicacionAutorizada)
+  const bloqueadoSinConexion = sinServidor && !modoSinConexion
+  const copiaLocal = modoSinConexion ? sinConexion.copia : null
+  const mostrarEstado =
+    Boolean(sinConexion) &&
+    (sinConexion.ubicacionAutorizada || sinConexion.ventas.length > 0 || sinServidor || sinConexion.actualizacionPendiente)
+
+  const productosDeLaCopia = useMemo(() => (copiaLocal?.productos || []).map(aProductoDeLaCopia), [copiaLocal])
+  const clientesDeLaCopia = useMemo(() => (copiaLocal?.clientes || []).map(aClienteDeLaCopia), [copiaLocal])
+  const productosEnVenta = modoSinConexion ? productosDeLaCopia : products
+
+  const disponibleSinConexion = sinConexion?.disponibleDe
+  const existenciaDe = useMemo(
+    () => (modoSinConexion ? (producto) => disponibleSinConexion(producto?.id) : existenciasDeMiUbicacion.existenciaDe),
+    [modoSinConexion, disponibleSinConexion, existenciasDeMiUbicacion.existenciaDe]
+  )
+  const existenciaLista = modoSinConexion || existenciasDeMiUbicacion.lista
+
+  const [panelAbierto, setPanelAbierto] = useState(false)
+  const [comprobante, setComprobante] = useState(null)
+
+  /*
     La tasa sale de la configuración de la empresa. Tenerla fija aquí
     hacía que cambiarla en Configuración no afectara lo que se cobra.
   */
-  const tasaISV = Number(company?.taxRate ?? ISV_POR_OMISION)
+  const tasaISV = Number(
+    modoSinConexion ? copiaLocal?.empresa?.tasaIsv ?? ISV_POR_OMISION : company?.taxRate ?? ISV_POR_OMISION
+  )
 
   /*
     Identifica al intento de cobro, no al clic. Se conserva mientras la
@@ -69,7 +151,8 @@ function POS() {
   const [claveDeVenta, setClaveDeVenta] = useState(claveDeIdempotencia)
 
   const [facturando, setFacturando] = useState(false)
-  const { clients = [], addClient } = useContext(ClientsContext)
+  const { clients: clientesEnLinea = [], addClient } = useContext(ClientsContext)
+  const clients = modoSinConexion ? clientesDeLaCopia : clientesEnLinea
 
   const location = useLocation()
   const navigate = useNavigate()
@@ -100,9 +183,9 @@ function POS() {
     vaciar: vaciarCarrito,
     disponibleDe: availableStockFor,
   } = useCarrito({
-    productos: products,
+    productos: productosEnVenta,
     lineasIniciales: saleDraft?.cart || [],
-    existenciaDe: existenciasDeMiUbicacion.existenciaDe,
+    existenciaDe,
   })
 
   const {
@@ -156,10 +239,10 @@ function POS() {
   const filteredProducts = useMemo(
     () =>
       filterProductsBySearchText(
-        products,
+        productosEnVenta,
         search
       ),
-    [products, search]
+    [productosEnVenta, search]
   )
 
   const {
@@ -187,7 +270,17 @@ function POS() {
   }
 
   const validateSale = () => {
-    if (!existenciasDeMiUbicacion.lista) {
+    if (bloqueadoSinConexion) {
+      Swal.fire({
+        icon: "warning",
+        title: "No se puede facturar sin conexión",
+        text: motivoDelBloqueo(sinConexion?.copia),
+      })
+
+      return false
+    }
+
+    if (!existenciaLista) {
       Swal.fire({
         icon: "warning",
         title: "No se puede facturar todavía",
@@ -209,7 +302,7 @@ function POS() {
     }
 
     for (const item of cart) {
-      const product = products.find(
+      const product = productosEnVenta.find(
         (candidate) =>
           String(candidate.id) ===
           String(item.id)
@@ -226,10 +319,7 @@ function POS() {
         return false
       }
 
-      const existencia =
-        existenciasDeMiUbicacion.existenciaDe(
-          product
-        )
+      const existencia = existenciaDe(product)
 
       if (
         !hasEnoughStock(
@@ -383,12 +473,33 @@ function POS() {
     note: "",
   })
 
+  /*
+    La venta tal como se guardaría sin conexión, para la vista previa del
+    comprobante provisional.
+  */
+  const buildVentaSinConexion = () => ({
+    numeroProvisional: "VISTA PREVIA",
+    registradaEn: new Date().toISOString(),
+    renglones: cart.map((item) => ({
+      producto_id: item.id,
+      codigo: item.code || "",
+      nombre: item.name,
+      cantidad: Number(item.quantity),
+      precio_unitario: Number(item.price),
+    })),
+    tasaIsv: tasaISV,
+    formaPago: paymentType,
+    nombreCliente: getCustomerName(),
+    rtnComprador: buyerRTN.trim() || selectedClient?.rtn || "",
+    fechaVencimiento: paymentType === "credito" ? dueDate : null,
+  })
+
   const openPreview = () => {
     if (!validateSale()) return
 
     setPreviewMode("preview")
     setPreviewSale(
-      buildPreviewSale()
+      modoSinConexion ? { sinConexion: true, venta: buildVentaSinConexion() } : buildPreviewSale()
     )
     setPreviewOpen(true)
   }
@@ -404,7 +515,76 @@ function POS() {
     setDueDate(toISODateInDays(30))
   }
 
+  /*
+    Guarda la venta en el teléfono. `claveEnLinea` es la del intento en
+    línea que se quedó sin respuesta, si la venta nace de uno: antes de
+    enviarla se comprobará si ese intento ya se había registrado.
+  */
+  const guardarSinConexion = async ({ claveEnLinea = null } = {}) => {
+    try {
+      const venta = await sinConexion.guardarVentaSinConexion({
+        carrito: cart.map((item) => ({ productoId: item.id, cantidad: Number(item.quantity) })),
+        formaPago: paymentType,
+        clienteId: selectedClient?.id || null,
+        nombreCliente: getCustomerName(),
+        rtnComprador: buyerRTN.trim() || selectedClient?.rtn || "",
+        fechaVencimiento: paymentType === "credito" ? dueDate : null,
+        claveEnLinea,
+      })
+
+      setPreviewOpen(false)
+      setPreviewSale(null)
+      setComprobante(venta)
+      clearSaleForm()
+
+      Swal.fire({
+        icon: "success",
+        title: "Venta guardada en este teléfono",
+        text: `Comprobante provisional ${venta.numeroProvisional}. Queda pendiente de sincronizar: no es una factura. El número de factura lo asigna el servidor al sincronizar.`,
+      })
+
+      return venta
+    } catch (error) {
+      Swal.fire({
+        icon: "error",
+        title: "No se pudo guardar la venta",
+        text: error?.message || "No se pudo guardar la venta en este teléfono.",
+      })
+
+      return null
+    }
+  }
+
+  // Sin respuesta del servidor: la venta pudo haberse registrado o no.
+  const preguntarSinRespuesta = async () => {
+    const eleccion = await Swal.fire({
+      icon: "warning",
+      title: "No hubo respuesta del servidor",
+      text: "La venta pudo haberse registrado o no. Reintentar es seguro: esta misma venta no se duplica. Si sigues sin conexión, guárdala en este teléfono: antes de enviarla se comprobará si ya se había registrado.",
+      showDenyButton: true,
+      showCancelButton: true,
+      confirmButtonText: "Reintentar",
+      denyButtonText: "Guardar sin conexión",
+      cancelButtonText: "Cancelar",
+    })
+
+    if (eleccion.isConfirmed) return "reintentar"
+    if (eleccion.isDenied) return "guardar"
+
+    return null
+  }
+
   const generateSale = async () => {
+    let resultado
+
+    do {
+      resultado = await intentarVenta()
+    } while (resultado === REINTENTAR)
+
+    return resultado
+  }
+
+  const intentarVenta = async () => {
     if (!validateSale()) {
       return null
     }
@@ -416,6 +596,10 @@ function POS() {
     setFacturando(true)
 
     try {
+      if (modoSinConexion) {
+        return await guardarSinConexion()
+      }
+
       const createdSale = await addSale(
         buildSalePayload(),
         claveDeVenta,
@@ -467,6 +651,19 @@ function POS() {
 
       return createdSale
     } catch (error) {
+      if (error?.motivo === "sin-respuesta" && sinConexion?.ubicacionAutorizada) {
+        const eleccion = await preguntarSinRespuesta()
+
+        if (eleccion === "reintentar") return REINTENTAR
+
+        if (eleccion === "guardar") {
+          void sinConexion.comprobarConexion()
+          return await guardarSinConexion({ claveEnLinea: claveDeVenta })
+        }
+
+        return null
+      }
+
       Swal.fire({
         icon: "error",
 
@@ -533,6 +730,31 @@ function POS() {
       */}
       <PageHeader descripcion="Arma la venta, revisa el total y genera la factura." />
 
+      {mostrarEstado && (
+        <EstadoSinConexion
+          estado={sinConexion}
+          perfilSinConexion={Boolean(user?.sinConexion)}
+          onVerVentas={() => setPanelAbierto(true)}
+        />
+      )}
+
+      {modoSinConexion && (
+        <div className="alert-banner pos-modo-sin-conexion" role="status">
+          <span>
+            <strong>Modo sin conexión</strong>
+            Las ventas se guardan en este teléfono con un comprobante provisional y se envían solas cuando vuelva la
+            conexión. Precios y existencias son los de la última copia descargada.
+            {!copiaLocal?.clientesDisponibles && " La copia no tiene clientes: solo se puede vender al contado."}
+          </span>
+        </div>
+      )}
+
+      {bloqueadoSinConexion && (
+        <div className="alert-banner" role="alert">
+          <span>{motivoDelBloqueo(sinConexion?.copia)}</span>
+        </div>
+      )}
+
       <div className="bill-grid">
         {/* ── CATÁLOGO ─────────────────────────────────── */}
         <section className="pos-catalogo" aria-labelledby="pos-titulo-catalogo">
@@ -551,7 +773,7 @@ function POS() {
             Sin la existencia de la ubicación no se vende: el catálogo
             muestra 0 y aquí se dice por qué. Nunca el total global.
           */}
-          {!existenciasDeMiUbicacion.lista && (
+          {!existenciaLista && !bloqueadoSinConexion && (
             <div className="alert-banner" role="alert">
               <span>{existenciasDeMiUbicacion.motivo}</span>
 
@@ -712,7 +934,7 @@ function POS() {
                 onChange={handleClientSearchChange}
                 onSelect={handleSelectClient}
                 onClear={handleClearClient}
-                onCreateNew={openNewClientModal}
+                onCreateNew={modoSinConexion ? undefined : openNewClientModal}
               />
             </div>
 
@@ -829,10 +1051,10 @@ function POS() {
               <button
                 type="button"
                 className="btn btn-primary btn-lg btn-block"
-                disabled={cart.length === 0 || facturando || !existenciasDeMiUbicacion.lista}
+                disabled={cart.length === 0 || facturando || !existenciaLista || bloqueadoSinConexion}
                 onClick={generateSale}
               >
-                {facturando ? "Registrando…" : "Generar factura"}
+                {textoDelBotonDeVenta(facturando, modoSinConexion)}
               </button>
 
               <button
@@ -880,14 +1102,40 @@ function POS() {
         printTitle="Factura"
         canExport={previewMode === "saved"}
         onConfirm={previewMode === "preview" ? confirmPreviewSale : undefined}
-        confirmLabel="Generar factura"
+        confirmLabel={modoSinConexion ? "Guardar venta sin conexión" : "Generar factura"}
         onClose={() => {
           setPreviewOpen(false)
           setPreviewSale(null)
         }}
       >
-        <InvoiceTemplate sale={previewSale} />
+        {previewSale?.sinConexion ? (
+          <ComprobanteProvisional venta={previewSale.venta} empresa={copiaLocal?.empresa} vistaPrevia />
+        ) : (
+          <InvoiceTemplate sale={previewSale} />
+        )}
       </DocumentPreviewModal>
+
+      <DocumentPreviewModal
+        open={Boolean(comprobante)}
+        title="Comprobante provisional"
+        fileName={`Comprobante-provisional-${comprobante?.numeroProvisional || "venta"}.pdf`}
+        printTitle="Comprobante provisional"
+        canExport
+        onClose={() => setComprobante(null)}
+      >
+        <ComprobanteProvisional venta={comprobante} empresa={sinConexion?.copia?.empresa} />
+      </DocumentPreviewModal>
+
+      {panelAbierto && sinConexion && (
+        <PanelDeVentasLocales
+          estado={sinConexion}
+          onCerrar={() => setPanelAbierto(false)}
+          onVerComprobante={(venta) => {
+            setPanelAbierto(false)
+            setComprobante(venta)
+          }}
+        />
+      )}
     </div>
   )
 }
