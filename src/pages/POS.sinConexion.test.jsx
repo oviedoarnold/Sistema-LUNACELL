@@ -409,3 +409,39 @@ describe("venta guardada tras un intento en línea que no se registró", () => {
     expect(servidor.recibidas[0].p_nota).toMatch(/^Intento en línea sin respuesta: \S+/)
   })
 })
+
+describe("decisión del administrador sobre una venta en conciliación", () => {
+  it("el vendedor ve que se aplicó y deja de contarla como en conciliación", async () => {
+    servidor.respuestas.push({
+      data: { estado: "en_conciliacion", conciliacion_id: "conc-1", motivo: "existencia-insuficiente" },
+      error: null,
+      status: 200,
+    })
+    const { falso } = await renderPOS()
+    await esperarCopia()
+    await quitarConexion()
+    agregar("Martillo de uña")
+    fireEvent.click(botonGuardarSinConexion())
+    await waitFor(() => expect(screen.getByText(/1 venta pendiente de sincronizar/i)).toBeInTheDocument())
+    await devolverConexion()
+    await waitFor(() => expect(screen.getByText(/1 en conciliación/i)).toBeInTheDocument())
+
+    falso.datos.ventas_por_conciliar = [
+      {
+        id: "conc-1",
+        empresa_id: EMPRESA,
+        clave_idempotencia: servidor.recibidas[0].p_clave_idempotencia,
+        estado: "aplicada",
+        resuelta_en: "2026-10-10T13:00:00.000Z",
+        venta_id: "v-77",
+      },
+    ]
+    fireEvent.click(screen.getByRole("button", { name: /sincronizar ahora/i }))
+
+    await waitFor(() => expect(screen.queryByText(/1 en conciliación/i)).not.toBeInTheDocument())
+    fireEvent.click(screen.getByRole("button", { name: /ventas sin conexión/i }))
+    const panel = await screen.findByRole("dialog", { name: /ventas sin conexión de este teléfono/i })
+    expect(within(panel).getByText("Aplicada en conciliación")).toBeInTheDocument()
+    expect(within(panel).getByText(/un administrador la aplicó/i)).toBeInTheDocument()
+  })
+})

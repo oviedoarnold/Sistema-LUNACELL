@@ -419,3 +419,101 @@ describe("ventas guardadas tras un intento en línea sin respuesta", () => {
     expect((await almacen.leer("ventas", venta.clave)).estado).toBe(ESTADOS.PENDIENTE)
   })
 })
+
+/*
+  En qué quedaron las ventas en conciliación: después de cada ronda con
+  servidor se pregunta por las que todavía no tienen decisión, para que el
+  vendedor lo vea y el disponible sin conexión deje de restarlas cuando
+  corresponde.
+*/
+describe("resoluciones de las ventas en conciliación", () => {
+  async function conVentaEnConciliacion({ consultar }) {
+    const servidor = crearServidorFalso({ existencias: { [CARGADOR.id]: 0 } })
+    const almacen = await nuevoNavegador().abrir()
+    const copia = copiaDePrueba()
+    await guardarCopia(almacen, copia)
+    const id = await idDelDispositivo(almacen)
+    const venta = await guardarVenta(
+      almacen,
+      construirVentaLocal({
+        copia,
+        sesion: sesionDe(),
+        dispositivo: id,
+        carrito: [{ productoId: CARGADOR.id, cantidad: 1 }],
+        ahora: ahoraDePrueba(),
+      })
+    )
+    const sincronizador = crearSincronizador({
+      almacen,
+      enviar: (v) => servidor.enviar(v),
+      consultarConciliaciones: consultar,
+      sesionActual: async () => sesionDe(),
+      ahora: ahoraDePrueba,
+      locks: null,
+    })
+
+    return { almacen, venta, sincronizador, servidor }
+  }
+
+  it("guarda la decisión del administrador sin cambiar el estado final de la venta", async () => {
+    const consultar = vi.fn(async (claves) => ({
+      data: claves.map((clave) => ({ clave_idempotencia: clave, estado: "aplicada", resuelta_en: "2026-10-10T13:00:00.000Z", venta_id: "v-9" })),
+      error: null,
+    }))
+    const { almacen, venta, sincronizador } = await conVentaEnConciliacion({ consultar })
+
+    await sincronizador.sincronizar()
+
+    expect(consultar).toHaveBeenCalledWith([venta.clave])
+    expect(await almacen.leer("ventas", venta.clave)).toMatchObject({
+      estado: ESTADOS.EN_CONCILIACION,
+      conciliacion: { estado: "aplicada", resueltaEn: "2026-10-10T13:00:00.000Z", ventaId: "v-9" },
+    })
+  })
+
+  it("no vuelve a preguntar por las que ya tienen decisión", async () => {
+    const consultar = vi.fn(async (claves) => ({
+      data: claves.map((clave) => ({ clave_idempotencia: clave, estado: "anulada", resuelta_en: "2026-10-10T13:00:00.000Z", venta_id: null })),
+      error: null,
+    }))
+    const { sincronizador } = await conVentaEnConciliacion({ consultar })
+
+    await sincronizador.sincronizar()
+    await sincronizador.sincronizar()
+
+    expect(consultar).toHaveBeenCalledTimes(1)
+  })
+
+  it("si todavía está pendiente, vuelve a preguntar en la próxima ronda", async () => {
+    const consultar = vi.fn(async (claves) => ({
+      data: claves.map((clave) => ({ clave_idempotencia: clave, estado: "pendiente", resuelta_en: null, venta_id: null })),
+      error: null,
+    }))
+    const { sincronizador } = await conVentaEnConciliacion({ consultar })
+
+    await sincronizador.sincronizar()
+    await sincronizador.sincronizar()
+
+    expect(consultar).toHaveBeenCalledTimes(2)
+  })
+
+  it("si la consulta falla no pasa nada: la venta sigue igual y se reintenta después", async () => {
+    const consultar = vi.fn(async () => ({ data: null, error: { message: "TypeError: Failed to fetch" }, status: 0 }))
+    const { almacen, venta, sincronizador } = await conVentaEnConciliacion({ consultar })
+
+    const resumen = await sincronizador.sincronizar()
+
+    expect(resumen.enConciliacion).toBe(1)
+    expect((await almacen.leer("ventas", venta.clave)).conciliacion).toBeUndefined()
+  })
+
+  it("si la ronda se detuvo por falta de red, no pregunta", async () => {
+    const consultar = vi.fn()
+    const { servidor, sincronizador } = await conVentaEnConciliacion({ consultar })
+    servidor.fallarProxima({ tipo: "red" })
+
+    await sincronizador.sincronizar()
+
+    expect(consultar).not.toHaveBeenCalled()
+  })
+})
