@@ -117,6 +117,40 @@ export function marcar(almacen, clave, cambios) {
 }
 
 /*
+  Toma una venta para enviarla: en una sola transacción comprueba que siga
+  en un estado enviable y la pasa a «sincronizando». Si otra pestaña ya la
+  tomó o el servidor ya la confirmó, devuelve null y no se envía.
+*/
+export function tomarParaEnvio(almacen, clave, { enviables, cambios = {} }) {
+  return almacen.transaccion(["ventas"], "readwrite", async (t) => {
+    const venta = await t.leer("ventas", clave)
+    if (!venta || !enviables.includes(venta.estado)) return null
+
+    const tomada = { ...venta, ...cambios, estado: ESTADOS.SINCRONIZANDO, intentos: (venta.intentos || 0) + 1, clave: venta.clave }
+    await t.poner("ventas", tomada)
+
+    return tomada
+  })
+}
+
+/*
+  Devuelve una venta que no se pudo confirmar a pendiente o a error, solo si
+  sigue «sincronizando». Si mientras tanto otra pestaña la confirmó, se deja
+  como está: una venta confirmada nunca retrocede.
+*/
+export function soltarEnvio(almacen, clave, cambios) {
+  return almacen.transaccion(["ventas"], "readwrite", async (t) => {
+    const venta = await t.leer("ventas", clave)
+    if (!venta || venta.estado !== ESTADOS.SINCRONIZANDO) return null
+
+    const nueva = { ...venta, ...cambios, clave: venta.clave }
+    await t.poner("ventas", nueva)
+
+    return nueva
+  })
+}
+
+/*
   Lo que quedó «sincronizando» porque la app se cerró o el teléfono se
   reinició a mitad de un envío vuelve a pendiente. Se reenvía con la misma
   clave: si el servidor ya la tenía, responde «ya registrada».

@@ -44,14 +44,13 @@ export function aParametrosDeRescate(venta, lote = null) {
 /*
   La función de envío que usa el sincronizador. Devuelve { data, error,
   status } tal como responde supabase-js; una excepción (sin red) la maneja
-  el sincronizador.
+  el sincronizador. Con `signal`, el sincronizador aborta la petición cuando
+  se agota su tiempo límite.
 */
 export function crearEnvio(supabase, ahora = () => new Date()) {
-  return async (venta) => {
-    const { data, error, status } = await supabase.rpc(
-      "sincronizar_venta_sin_conexion",
-      aParametrosDeSincronizacion(venta, ahora())
-    )
+  return async (venta, { signal } = {}) => {
+    const consulta = supabase.rpc("sincronizar_venta_sin_conexion", aParametrosDeSincronizacion(venta, ahora()))
+    const { data, error, status } = await (signal && consulta.abortSignal ? consulta.abortSignal(signal) : consulta)
 
     return { data, error, status }
   }

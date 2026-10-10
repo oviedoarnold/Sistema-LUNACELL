@@ -11,13 +11,54 @@
     servidor responde que la tiene. Nunca se borra aquí.
   - Un error de una venta no detiene las demás; solo la falta de red o de
     sesión detiene la ronda.
+  - Cada envío tiene un tiempo límite: una petición que no responde (red
+    móvil que se queda colgada) se aborta y cuenta como falta de red. Si el
+    servidor sí la recibió, el reenvío con la misma clave responde «ya
+    registrada».
+  - Cada venta se toma y se suelta en una transacción que mira su estado
+    actual: si otra pestaña la confirmó mientras tanto, no se reenvía ni
+    retrocede.
 */
 import { conCandado } from "./candado"
 import { clasificarError, clasificarRespuesta } from "./clasificar"
-import { ESTADOS, marcar, recuperarInterrumpidas, ventasDelUsuario } from "./cola"
+import { ESTADOS, marcar, recuperarInterrumpidas, soltarEnvio, tomarParaEnvio, ventasDelUsuario } from "./cola"
 
-export function crearSincronizador({ almacen, enviar, sesionActual, ahora = () => new Date(), locks }) {
-  async function ronda({ manual }) {
+export const LIMITE_DE_ENVIO = 30000
+
+const TIEMPO_AGOTADO = { code: "", message: "Tiempo de espera agotado: el servidor no respondió" }
+
+async function enviarConLimite(enviar, venta, limiteDeEnvio) {
+  const control = new AbortController()
+  let reloj
+
+  const agotado = new Promise((resolver) => {
+    reloj = setTimeout(() => {
+      control.abort()
+      resolver({ data: null, error: TIEMPO_AGOTADO, status: 0 })
+    }, limiteDeEnvio)
+  })
+
+  // Una excepción del envío (sin red) es una respuesta más, nunca un rechazo suelto.
+  const envio = Promise.resolve()
+    .then(() => enviar(venta, { signal: control.signal }))
+    .catch((error) => ({ data: null, error, status: 0 }))
+
+  try {
+    return await Promise.race([envio, agotado])
+  } finally {
+    clearTimeout(reloj)
+  }
+}
+
+export function crearSincronizador({
+  almacen,
+  enviar,
+  sesionActual,
+  ahora = () => new Date(),
+  locks,
+  limiteDeEnvio = LIMITE_DE_ENVIO,
+}) {
+  async function ronda({ manual, renovar }) {
     await recuperarInterrumpidas(almacen)
 
     const sesion = await sesionActual()
@@ -25,28 +66,29 @@ export function crearSincronizador({ almacen, enviar, sesionActual, ahora = () =
 
     if (!sesion?.usuarioAuth) return { ...resumen, detenidoPor: "sin_sesion" }
 
-    const enviables = new Set(manual ? [ESTADOS.PENDIENTE, ESTADOS.ERROR] : [ESTADOS.PENDIENTE])
-    const cola = (await ventasDelUsuario(almacen, sesion)).filter((v) => enviables.has(v.estado))
+    const enviables = manual ? [ESTADOS.PENDIENTE, ESTADOS.ERROR] : [ESTADOS.PENDIENTE]
+    const cola = (await ventasDelUsuario(almacen, sesion)).filter((v) => enviables.includes(v.estado))
 
-    for (const venta of cola) {
-      await marcar(almacen, venta.clave, {
-        estado: ESTADOS.SINCRONIZANDO,
-        intentos: (venta.intentos || 0) + 1,
-        ultimoIntentoEn: ahora().toISOString(),
+    for (const { clave } of cola) {
+      if (!(await renovar())) {
+        resumen.detenidoPor = "otra_pestana"
+        break
+      }
+
+      const venta = await tomarParaEnvio(almacen, clave, {
+        enviables,
+        cambios: { ultimoIntentoEn: ahora().toISOString() },
       })
 
-      let respuesta
-      try {
-        respuesta = await enviar(venta)
-      } catch (error) {
-        respuesta = { data: null, error, status: 0 }
-      }
+      if (!venta) continue
+
+      const respuesta = await enviarConLimite(enviar, venta, limiteDeEnvio)
 
       resumen.enviadas += 1
       const final = respuesta.error ? null : clasificarRespuesta(respuesta.data)
 
       if (final === "registrada") {
-        await marcar(almacen, venta.clave, {
+        await marcar(almacen, clave, {
           estado: ESTADOS.REGISTRADA,
           ventaId: respuesta.data.venta_id ?? null,
           numeroFactura: respuesta.data.numero_factura ?? null,
@@ -58,7 +100,7 @@ export function crearSincronizador({ almacen, enviar, sesionActual, ahora = () =
       }
 
       if (final === "en_conciliacion") {
-        await marcar(almacen, venta.clave, {
+        await marcar(almacen, clave, {
           estado: ESTADOS.EN_CONCILIACION,
           conciliacionId: respuesta.data.conciliacion_id ?? null,
           motivo: respuesta.data.motivo ?? null,
@@ -78,12 +120,11 @@ export function crearSincronizador({ almacen, enviar, sesionActual, ahora = () =
       }
 
       if (clase === "rechazo") {
-        await marcar(almacen, venta.clave, { estado: ESTADOS.ERROR, ultimoError })
-        resumen.errores += 1
+        if (await soltarEnvio(almacen, clave, { estado: ESTADOS.ERROR, ultimoError })) resumen.errores += 1
         continue
       }
 
-      await marcar(almacen, venta.clave, { estado: ESTADOS.PENDIENTE, ultimoError })
+      await soltarEnvio(almacen, clave, { estado: ESTADOS.PENDIENTE, ultimoError })
 
       if (clase === "red" || clase === "sesion") {
         resumen.detenidoPor = clase
@@ -98,6 +139,7 @@ export function crearSincronizador({ almacen, enviar, sesionActual, ahora = () =
   }
 
   return {
-    sincronizar: ({ manual = false } = {}) => conCandado(almacen, () => ronda({ manual }), { locks, ahora }),
+    sincronizar: ({ manual = false } = {}) =>
+      conCandado(almacen, ({ renovar }) => ronda({ manual, renovar }), { locks, ahora }),
   }
 }
