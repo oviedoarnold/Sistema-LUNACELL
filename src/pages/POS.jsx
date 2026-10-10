@@ -637,6 +637,13 @@ function POS() {
       // La venta ya descontó en la base: la pantalla tiene que mostrarlo.
       await existenciasDeMiUbicacion.recargar()
 
+      /*
+        Y la copia para vender sin conexión también: si la conexión se cae
+        ahora, lo que se acaba de vender no puede seguir apareciendo como
+        disponible.
+      */
+      void sinConexion?.actualizarCopia({ forzar: true })
+
       Swal.fire({
         icon: "success",
 
