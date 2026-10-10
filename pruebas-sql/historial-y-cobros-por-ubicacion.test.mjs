@@ -35,11 +35,11 @@ afterAll(async () => {
 */
 async function escenario() {
   const esc = await escenarioSinConexion(db)
-  await db.query("insert into permisos_usuario (usuario_id, empresa_id, seccion) values ($1, $2, 'receivables'), ($1, $2, 'sales-history')", [
+  await db.query("insert into permisos_usuario (usuario_id, empresa_id, seccion) values ($1, $2, 'sales-history')", [
     esc.vendedor.usuario,
     esc.empresa,
   ])
-  const vendedor2 = await crearVendedor(db, { empresa: esc.empresa, ubicacion: esc.camion2, permisos: ["pos", "receivables"] })
+  const vendedor2 = await crearVendedor(db, { empresa: esc.empresa, ubicacion: esc.camion2, permisos: ["pos", "sales-history"] })
 
   const aCredito = async (authId) =>
     (
@@ -134,7 +134,7 @@ describe("cobros por ubicación", () => {
 
   it("8. un vendedor sin ubicación operativa no cobra", async () => {
     const e = await escenario()
-    const sinUbicacion = await crearVendedor(db, { empresa: e.empresa, permisos: ["receivables"] })
+    const sinUbicacion = await crearVendedor(db, { empresa: e.empresa, permisos: ["sales-history"] })
 
     const error = await fallo(pagar(sinUbicacion.authId, e.clienteId, 10))
 
