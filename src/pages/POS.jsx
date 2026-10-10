@@ -23,6 +23,7 @@ import InvoiceTemplate from "../components/InvoiceTemplate"
 import ClientAutocomplete from "../components/documents/ClientAutocomplete"
 import ModalDeCliente from "../components/documents/ModalDeCliente"
 import { useCarrito } from "../hooks/useCarrito"
+import { useExistenciaDeMiUbicacion } from "../hooks/useExistenciaDeMiUbicacion"
 import { useClienteDelDocumento } from "../hooks/useClienteDelDocumento"
 import DocumentPreviewModal from "../components/documents/DocumentPreviewModal"
 
@@ -38,13 +39,19 @@ import {
   hasEnoughStock,
 } from "../utils/cart"
 
-import { existenciaEnCatalogo } from "../utils/existencias"
-
 const ISV_POR_OMISION = 15
 
 function POS() {
   const { products = [], company } = useContext(ProductContext)
   const { addSale } = useContext(SalesContext)
+
+  /*
+    Lo que se puede vender: la existencia de la ubicación operativa del
+    usuario, la misma de la que descuenta registrar_venta_ubicacion(). El
+    `stock` del catálogo es el total de todas las ubicaciones y aquí no se
+    usa para nada.
+  */
+  const existenciasDeMiUbicacion = useExistenciaDeMiUbicacion()
 
   /*
     La tasa sale de la configuración de la empresa. Tenerla fija aquí
@@ -95,6 +102,7 @@ function POS() {
   } = useCarrito({
     productos: products,
     lineasIniciales: saleDraft?.cart || [],
+    existenciaDe: existenciasDeMiUbicacion.existenciaDe,
   })
 
   const {
@@ -179,6 +187,16 @@ function POS() {
   }
 
   const validateSale = () => {
+    if (!existenciasDeMiUbicacion.lista) {
+      Swal.fire({
+        icon: "warning",
+        title: "No se puede facturar todavía",
+        text: existenciasDeMiUbicacion.motivo,
+      })
+
+      return false
+    }
+
     if (cart.length === 0) {
       Swal.fire({
         icon: "warning",
@@ -209,7 +227,7 @@ function POS() {
       }
 
       const existencia =
-        existenciaEnCatalogo(
+        existenciasDeMiUbicacion.existenciaDe(
           product
         )
 
@@ -400,7 +418,8 @@ function POS() {
     try {
       const createdSale = await addSale(
         buildSalePayload(),
-        claveDeVenta
+        claveDeVenta,
+        { existenciaDe: existenciasDeMiUbicacion.existenciaDe }
       )
 
       if (!createdSale) {
@@ -430,6 +449,9 @@ function POS() {
       setPreviewOpen(true)
 
       clearSaleForm()
+
+      // La venta ya descontó en la base: la pantalla tiene que mostrarlo.
+      await existenciasDeMiUbicacion.recargar()
 
       Swal.fire({
         icon: "success",
@@ -524,6 +546,26 @@ function POS() {
             placeholder="Buscar producto para agregar..."
             etiqueta="Buscar producto por nombre o código"
           />
+
+          {/*
+            Sin la existencia de la ubicación no se vende: el catálogo
+            muestra 0 y aquí se dice por qué. Nunca el total global.
+          */}
+          {!existenciasDeMiUbicacion.lista && (
+            <div className="alert-banner" role="alert">
+              <span>{existenciasDeMiUbicacion.motivo}</span>
+
+              {existenciasDeMiUbicacion.error && (
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={() => existenciasDeMiUbicacion.recargar()}
+                >
+                  Reintentar
+                </button>
+              )}
+            </div>
+          )}
 
           <div className="picker-list">
             {filteredProducts.length === 0 ? (
@@ -787,7 +829,7 @@ function POS() {
               <button
                 type="button"
                 className="btn btn-primary btn-lg btn-block"
-                disabled={cart.length === 0 || facturando}
+                disabled={cart.length === 0 || facturando || !existenciasDeMiUbicacion.lista}
                 onClick={generateSale}
               >
                 {facturando ? "Registrando…" : "Generar factura"}

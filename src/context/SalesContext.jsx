@@ -10,7 +10,6 @@ import {
 } from "../lib/api/ventas"
 
 import { hasEnoughStock } from "../utils/cart"
-import { existenciaEnCatalogo } from "../utils/existencias"
 
 function SalesProvider({ children }) {
   const { user } = useAuth()
@@ -74,8 +73,13 @@ function SalesProvider({ children }) {
     [products]
   )
 
+  /*
+    `existenciaDe` la da la pantalla que vende: cuánto hay en SU ubicación
+    operativa. Sin ella no se valida contra el total del catálogo, que
+    suma todas las ubicaciones: se rechaza.
+  */
   const validarRenglones = useCallback(
-    (items = []) => {
+    (items = [], existenciaDe) => {
       if (!Array.isArray(items)) {
         throw new Error("Los productos de la venta no son válidos.")
       }
@@ -104,7 +108,13 @@ function SalesProvider({ children }) {
           throw new Error("Uno de los productos ya no existe en el inventario.")
         }
 
-        const existencia = existenciaEnCatalogo(producto)
+        if (typeof existenciaDe !== "function") {
+          throw new Error(
+            "No se pudo comprobar la existencia de tu ubicación. Intenta de nuevo."
+          )
+        }
+
+        const existencia = existenciaDe(producto)
 
         if (!hasEnoughStock(cantidad, existencia)) {
           throw new Error(
@@ -141,12 +151,12 @@ function SalesProvider({ children }) {
     es el de la ubicación que vende, no el total del catálogo.
   */
   const addSale = useCallback(
-    async (venta, clave = null) => {
+    async (venta, clave = null, { existenciaDe } = {}) => {
       if (!venta) {
         throw new Error("No se recibieron datos de la venta.")
       }
 
-      validarRenglones(venta.items)
+      validarRenglones(venta.items, existenciaDe)
 
       const renglones = armarRenglones(venta.items)
       const formaPago = venta.paymentType || venta.type || "contado"

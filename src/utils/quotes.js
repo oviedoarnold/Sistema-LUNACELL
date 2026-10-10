@@ -1,5 +1,4 @@
 import { calculateCartSubtotal, hasEnoughStock } from "./cart"
-import { existenciaEnCatalogo } from "./existencias"
 import { crearId } from "./ids"
 
 export const VIGENTE = "vigente"
@@ -133,11 +132,11 @@ export function buildSaleDraftFromQuote(quote) {
   una cotización es una oferta y no reserva inventario, así que el usuario
   puede pasar al punto de venta de todos modos.
 
-  La existencia se pregunta al catálogo en vez de leerla del producto
-  porque la ubicación desde la que se surte se decide al convertir la
-  cotización en venta, no al armarla.
+  `existenciaDe` dice cuánto hay en la ubicación desde la que se va a
+  facturar: la operativa de quien convierte, que es de donde descontará
+  la venta. No el total del catálogo, que suma todas las ubicaciones.
 */
-export function findUnavailableItems(cartLines, products) {
+export function findUnavailableItems(cartLines, products, existenciaDe) {
   return (cartLines || []).reduce((unavailable, line) => {
     const product = (products || []).find(
       (candidate) => String(candidate.id) === String(line.id)
@@ -147,7 +146,7 @@ export function findUnavailableItems(cartLines, products) {
       return [...unavailable, { name: line.name, reason: "no-existe" }]
     }
 
-    const disponible = existenciaEnCatalogo(product)
+    const disponible = existenciaDe(product)
 
     if (!hasEnoughStock(line.quantity, disponible)) {
       return [
