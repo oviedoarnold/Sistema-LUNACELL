@@ -47,9 +47,9 @@ vi.mock("../lib/supabase", () => ({
   exigirSupabase: () => globalThis.__supabaseFalso,
 }))
 
-function montar({ sesionInicial = { user: { id: "auth-vendedor" } }, fallarEn = {} } = {}) {
+function montar({ sesionInicial = { user: { id: "auth-vendedor" } }, fallarEn = {}, tablas = TABLAS } = {}) {
   const falso = crearSupabaseFalso({
-    tablas: TABLAS,
+    tablas,
     sesionInicial,
     fallarEn,
     cuentas: [{ id: "auth-vendedor", email: VENDEDOR.email, password: "Vende2026" }],
@@ -181,5 +181,74 @@ describe("entrar sin conexión", () => {
     })
 
     await waitFor(() => expect(vista.result.current.user?.sinConexion).toBeFalsy())
+  })
+})
+
+/*
+  El perfil guardado no puede servir para conservar un acceso revocado.
+  Mientras no hay conexión no se puede saber si lo revocaron (límite
+  inevitable); en cuanto el servidor responde, manda lo que diga él.
+*/
+describe("revocaciones y vencimiento del perfil sin conexión", () => {
+  const perfilGuardado = async () => {
+    const { almacenDeLaApp } = await import("../lib/sinConexion/almacenDeLaApp")
+    const { leerPerfilLocal } = await import("../lib/sinConexion/perfilLocal")
+
+    return leerPerfilLocal(await almacenDeLaApp(), "auth-vendedor")
+  }
+
+  it("si el servidor confirma que ya no tiene acceso, borra el perfil guardado y sin red ya no entra", async () => {
+    await entrarConConexion()
+    montar({ tablas: { ...TABLAS, usuarios: [{ ...VENDEDOR, activo: false }] } })
+
+    const vista = await renderAuth()
+
+    expect(vista.result.current.user).toBeNull()
+    await waitFor(async () => expect(await perfilGuardado()).toBeNull())
+
+    vista.unmount()
+    vi.resetModules()
+    const { vista: sinRed } = await abrirSinRed()
+    expect(sinRed.result.current.user).toBeNull()
+  })
+
+  it("si le quitaron el POS, el perfil guardado se actualiza y sin red ya no puede facturar", async () => {
+    await entrarConConexion()
+    montar({ tablas: { ...TABLAS, permisos_usuario: [{ usuario_id: "u-vendedor", empresa_id: EMPRESA, seccion: "dashboard" }] } })
+    const conRed = await renderAuth()
+    await waitFor(() => expect(conRed.result.current.user?.permissions).toEqual(["dashboard"]))
+    await waitFor(async () => expect((await perfilGuardado())?.permissions).toEqual(["dashboard"]))
+    conRed.unmount()
+    vi.resetModules()
+
+    const { vista } = await abrirSinRed()
+
+    expect(vista.result.current.hasPermission("pos")).toBe(false)
+  })
+
+  it("al volver la conexión, si el servidor dice que ya no tiene acceso, sale y se borra el perfil", async () => {
+    await entrarConConexion()
+    const { falso, vista } = await abrirSinRed()
+    expect(vista.result.current.user?.sinConexion).toBe(true)
+
+    falso.datos.usuarios[0].activo = false
+    falso.auth.getSession.mockResolvedValue({ data: { session: { user: { id: "auth-vendedor" } } }, error: null })
+
+    await act(() => vista.result.current.revalidarSesion())
+
+    expect(vista.result.current.user).toBeNull()
+    expect(await perfilGuardado()).toBeNull()
+  })
+
+  it("vence a los 7 días aunque la aplicación siga abierta: deja de facturar sin conexión", async () => {
+    await entrarConConexion()
+    const { vista } = await abrirSinRed()
+    expect(vista.result.current.hasPermission("pos")).toBe(true)
+
+    const confirmado = Date.parse(vista.result.current.user.confirmadoEn)
+    vi.useFakeTimers({ toFake: ["Date"] })
+    vi.setSystemTime(confirmado + 7 * 24 * 3600000 + 60000)
+
+    expect(vista.result.current.hasPermission("pos")).toBe(false)
   })
 })
