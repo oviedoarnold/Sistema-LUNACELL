@@ -19,8 +19,8 @@ Bodega → Lunacell Store. Store va al final, tras la revisión fiscal.
 | `venta.js` | Arma la venta local y valida: copia del mismo usuario y ubicación, ubicación habilitada, productos de la copia, crédito solo a clientes registrados. Totales en centavos. |
 | `cola.js` | La cola durable. Clave de idempotencia única por venta (`off-<dispositivo>-<uuid>`), número provisional interno `PROV-XXXX-000001` (no fiscal), control de existencias locales y estados. |
 | `clasificar.js` | Traduce cada respuesta y cada error del servidor a lo que hay que hacer. |
-| `candado.js` | Solo una pestaña sincroniza a la vez (Web Locks, o un turno con vencimiento en IndexedDB). |
-| `sincronizador.js` | La ronda: envía en orden las ventas pendientes del usuario en sesión y guarda la respuesta. |
+| `candado.js` | Solo una pestaña sincroniza a la vez (Web Locks, o un turno de 60 s en IndexedDB que se renueva antes de cada envío; si otra pestaña lo tomó al vencer, la ronda vieja se detiene). |
+| `sincronizador.js` | La ronda: envía en orden las ventas pendientes del usuario en sesión y guarda la respuesta. Cada envío tiene un límite de 30 s: si el servidor no responde, la petición se aborta y la venta queda pendiente (cuenta como falta de red). Cada venta se toma y se suelta en una transacción que mira su estado actual: una venta confirmada por otra pestaña no se reenvía ni retrocede. |
 | `conectividad.js` | Cuándo sincronizar: al iniciar, al volver la red, al volver a primer plano, periódicamente con pendientes, con espera progresiva tras fallos y a mano. |
 | `exportacion.js` | Archivo de emergencia cifrado (AES-GCM, llave por PBKDF2-SHA-256). |
 
