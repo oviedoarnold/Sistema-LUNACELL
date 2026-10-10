@@ -41,6 +41,7 @@ export function construirVentaLocal({
   fechaVencimiento = null,
   nota = "",
   ahora = new Date(),
+  claveEnLinea = null,
 }) {
   if (!copia) throw new ErrorDeVentaLocal("No hay copia local para vender sin conexión.")
 
@@ -109,6 +110,12 @@ export function construirVentaLocal({
     rtnComprador: String(rtnComprador || "").trim(),
     fechaVencimiento: formaPago === "credito" ? fechaVencimiento : null,
     nota: String(nota || ""),
+    /*
+      La clave del intento en línea que se quedó sin respuesta, si esta
+      venta nace de uno. Antes de enviarla se pregunta al servidor por ella:
+      si ese intento sí se registró, esta venta no se envía (sería doble).
+    */
+    claveEnLinea: claveEnLinea ? String(claveEnLinea) : null,
     estado: "pendiente",
     intentos: 0,
   }

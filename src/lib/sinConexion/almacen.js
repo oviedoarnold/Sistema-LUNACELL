@@ -37,7 +37,13 @@ function actualizarEsquema(base, versionAnterior) {
   }
 }
 
-export function abrirAlmacen({ indexedDB = globalThis.indexedDB, nombre = NOMBRE_DEL_ALMACEN } = {}) {
+/*
+  `alCambiarVersion`: otra pestaña (una versión nueva de la aplicación) pide
+  actualizar el esquema. Esta conexión se cierra para no bloquearla y se
+  avisa, para pedir recargar la página. Lo guardado no se pierde: las
+  versiones solo agregan.
+*/
+export function abrirAlmacen({ indexedDB = globalThis.indexedDB, nombre = NOMBRE_DEL_ALMACEN, alCambiarVersion } = {}) {
   if (!indexedDB) {
     return Promise.reject(new Error("Este navegador no permite guardar ventas sin conexión (no hay IndexedDB)."))
   }
@@ -48,7 +54,16 @@ export function abrirAlmacen({ indexedDB = globalThis.indexedDB, nombre = NOMBRE
     solicitud.onupgradeneeded = (evento) => actualizarEsquema(solicitud.result, evento.oldVersion)
     solicitud.onerror = () => rechazar(solicitud.error)
     solicitud.onblocked = () => rechazar(new Error("Cierra las otras pestañas de LUNACELL para actualizar el almacén local."))
-    solicitud.onsuccess = () => resolver(envolver(solicitud.result))
+    solicitud.onsuccess = () => {
+      const base = solicitud.result
+
+      base.onversionchange = () => {
+        base.close()
+        alCambiarVersion?.()
+      }
+
+      resolver(envolver(base))
+    }
   })
 }
 

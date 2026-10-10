@@ -18,6 +18,11 @@
   - Cada venta se toma y se suelta en una transacción que mira su estado
     actual: si otra pestaña la confirmó mientras tanto, no se reenvía ni
     retrocede.
+  - Una venta guardada tras un intento en línea sin respuesta (`claveEnLinea`)
+    no se envía a ciegas: antes se pregunta al servidor por esa clave
+    (`verificarEnLinea`). Si el intento se registró, la venta queda
+    registrada con esa factura y no se envía; si no se puede preguntar,
+    espera.
 */
 import { conCandado } from "./candado"
 import { clasificarError, clasificarRespuesta } from "./clasificar"
@@ -26,6 +31,7 @@ import { ESTADOS, marcar, recuperarInterrumpidas, soltarEnvio, tomarParaEnvio, v
 export const LIMITE_DE_ENVIO = 30000
 
 const TIEMPO_AGOTADO = { code: "", message: "Tiempo de espera agotado: el servidor no respondió" }
+const SIN_VERIFICACION = { code: "", message: "No se puede comprobar si el intento en línea se registró" }
 
 async function enviarConLimite(enviar, venta, limiteDeEnvio) {
   const control = new AbortController()
@@ -57,7 +63,41 @@ export function crearSincronizador({
   ahora = () => new Date(),
   locks,
   limiteDeEnvio = LIMITE_DE_ENVIO,
+  verificarEnLinea,
 }) {
+  /*
+    Lo que responde el servidor por una venta. Para una que nace de un
+    intento en línea sin respuesta, primero se pregunta por ese intento.
+  */
+  async function responder(venta) {
+    if (venta.claveEnLinea) {
+      if (!verificarEnLinea) return { data: null, error: SIN_VERIFICACION, status: 200 }
+
+      const verificacion = await enviarConLimite(
+        (v, opciones) => verificarEnLinea(v.claveEnLinea, opciones),
+        venta,
+        limiteDeEnvio
+      )
+
+      if (verificacion.error) return verificacion
+
+      if (verificacion.data) {
+        return {
+          data: {
+            estado: "ya_registrada",
+            venta_id: verificacion.data.id ?? null,
+            numero_factura: verificacion.data.numero_factura ?? null,
+            en_linea: true,
+          },
+          error: null,
+          status: 200,
+        }
+      }
+    }
+
+    return enviarConLimite(enviar, venta, limiteDeEnvio)
+  }
+
   async function ronda({ manual, renovar }) {
     await recuperarInterrumpidas(almacen)
 
@@ -82,7 +122,7 @@ export function crearSincronizador({
 
       if (!venta) continue
 
-      const respuesta = await enviarConLimite(enviar, venta, limiteDeEnvio)
+      const respuesta = await responder(venta)
 
       resumen.enviadas += 1
       const final = respuesta.error ? null : clasificarRespuesta(respuesta.data)
@@ -92,6 +132,7 @@ export function crearSincronizador({
           estado: ESTADOS.REGISTRADA,
           ventaId: respuesta.data.venta_id ?? null,
           numeroFactura: respuesta.data.numero_factura ?? null,
+          registradaEnLinea: Boolean(respuesta.data.en_linea),
           confirmadaEn: ahora().toISOString(),
           ultimoError: null,
         })
