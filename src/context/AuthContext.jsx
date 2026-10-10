@@ -8,6 +8,7 @@ import {
 import { AuthContext } from "./contexts"
 import { supabase } from "../lib/supabase"
 import { marcarSesionAbierta, borrarMarcaDeSesion } from "../lib/marcaDeSesion"
+import { perfilSigueVigente } from "../lib/sinConexion/perfilLocal"
 import {
   authIdDeLaSesionGuardada,
   esFalloDeRed,
@@ -233,6 +234,14 @@ export function AuthProvider({ children }) {
       if (perfil) {
         marcarSesionAbierta()
         void recordarPerfil(perfil)
+      } else if (sesion?.user && !esFalloDeRed(fallo)) {
+        /*
+          El servidor respondió que esta cuenta ya no tiene acceso (sin
+          perfil, desactivada): el perfil guardado deja de valer en el
+          acto, para que no sirva para entrar sin conexión.
+        */
+        await olvidarPerfil()
+        borrarMarcaDeSesion()
       } else {
         perfil = await perfilParaSinConexion(sesion, fallo)
         if (!perfil) borrarMarcaDeSesion()
@@ -337,12 +346,20 @@ export function AuthProvider({ children }) {
     const { data } = await supabase.auth.getSession()
     if (!data?.session?.user) return
 
-    const { perfil } = await consultarPerfil(data.session.user.id).catch(() => ({ perfil: null }))
+    const { perfil, error } = await consultarPerfil(data.session.user.id).catch((fallo) => ({ perfil: null, error: fallo }))
 
     if (perfil) {
       marcarSesionAbierta()
       void recordarPerfil(perfil)
       setUser(perfil)
+      return
+    }
+
+    // El servidor respondió que ya no tiene acceso: fuera, y sin perfil guardado.
+    if (!esFalloDeRed(error)) {
+      await olvidarPerfil()
+      borrarMarcaDeSesion()
+      setUser(null)
     }
   }, [])
 
@@ -499,7 +516,11 @@ export function AuthProvider({ children }) {
         necesita al servidor y el perfil no está confirmado.
       */
       if (user.sinConexion) {
-        return permission === PERMISSIONS.POS && (user.role === "admin" || concedePermiso(user.permissions, permission))
+        return (
+          permission === PERMISSIONS.POS &&
+          perfilSigueVigente(user) &&
+          (user.role === "admin" || concedePermiso(user.permissions, permission))
+        )
       }
 
       if (user.role === "admin") {

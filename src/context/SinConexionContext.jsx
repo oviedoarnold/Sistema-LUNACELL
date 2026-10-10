@@ -13,6 +13,7 @@ import { ESTADOS, guardarVenta, marcar, ventasDelUsuario, ventasNoConfirmadas } 
 import { codigoCorto, idDelDispositivo } from "../lib/sinConexion/dispositivo"
 import { exportarCifrado } from "../lib/sinConexion/exportacion"
 import { pedirAlmacenamientoPersistente } from "../lib/sinConexion/persistencia"
+import { perfilSigueVigente } from "../lib/sinConexion/perfilLocal"
 import { crearSincronizador } from "../lib/sinConexion/sincronizador"
 import { construirVentaLocal } from "../lib/sinConexion/venta"
 
@@ -315,6 +316,10 @@ export function SinConexionProvider({
       if (!almacen) throw new Error(apertura.error || "El almacén local no está disponible.")
       if (!ubicacionId) throw new Error("No tienes una ubicación operativa asignada.")
 
+      if (!perfilSigueVigente(user, ahora())) {
+        throw new Error("Tu sesión sin conexión venció: conéctate e inicia sesión para seguir vendiendo.")
+      }
+
       const venta = construirVentaLocal({
         copia,
         sesion: { empresaId, usuarioAuth: authId, ubicacionId },
@@ -332,7 +337,7 @@ export function SinConexionProvider({
 
       return guardada
     },
-    [almacen, apertura.error, ubicacionId, copia, empresaId, authId, dispositivo, ahora, refrescarLocal]
+    [almacen, apertura.error, ubicacionId, user, copia, empresaId, authId, dispositivo, ahora, refrescarLocal]
   )
 
   const disponibleDe = useCallback(

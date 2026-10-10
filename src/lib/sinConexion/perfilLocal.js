@@ -68,6 +68,19 @@ export async function leerPerfilLocal(almacen, authId, { ahora = () => new Date(
   }
 }
 
+/*
+  Un perfil sin conexión vale VIGENCIA_DEL_PERFIL_HORAS desde la última
+  confirmación del servidor, también con la aplicación abierta: no hace
+  falta recargar para que deje de servir.
+*/
+export function perfilSigueVigente(perfil, ahora = new Date()) {
+  if (!perfil?.sinConexion) return true
+
+  const edad = ahora.getTime() - Date.parse(perfil.confirmadoEn)
+
+  return edad >= 0 && edad <= VIGENCIA_DEL_PERFIL_HORAS * HORA
+}
+
 export function borrarPerfilLocal(almacen) {
   return almacen.transaccion(["meta"], "readwrite", (t) => t.borrar("meta", LLAVE))
 }
