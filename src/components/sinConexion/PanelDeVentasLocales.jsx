@@ -67,7 +67,8 @@ function detalleDe(venta) {
 
 function PanelDeVentasLocales({ estado, onCerrar, onVerComprobante }) {
   const [respaldoAbierto, setRespaldoAbierto] = useState(false)
-  const { ventas, sinConfirmar, sincronizarAhora, sincronizando, exportarRespaldo } = estado
+  const { ventas, sinConfirmar, sincronizarAhora, sincronizando, exportarRespaldo, ventasDeOtrosUsuarios = 0, puedeRespaldarTodo } = estado
+  const hayQueRespaldar = sinConfirmar > 0 || (puedeRespaldarTodo && ventasDeOtrosUsuarios > 0)
   const ordenadas = [...ventas].reverse()
 
   if (respaldoAbierto) {
@@ -79,7 +80,7 @@ function PanelDeVentasLocales({ estado, onCerrar, onVerComprobante }) {
       <button type="button" className="btn btn-ghost" onClick={onCerrar}>
         Cerrar
       </button>
-      <button type="button" className="btn btn-secondary" onClick={() => setRespaldoAbierto(true)} disabled={sinConfirmar === 0}>
+      <button type="button" className="btn btn-secondary" onClick={() => setRespaldoAbierto(true)} disabled={!hayQueRespaldar}>
         Respaldo cifrado
       </button>
       <button type="button" className="btn btn-primary" onClick={() => sincronizarAhora()} disabled={sincronizando}>
@@ -90,6 +91,16 @@ function PanelDeVentasLocales({ estado, onCerrar, onVerComprobante }) {
 
   return (
     <ModalShell titulo="Ventas sin conexión de este teléfono" onCerrar={onCerrar} ancho="modal-lg" acciones={acciones}>
+      {ventasDeOtrosUsuarios > 0 && (
+        <p className="estado-sin-conexion-aviso" role="note">
+          Hay {ventasDeOtrosUsuarios} {ventasDeOtrosUsuarios === 1 ? "venta" : "ventas"} de otro usuario en este teléfono.
+          Se enviarán cuando ese usuario vuelva a entrar con conexión.{" "}
+          {puedeRespaldarTodo
+            ? "Como administrador, puedes incluirlas en el respaldo cifrado."
+            : "Si no puede hacerlo, un administrador puede respaldarlas desde este teléfono."}
+        </p>
+      )}
+
       {ordenadas.length === 0 ? (
         <p>No hay ventas sin conexión en este teléfono.</p>
       ) : (

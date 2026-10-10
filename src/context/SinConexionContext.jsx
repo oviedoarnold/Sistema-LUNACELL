@@ -121,9 +121,20 @@ export function SinConexionProvider({
     let sigue = true
     const dueno = { empresaId, usuarioAuth: authId, ubicacionId }
 
-    Promise.all([ventasDelUsuario(almacen, dueno), ubicacionId ? leerCopia(almacen, dueno) : null])
-      .then(([ventas, copia]) => {
-        if (sigue) setLocal({ clave: claveDelDueno, ventas, copia: copia || null })
+    Promise.all([
+      ventasDelUsuario(almacen, dueno),
+      ubicacionId ? leerCopia(almacen, dueno) : null,
+      ventasNoConfirmadas(almacen),
+    ])
+      .then(([ventas, copia, delTelefono]) => {
+        /*
+          Las de otros usuarios del teléfono no se muestran ni se mezclan:
+          solo se cuentan, para avisar y para que un administrador pueda
+          respaldarlas si su dueño no puede volver a entrar.
+        */
+        const otros = delTelefono.filter((v) => v.usuarioAuth !== authId).length
+
+        if (sigue) setLocal({ clave: claveDelDueno, ventas, copia: copia || null, otros })
       })
       .catch(() => {})
 
@@ -135,6 +146,7 @@ export function SinConexionProvider({
   const vigente = local !== null && local.clave === claveDelDueno
   const ventas = useMemo(() => (vigente ? local.ventas : []), [vigente, local])
   const copia = vigente ? local.copia : null
+  const ventasDeOtrosUsuarios = vigente ? local.otros : 0
 
   // ── copia local ────────────────────────────────────────
   const [errorDeCopia, setErrorDeCopia] = useState("")
@@ -329,7 +341,19 @@ export function SinConexionProvider({
         ...datos,
       })
 
-      const guardada = await guardarVenta(almacen, venta)
+      let guardada
+      try {
+        guardada = await guardarVenta(almacen, venta)
+      } catch (error) {
+        if (error?.name === "QuotaExceededError") {
+          throw new Error(
+            "El teléfono no tiene espacio para guardar la venta. Libera espacio y vuelve a intentarlo: las ventas ya guardadas siguen a salvo.",
+            { cause: error }
+          )
+        }
+
+        throw error
+      }
 
       refrescarLocal()
 
@@ -401,6 +425,8 @@ export function SinConexionProvider({
       ),
       sinConfirmar: sinConfirmar.length,
       ventasDeOtraUbicacion: sinConfirmar.filter((v) => v.ubicacionId !== ubicacionId).length,
+      ventasDeOtrosUsuarios,
+      puedeRespaldarTodo: esAdmin,
       sincronizando,
       ultimaSincronizacion,
       errorDeSincronizacion,
@@ -424,6 +450,8 @@ export function SinConexionProvider({
     persistencia,
     ventas,
     ubicacionId,
+    ventasDeOtrosUsuarios,
+    esAdmin,
     sincronizando,
     ultimaSincronizacion,
     errorDeSincronizacion,
