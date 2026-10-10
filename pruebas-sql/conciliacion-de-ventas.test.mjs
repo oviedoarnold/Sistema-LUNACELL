@@ -11,12 +11,13 @@
 
 import { describe, it, expect, beforeAll, afterAll } from "vitest"
 
-import { levantarBase, enDosSesiones } from "./arnes.mjs"
+import { levantarBase, enDosSesiones, consultarComo } from "./arnes.mjs"
 import { crearVendedor, contar } from "./fixtures.mjs"
 import {
   escenarioSinConexion,
   ventaSinConexion,
   sincronizar,
+  rescatar,
   conciliar,
   fallo,
   existencia,
@@ -122,6 +123,99 @@ describe("aplicar una venta con el reloj desfasado", () => {
     expect(r.motivo).toBe("reloj-desfasado")
     expect(segundos(v.fecha, venta.registrada_en)).toBeLessThan(1)
     expect(Math.abs(v.desfase_segundos - 7200)).toBeLessThan(30)
+  })
+})
+
+/*
+  Una venta conciliada tiene que quedar igual que la misma venta hecha en
+  línea: importes, impuesto, redondeo, estado, documento, detalle,
+  movimientos y existencia. Lo único distinto es lo que la conciliación
+  conserva a propósito (origen y trazabilidad).
+*/
+describe("equivalencia con la venta en línea", () => {
+  const camposComparables = (v) => ({
+    subtotal: Number(v.subtotal),
+    isv: Number(v.isv),
+    tasa_isv: Number(v.tasa_isv),
+    total: Number(v.total),
+    estado: v.estado,
+    es_fiscal: v.es_fiscal,
+    cai_emision: v.cai_emision,
+    rango_desde_emision: v.rango_desde_emision,
+    rango_hasta_emision: v.rango_hasta_emision,
+    fecha_limite_emision_emision: v.fecha_limite_emision_emision,
+    forma_pago: v.forma_pago,
+    ubicacion_id: v.ubicacion_id,
+    usuario_id: v.usuario_id,
+    nombre_cliente: v.nombre_cliente,
+    rtn_comprador: v.rtn_comprador,
+    formato_numero: v.numero_factura.replace(/\d/g, "9"),
+  })
+
+  // La misma venta por el POS en línea, como el vendedor.
+  const ventaEnLinea = async (esc, renglones) =>
+    (
+      await consultarComo(db, esc.vendedor.authId, "select registrar_venta_ubicacion($1::jsonb, 'contado') as r", [
+        JSON.stringify(renglones.map((r) => ({ producto_id: r.producto_id, cantidad: r.cantidad }))),
+      ])
+    ).rows[0].r.venta_id
+
+  const detalleDe = async (id) =>
+    (await db.query("select producto_id, cantidad, precio::numeric as precio, subtotal::numeric as subtotal from detalle_venta where venta_id = $1 order by producto_id", [id])).rows
+  const salidasDe = async (id) =>
+    (await db.query("select producto_id, ubicacion_id, usuario_id, tipo, cantidad from movimientos_inventario where venta_id = $1 order by producto_id", [id])).rows
+
+  it("6b. una venta conciliada queda igual que la misma venta en línea", async () => {
+    const esc = await escenarioSinConexion(db, { enCamion1: 20 })
+    const renglones = [
+      { producto_id: esc.cargador.id, codigo: esc.cargador.codigo, nombre: "Cargador", cantidad: 3, precio_unitario: 100 },
+      { producto_id: esc.cubo.id, codigo: esc.cubo.codigo, nombre: "Cubo Iphone", cantidad: 1, precio_unitario: 50 },
+    ]
+    const enLinea = await ventaEnLinea(esc, renglones)
+    const desfasada = ventaSinConexion(esc, {
+      renglones,
+      registrada_en: new Date(Date.now() - 2 * 3600000 - 60000).toISOString(),
+      reloj_dispositivo: new Date(Date.now() - 2 * 3600000).toISOString(),
+    })
+    const r = await sincronizar(db, esc.vendedor.authId, desfasada)
+    const conciliada = await conciliar(db, esc.admin.authId, r.conciliacion_id, "aplicar")
+
+    const a = await fila("ventas", enLinea)
+    const b = await fila("ventas", conciliada.venta_id)
+
+    expect(camposComparables(b)).toEqual(camposComparables(a))
+    expect(Number(b.correlativo)).toBe(Number(a.correlativo) + 1)
+    expect((await detalleDe(b.id)).map(({ producto_id, cantidad, precio, subtotal }) => [producto_id, cantidad, precio, subtotal]))
+      .toEqual((await detalleDe(a.id)).map(({ producto_id, cantidad, precio, subtotal }) => [producto_id, cantidad, precio, subtotal]))
+    expect((await salidasDe(b.id)).map(({ venta_id, ...m }) => m)).toEqual((await salidasDe(a.id)).map(({ venta_id, ...m }) => m))
+    expect(await existencia(db, esc.camion1, esc.cargador.id)).toBe(14)
+    expect(await existencia(db, esc.camion1, esc.cubo.id)).toBe(2)
+  })
+
+  it("6c. el mismo producto en dos renglones queda en una sola línea, como en línea", async () => {
+    const esc = await escenarioSinConexion(db)
+    const linea = { producto_id: esc.cargador.id, codigo: esc.cargador.codigo, nombre: "Cargador", cantidad: 1, precio_unitario: 100 }
+    await db.query("update productos set precio = 120 where id = $1", [esc.cargador.id])
+    const r = await sincronizar(db, esc.vendedor.authId, ventaSinConexion(esc, { renglones: [linea, linea] }))
+
+    const aplicada = await conciliar(db, esc.admin.authId, r.conciliacion_id, "aplicar")
+    const detalle = await detalleDe(aplicada.venta_id)
+
+    expect(detalle).toHaveLength(1)
+    expect(detalle[0]).toMatchObject({ cantidad: 2 })
+    expect(Number(detalle[0].subtotal)).toBe(200)
+  })
+
+  it("6d. una venta de una ubicación fiscal no se aplica como documento interno", async () => {
+    const esc = await escenarioSinConexion(db)
+    await db.query("update ubicaciones set emite_fiscal = true where id = $1", [esc.tienda])
+    const r = await rescatar(db, esc.admin.authId, ventaSinConexion(esc, { ubicacion_id: esc.tienda }))
+
+    const error = await fallo(conciliar(db, esc.admin.authId, r.conciliacion_id, "aplicar"))
+    const anulada = await conciliar(db, esc.admin.authId, r.conciliacion_id, "anular", "Se emitirá por el procedimiento fiscal")
+
+    expect(error.code).toBe("CV007")
+    expect(anulada.estado).toBe("anulada")
   })
 })
 
