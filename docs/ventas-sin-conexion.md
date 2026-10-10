@@ -2,8 +2,8 @@
 
 El servidor (OFF-1.1, migraciones 0027–0029) ya acepta ventas hechas sin
 conexión de forma idempotente y manda a conciliación las que no cuadran. Este
-documento describe la otra mitad: lo que corre en el teléfono. La pantalla del
-POS que lo usa llega en OFF-1.3. **Ninguna ubicación está habilitada**
+documento describe la otra mitad: lo que corre en el teléfono (motor, OFF-1.2)
+y su integración con el POS y la conciliación (OFF-1.3). **Ninguna ubicación está habilitada**
 (`ubicaciones.vende_sin_conexion = false` en todas).
 
 Orden previsto de activación (OFF-1.4): Camión 01 → Camión 02 → Lunacell
@@ -130,3 +130,89 @@ una fecha dada. Esa limpieza es opcional y la decide OFF-1.3.
   código corto del dispositivo y el correlativo es local.
 - No usa ni reserva correlativos del CAI.
 - El número de factura real lo asigna el servidor al registrar.
+
+## Integración con el POS (OFF-1.3)
+
+La guía de uso para vendedores y administradores está en
+[guia-ventas-sin-conexion.md](guia-ventas-sin-conexion.md).
+
+### Piezas
+
+| Archivo | Qué hace |
+|---|---|
+| `src/context/SinConexionContext.jsx` | Une motor, sesión y pantalla: comprueba que el servidor responda, descarga la copia local, sincroniza sola y a mano, guarda ventas, exporta el respaldo, pide almacenamiento persistente y avisa si hay una versión nueva del almacén. Sin este proveedor, el POS funciona solo en línea, exactamente como antes. |
+| `src/lib/api/copiaSinConexion.js` | Descarga la copia de la ubicación del vendedor con las mismas consultas que usa la aplicación. Trae catálogo, existencias y clientes solo si la ubicación está habilitada. Nunca habilita una ubicación fiscal. |
+| `src/lib/sinConexion/perfilLocal.js` y `sesionSinConexion.js` | Perfil para entrar al POS sin conexión. |
+| `src/lib/sinConexion/rescate.js` | Rescate administrativo: validación, duplicados y la respuesta `rechazado`. |
+| `src/lib/api/conciliacion.js` | Ventas por conciliar, `conciliar_venta` y la auditoría de rescates. |
+| `src/pages/POS.jsx` y `src/components/sinConexion/` | Modo sin conexión del POS, comprobante provisional, barra de estado, ventas del teléfono y respaldo cifrado. |
+| `src/pages/Conciliacion.jsx` y `src/components/conciliacion/` | Pantalla administrativa en `/reconciliation`, solo para administradores. |
+
+### Cuándo el POS vende sin conexión
+
+Se cumplen las dos condiciones:
+
+- **No hay servidor:** `navigator.onLine` es falso, `/auth/v1/health` no
+  responde, o la sesión es el perfil sin conexión.
+- **La copia local permite vender:** la ubicación tiene `vende_sin_conexion`,
+  está activa, vende y no es fiscal.
+
+Sin servidor y sin habilitación, el POS bloquea la venta y explica por qué. Con
+servidor, el POS es el de siempre.
+
+### Entrar sin conexión
+
+Sin red, Supabase no puede renovar el token y la sesión se ve vacía. Para que el
+vendedor pueda entrar, cada vez que el servidor confirma su perfil se guarda lo
+mínimo:
+
+- empresa;
+- usuario;
+- ubicación;
+- rol y permisos.
+
+No se guarda el correo. Ese perfil se usa solo si:
+
+- el navegador todavía guarda la sesión del **mismo** usuario (Supabase la borra
+  al cerrar sesión o si el servidor la revoca), y
+- el servidor **no respondió** (falta de red). Si respondió que no hay perfil,
+  no se usa.
+
+Con ese perfil (`sinConexion: true`) solo se abre el POS y las demás pantallas
+quedan ocultas. Vence a los 7 días de la última confirmación y se borra al
+cerrar sesión. Para **enviar** ventas hace falta una sesión real del mismo
+usuario: el sincronizador la pide a Supabase y el servidor vuelve a comprobarla.
+Al volver la conexión, el perfil se confirma solo.
+
+### Venta en línea sin respuesta
+
+`crearVenta` distingue "sin respuesta" (red caída o tiempo agotado) de un
+rechazo. Con la ubicación habilitada, el POS ofrece dos opciones:
+
+- **Reintentar** con la misma clave: es idempotente.
+- **Guardar sin conexión:** la venta local lleva `claveEnLinea`. Antes de
+  enviarla, el sincronizador busca esa clave en `ventas`. Si el intento en línea
+  se registró, la venta local queda **registrada con esa factura y no se
+  envía**. Si no se puede comprobar, espera. Nunca se envía a ciegas.
+
+El vendedor ve las ventas de su ubicación (0029), que es donde quedó el intento.
+
+### Copia local
+
+- Se descarga con servidor, como máximo cada 15 minutos.
+- Se descarga además al cambiar de usuario o de ubicación, después de cada venta
+  en línea y después de sincronizar ventas.
+- `tomadaEn` se fija antes de descargar, para no dejar sin descontar una venta
+  confirmada durante la descarga.
+
+### Límites conocidos
+
+- **Venta en línea interrumpida y reasignación de ubicación:** si el vendedor
+  cambia de ubicación antes de sincronizar, la verificación no ve la venta
+  original. La venta local llega al servidor y queda en conciliación ("ubicación
+  cambiada"); el administrador la anula si estaba duplicada.
+- **Entrar sin conexión:** solo funciona si el usuario ya entró con conexión en
+  ese teléfono durante los últimos 7 días.
+- **Navegador y PWA:** valen los límites de arriba (almacenamiento que el
+  navegador puede borrar, sin sincronización en segundo plano). Por eso existen
+  el respaldo cifrado y los avisos al cerrar sesión.
