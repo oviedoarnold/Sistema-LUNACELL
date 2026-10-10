@@ -18,6 +18,9 @@
   - Cada venta se toma y se suelta en una transacción que mira su estado
     actual: si otra pestaña la confirmó mientras tanto, no se reenvía ni
     retrocede.
+  - Al terminar una ronda con servidor, se pregunta en qué quedaron las
+    ventas en conciliación todavía sin decisión (`consultarConciliaciones`).
+    Si la consulta falla no pasa nada: se pregunta en la próxima ronda.
   - Una venta guardada tras un intento en línea sin respuesta (`claveEnLinea`)
     no se envía a ciegas: antes se pregunta al servidor por esa clave
     (`verificarEnLinea`). Si el intento se registró, la venta queda
@@ -26,7 +29,15 @@
 */
 import { conCandado } from "./candado"
 import { clasificarError, clasificarRespuesta } from "./clasificar"
-import { ESTADOS, marcar, recuperarInterrumpidas, soltarEnvio, tomarParaEnvio, ventasDelUsuario } from "./cola"
+import {
+  ESTADOS,
+  guardarResoluciones,
+  marcar,
+  recuperarInterrumpidas,
+  soltarEnvio,
+  tomarParaEnvio,
+  ventasDelUsuario,
+} from "./cola"
 
 export const LIMITE_DE_ENVIO = 30000
 
@@ -64,7 +75,26 @@ export function crearSincronizador({
   locks,
   limiteDeEnvio = LIMITE_DE_ENVIO,
   verificarEnLinea,
+  consultarConciliaciones,
 }) {
+  async function anotarResoluciones(sesion) {
+    if (!consultarConciliaciones) return
+
+    const sinDecision = (await ventasDelUsuario(almacen, sesion))
+      .filter((v) => v.estado === ESTADOS.EN_CONCILIACION)
+      .filter((v) => !["aplicada", "anulada"].includes(v.conciliacion?.estado))
+      .map((v) => v.clave)
+
+    if (sinDecision.length === 0) return
+
+    try {
+      const { data, error } = await consultarConciliaciones(sinDecision)
+      if (!error && Array.isArray(data)) await guardarResoluciones(almacen, data)
+    } catch {
+      // Se vuelve a preguntar en la próxima ronda.
+    }
+  }
+
   /*
     Lo que responde el servidor por una venta. Para una que nace de un
     intento en línea sin respuesta, primero se pregunta por ese intento.
@@ -172,6 +202,8 @@ export function crearSincronizador({
         break
       }
     }
+
+    if (!resumen.detenidoPor) await anotarResoluciones(sesion)
 
     const despues = await ventasDelUsuario(almacen, sesion)
     resumen.pendientes = despues.filter((v) => v.estado === ESTADOS.PENDIENTE).length

@@ -165,6 +165,32 @@ export function soltarEnvio(almacen, clave, cambios) {
 }
 
 /*
+  Lo que decidió un administrador sobre las ventas en conciliación de este
+  teléfono (ventas_por_conciliar: estado, resuelta_en, venta_id). La venta
+  sigue «en conciliación» (el servidor ya la tenía); solo se anota la
+  decisión, para mostrarla y para que el disponible deje de restarla cuando
+  la copia ya la refleje.
+*/
+export function guardarResoluciones(almacen, filas) {
+  return almacen.transaccion(["ventas"], "readwrite", async (t) => {
+    let anotadas = 0
+
+    for (const fila of filas || []) {
+      const venta = await t.leer("ventas", fila.clave_idempotencia)
+      if (!venta || venta.estado !== ESTADOS.EN_CONCILIACION) continue
+
+      await t.poner("ventas", {
+        ...venta,
+        conciliacion: { estado: fila.estado, resueltaEn: fila.resuelta_en ?? null, ventaId: fila.venta_id ?? null },
+      })
+      anotadas += 1
+    }
+
+    return anotadas
+  })
+}
+
+/*
   Lo que quedó «sincronizando» porque la app se cerró o el teléfono se
   reinició a mitad de un envío vuelve a pendiente. Se reenvía con la misma
   clave: si el servidor ya la tenía, responde «ya registrada».

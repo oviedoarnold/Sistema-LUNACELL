@@ -28,13 +28,21 @@ export const leerCopia = (almacen, dueno) => almacen.leer("copias", idDeCopia(du
   todavía no refleja.
 
   - pendiente, sincronizando, error: el servidor aún no la descontó;
-  - en conciliación: el servidor no la aplicó, pero el producto ya salió;
+  - en conciliación: el servidor no la aplicó, pero el producto ya salió.
+    Se resta mientras un administrador no decida; si decidió (aplicar o
+    anular) ANTES de tomar la copia, la copia ya refleja esa decisión y no
+    se resta otra vez;
   - registrada: ya está en el servidor; solo se resta si se confirmó después
     de tomar la copia (la copia es anterior y no la incluye).
 
   Otros dispositivos de la misma ubicación pueden haber vendido sin que este
   lo sepa: eso lo resuelve el servidor al sincronizar (conciliación).
 */
+const DECISIONES = new Set(["aplicada", "anulada"])
+
+const decididaAntesDe = (venta, momento) =>
+  DECISIONES.has(venta.conciliacion?.estado) && Date.parse(venta.conciliacion.resueltaEn) <= momento
+
 export function disponibleLocal(copia, ventas, productoId) {
   const existencia = Number(copia.existencias?.[productoId] ?? 0)
   const tomadaEn = Date.parse(copia.tomadaEn)
@@ -42,6 +50,7 @@ export function disponibleLocal(copia, ventas, productoId) {
   const comprometido = ventas
     .filter((v) => mismoDueno(v, copia))
     .filter((v) => v.estado !== "registrada" || Date.parse(v.confirmadaEn) > tomadaEn)
+    .filter((v) => !(v.estado === "en_conciliacion" && decididaAntesDe(v, tomadaEn)))
     .flatMap((v) => v.renglones)
     .filter((r) => r.producto_id === productoId)
     .reduce((suma, r) => suma + Number(r.cantidad), 0)

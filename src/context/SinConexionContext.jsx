@@ -5,7 +5,7 @@ import { PERMISSIONS } from "./permissions"
 import { useAuth } from "../hooks/useAuth"
 import { supabase } from "../lib/supabase"
 import { descargarCopia } from "../lib/api/copiaSinConexion"
-import { crearEnvio, crearVerificacionEnLinea } from "../lib/api/ventasSinConexion"
+import { crearConsultaDeConciliaciones, crearEnvio, crearVerificacionEnLinea } from "../lib/api/ventasSinConexion"
 import { almacenDeLaApp, EVENTO_DE_VERSION } from "../lib/sinConexion/almacenDeLaApp"
 import { crearProgramador, hayServidor } from "../lib/sinConexion/conectividad"
 import { antiguedadDeCopia, disponibleLocal, guardarCopia, leerCopia } from "../lib/sinConexion/copiaLocal"
@@ -184,6 +184,7 @@ export function SinConexionProvider({
       almacen,
       enviar: crearEnvio(cliente, ahora),
       verificarEnLinea: crearVerificacionEnLinea(cliente),
+      consultarConciliaciones: crearConsultaDeConciliaciones(cliente),
       ahora,
       locks,
       /*
@@ -394,7 +395,10 @@ export function SinConexionProvider({
       ventas,
       pendientes: cuenta((v) => v.estado === ESTADOS.PENDIENTE || v.estado === ESTADOS.SINCRONIZANDO),
       conError: cuenta((v) => v.estado === ESTADOS.ERROR),
-      enConciliacion: cuenta((v) => v.estado === ESTADOS.EN_CONCILIACION),
+      // Solo las que esperan una decisión: las ya aplicadas o anuladas no.
+      enConciliacion: cuenta(
+        (v) => v.estado === ESTADOS.EN_CONCILIACION && !["aplicada", "anulada"].includes(v.conciliacion?.estado)
+      ),
       sinConfirmar: sinConfirmar.length,
       ventasDeOtraUbicacion: sinConfirmar.filter((v) => v.ubicacionId !== ubicacionId).length,
       sincronizando,

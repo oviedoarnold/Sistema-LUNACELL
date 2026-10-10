@@ -27,10 +27,29 @@ const ESTADO_DE_VENTA = {
   error: { texto: "Error", variante: "overdue", Icono: FaExclamationCircle },
 }
 
+// Una venta en conciliación sobre la que un administrador ya decidió.
+const DECIDIDA = {
+  aplicada: { texto: "Aplicada en conciliación", variante: "ok", Icono: FaCheckCircle },
+  anulada: { texto: "Anulada en conciliación", variante: "neutral", Icono: FaBalanceScale },
+}
+
+const estadoVisible = (venta) =>
+  (venta.estado === "en_conciliacion" && DECIDIDA[venta.conciliacion?.estado]) ||
+  ESTADO_DE_VENTA[venta.estado] ||
+  ESTADO_DE_VENTA.pendiente
+
 
 function detalleDe(venta) {
   if (venta.estado === "registrada") {
     return venta.numeroFactura ? `Factura ${venta.numeroFactura}` : "Registrada"
+  }
+
+  if (venta.estado === "en_conciliacion" && venta.conciliacion?.estado === "aplicada") {
+    return "Un administrador la aplicó: ya está en los libros del servidor."
+  }
+
+  if (venta.estado === "en_conciliacion" && venta.conciliacion?.estado === "anulada") {
+    return "Un administrador la anuló. Si crees que es un error, consúltalo con él."
   }
 
   if (venta.estado === "en_conciliacion") {
@@ -94,7 +113,7 @@ function PanelDeVentasLocales({ estado, onCerrar, onVerComprobante }) {
 
             <tbody>
               {ordenadas.map((venta) => {
-                const { texto, variante, Icono } = ESTADO_DE_VENTA[venta.estado] || ESTADO_DE_VENTA.pendiente
+                const { texto, variante, Icono } = estadoVisible(venta)
 
                 return (
                   <tr key={venta.clave}>

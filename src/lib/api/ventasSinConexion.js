@@ -70,6 +70,21 @@ export function crearRescate(supabase) {
 }
 
 /*
+  En qué quedaron las ventas de este vendedor que están en conciliación. El
+  vendedor solo ve las suyas (0027, ventas_por_conciliar_lectura).
+*/
+export function crearConsultaDeConciliaciones(supabase) {
+  return async (claves) => {
+    const { data, error, status } = await supabase
+      .from("ventas_por_conciliar")
+      .select("clave_idempotencia, estado, resuelta_en, venta_id")
+      .in("clave_idempotencia", claves)
+
+    return { data: data ?? null, error, status }
+  }
+}
+
+/*
   ¿Se registró el intento en línea con esta clave? Lo pregunta el
   sincronizador antes de enviar una venta que nació de un intento sin
   respuesta. El vendedor ve las ventas de su ubicación (0029), que es donde
