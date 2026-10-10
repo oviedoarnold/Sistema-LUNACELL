@@ -392,3 +392,20 @@ describe("POS sin conexión en una ubicación sin autorización", () => {
     expect(screen.getByRole("button", { name: /generar factura/i })).toBeDisabled()
   })
 })
+
+describe("venta guardada tras un intento en línea que no se registró", () => {
+  it("se envía como venta sin conexión y lleva en la nota la clave del intento, para revisar duplicados", async () => {
+    await renderPOS({ fallarEn: { registrar_venta_ubicacion: { code: "", message: "TypeError: Failed to fetch" } } })
+    await esperarCopia()
+
+    Swal.fire.mockResolvedValueOnce({ isConfirmed: false, isDenied: true, isDismissed: false })
+    agregar("Martillo de uña")
+    fireEvent.click(screen.getByRole("button", { name: /generar factura/i }))
+    await waitFor(() => expect(screen.getByText("COMPROBANTE PROVISIONAL")).toBeInTheDocument())
+
+    await devolverConexion()
+
+    await waitFor(() => expect(servidor.recibidas).toHaveLength(1))
+    expect(servidor.recibidas[0].p_nota).toMatch(/^Intento en línea sin respuesta: \S+/)
+  })
+})

@@ -129,6 +129,16 @@ describe("ventas por conciliar", () => {
     expect(within(detalle).getByText(/solo hay 1 en camión 01 \(LV007\)/i)).toBeInTheDocument()
   })
 
+  it("muestra la nota de la venta, que avisa si nació de un intento en línea sin respuesta", async () => {
+    await renderConciliacion({
+      tablasExtra: { ventas_por_conciliar: [porConciliar({ nota: "Intento en línea sin respuesta: mf2abc-1234" })] },
+    })
+
+    fireEvent.click(await screen.findByRole("button", { name: /revisar prov-disp-000001/i }))
+
+    expect(within(screen.getByRole("dialog")).getByText("Intento en línea sin respuesta: mf2abc-1234")).toBeInTheDocument()
+  })
+
   it("exige el motivo antes de llamar al servidor", async () => {
     await renderConciliacion()
     fireEvent.click(await screen.findByRole("button", { name: /revisar prov-disp-000001/i }))

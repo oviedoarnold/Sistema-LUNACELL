@@ -252,3 +252,24 @@ describe("revocaciones y vencimiento del perfil sin conexión", () => {
     expect(vista.result.current.hasPermission("pos")).toBe(false)
   })
 })
+
+describe("datos del teléfono al cerrar sesión", () => {
+  it("borra la copia local del usuario (clientes, precios) pero conserva sus ventas sin sincronizar", async () => {
+    await entrarConConexion()
+    const { almacenDeLaApp } = await import("../lib/sinConexion/almacenDeLaApp")
+    const almacen = await almacenDeLaApp()
+    await almacen.transaccion(["copias", "ventas"], "readwrite", async (t) => {
+      await t.poner("copias", { id: `${EMPRESA}|auth-vendedor|camion-01`, usuarioAuth: "auth-vendedor", clientes: [{ nombre: "Ferremax" }] })
+      await t.poner("copias", { id: `${EMPRESA}|auth-otro|camion-02`, usuarioAuth: "auth-otro", clientes: [] })
+      await t.poner("ventas", { clave: "off-dispositivo-0001-aaaa", usuarioAuth: "auth-vendedor", estado: "pendiente" })
+    })
+    const { vista } = await abrirSinRed()
+
+    await act(() => vista.result.current.logout())
+
+    const { almacenDeLaApp: abrirOtraVez } = await import("../lib/sinConexion/almacenDeLaApp")
+    const despues = await abrirOtraVez()
+    expect((await despues.todos("copias")).map((c) => c.usuarioAuth)).toEqual(["auth-otro"])
+    expect(await despues.leer("ventas", "off-dispositivo-0001-aaaa")).toMatchObject({ estado: "pendiente" })
+  })
+})
