@@ -54,4 +54,15 @@ describe("RPC sincronizar_venta_sin_conexion", () => {
     expect(rpc).toHaveBeenCalledWith("sincronizar_venta_sin_conexion", expect.objectContaining({ p_clave_idempotencia: venta.clave }))
     expect(r).toEqual({ data: { estado: "registrada" }, error: null, status: 200 })
   })
+
+  it("pasa la señal de corte a la consulta para poder abortarla", async () => {
+    const abortSignal = vi.fn(() => Promise.resolve({ data: { estado: "registrada" }, error: null, status: 200 }))
+    const rpc = vi.fn(() => ({ abortSignal }))
+    const control = new AbortController()
+
+    const r = await crearEnvio({ rpc })(venta, { signal: control.signal })
+
+    expect(abortSignal).toHaveBeenCalledWith(control.signal)
+    expect(r.status).toBe(200)
+  })
 })

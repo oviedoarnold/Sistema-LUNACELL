@@ -240,3 +240,94 @@ describe("clasificar los errores", () => {
     expect(clasificarError({ code: "40001" }, 500)).toBe("temporal")
   })
 })
+
+/*
+  Regresiones de la revisión del PR #44: un envío que nunca responde y un
+  candado de respaldo que vence a mitad de una ronda.
+*/
+describe("envíos que no responden y candado vencido", () => {
+  async function pestana({ navegador, enviar, ahora, limiteDeEnvio }) {
+    const almacen = await navegador.abrir()
+    const copia = copiaDePrueba()
+    await guardarCopia(almacen, copia)
+    const id = await idDelDispositivo(almacen)
+    const sincronizador = crearSincronizador({
+      almacen,
+      enviar,
+      sesionActual: async () => sesionDe(),
+      ahora,
+      locks: null,
+      limiteDeEnvio,
+    })
+    const vender = () =>
+      guardarVenta(
+        almacen,
+        construirVentaLocal({
+          copia,
+          sesion: sesionDe(),
+          dispositivo: id,
+          carrito: [{ productoId: CARGADOR.id, cantidad: 1 }],
+          ahora: ahoraDePrueba(),
+        })
+      )
+
+    return { almacen, sincronizador, vender, estados: async () => (await ventasDe(almacen, DUENO)).map((v) => v.estado) }
+  }
+
+  it("un envío colgado se corta por tiempo: la venta queda pendiente, se aborta la petición y el candado se libera", async () => {
+    const servidor = crearServidorFalso({ existencias: { [CARGADOR.id]: 10 } })
+    let colgar = true
+    let senal = null
+    const enviar = (venta, opciones) => {
+      if (!colgar) return servidor.enviar(venta)
+      senal = opciones?.signal
+      return new Promise(() => {})
+    }
+    const t = await pestana({ navegador: nuevoNavegador(), enviar, ahora: ahoraDePrueba, limiteDeEnvio: 20 })
+    await t.vender()
+
+    const primera = await t.sincronizador.sincronizar()
+
+    expect(primera.detenidoPor).toBe("red")
+    expect(senal?.aborted).toBe(true)
+    expect(await t.estados()).toEqual([ESTADOS.PENDIENTE])
+
+    colgar = false
+    const segunda = await t.sincronizador.sincronizar()
+
+    expect(segunda.omitido).toBeUndefined()
+    expect(await t.estados()).toEqual([ESTADOS.REGISTRADA])
+    expect(servidor.registradas().length).toBe(1)
+  })
+
+  it("si otra pestaña toma el candado vencido, la ronda vieja no revienta ni retrocede ventas confirmadas", async () => {
+    const servidor = crearServidorFalso({ existencias: { [CARGADOR.id]: 10 } })
+    const navegador = nuevoNavegador()
+    let reloj = Date.parse("2026-10-10T12:00:00.000Z")
+    const ahora = () => new Date(reloj)
+    let soltar
+    let retener = true
+    const enviarLento = (venta) => {
+      if (!retener) return servidor.enviar(venta)
+      retener = false
+      return new Promise((r) => (soltar = r)).then(() => servidor.enviar(venta))
+    }
+    const a = await pestana({ navegador, enviar: enviarLento, ahora, limiteDeEnvio: 60000 })
+    const b = await pestana({ navegador, enviar: (v) => servidor.enviar(v), ahora, limiteDeEnvio: 60000 })
+    await a.vender()
+    await a.vender()
+
+    const rondaA = a.sincronizador.sincronizar()
+    while (!soltar) await new Promise((r) => setTimeout(r, 0))
+
+    reloj += 61000
+    const rondaB = await b.sincronizador.sincronizar()
+    soltar()
+    const resultadoA = await rondaA
+
+    expect(rondaB.omitido).toBeUndefined()
+    expect(resultadoA.omitido).toBeUndefined()
+    expect(await a.estados()).toEqual([ESTADOS.REGISTRADA, ESTADOS.REGISTRADA])
+    expect(servidor.registradas().length).toBe(2)
+  })
+})
