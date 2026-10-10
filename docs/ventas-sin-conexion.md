@@ -112,6 +112,11 @@ una fecha dada. Esa limpieza es opcional y la decide OFF-1.3.
 - **Llave:** se deriva de una frase de al menos 10 caracteres con PBKDF2-SHA-256
   (310 000 iteraciones), usando una sal aleatoria por archivo.
 - **La frase:** no se guarda en ningún lado.
+- **Importar valida antes de calcular:**
+  - antes de derivar la llave, comprueba el formato, el algoritmo y las iteraciones (entero entre 310 000 y 1 000 000);
+  - comprueba también la sal (16 bytes), el iv (12 bytes), los datos en base64 y el tamaño del archivo (20 MB como máximo);
+  - un archivo manipulado se rechaza con un mensaje claro y nunca congela el navegador;
+  - importar solo lee: no toca la cola del teléfono.
 - **Exportar no borra:** las ventas siguen en el teléfono hasta que el
   servidor las confirme.
 - **Rescate:** un administrador lo sube con `rescatar_venta_sin_conexion`.
