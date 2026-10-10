@@ -190,10 +190,10 @@ begin
     cai_emision, rango_desde_emision, rango_hasta_emision, fecha_limite_emision_emision,
     nota, clave_idempotencia,
     origen, dispositivo, numero_provisional, registrada_en, recibida_en,
-    reloj_dispositivo, reloj_corregido, huella_origen
+    reloj_dispositivo, desfase_segundos, huella_origen
   ) values (
     v_c.empresa_id, v_cliente, v_c.usuario_id, v_c.ubicacion_id,
-    v_numero, v_correlativo, false, v_c.fecha,
+    v_numero, v_correlativo, false, v_c.registrada_en,
     coalesce(nullif(v_c.nombre_cliente, ''), 'Consumidor Final'), v_c.rtn_comprador,
     v_subtotal, v_isv, v_c.tasa_isv, v_total,
     v_c.forma_pago, case when v_credito then v_c.fecha_vencimiento end,
@@ -201,7 +201,7 @@ begin
     '', null, null, null,
     v_c.nota, v_c.clave_idempotencia,
     'conciliacion', v_c.dispositivo, v_c.numero_provisional, v_c.registrada_en, v_c.recibida_en,
-    v_c.reloj_dispositivo, v_c.reloj_corregido, v_c.huella
+    v_c.reloj_dispositivo, v_c.desfase_segundos, v_c.huella
   )
   returning id into v_venta;
 

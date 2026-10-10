@@ -62,10 +62,10 @@ revoke execute on function public.ubicaciones_sin_conexion_solo_admin() from pub
 -- TRAZABILIDAD EN LAS VENTAS
 -- ─────────────────────────────────────────────────────────
 /*
-  En una venta sin conexión `fecha` es la hora real de la venta (validada,
-  y corregida si el reloj del teléfono estaba desfasado). Se conservan
-  además la hora que declaró el teléfono, la de su reloj al enviar y la de
-  llegada al servidor. Los movimientos de inventario conservan la hora en
+  En una venta sin conexión `fecha` es la hora que declaró el teléfono,
+  nunca una calculada. Se conservan además la hora de su reloj al enviar,
+  la de llegada al servidor y el desfase entre las dos; un desfase
+  importante no se corrige solo: la venta va a conciliación. Los movimientos de inventario conservan la hora en
   que se registraron: el libro no se reescribe.
 
   La huella resume el contenido original: un reenvío con la misma clave y
@@ -81,7 +81,7 @@ alter table public.ventas add column if not exists numero_provisional text;
 alter table public.ventas add column if not exists registrada_en timestamptz;
 alter table public.ventas add column if not exists recibida_en timestamptz;
 alter table public.ventas add column if not exists reloj_dispositivo timestamptz;
-alter table public.ventas add column if not exists reloj_corregido boolean not null default false;
+alter table public.ventas add column if not exists desfase_segundos integer;
 alter table public.ventas add column if not exists huella_origen text;
 
 -- ─────────────────────────────────────────────────────────
@@ -111,8 +111,7 @@ create table if not exists public.ventas_por_conciliar (
   registrada_en       timestamptz not null,
   reloj_dispositivo   timestamptz,
   recibida_en         timestamptz not null default now(),
-  fecha               timestamptz not null,
-  reloj_corregido     boolean not null default false,
+  desfase_segundos    integer,
 
   forma_pago          text not null check (forma_pago in ('contado', 'credito')),
   cliente_id          uuid,
@@ -126,7 +125,7 @@ create table if not exists public.ventas_por_conciliar (
 
   motivo              text not null check (motivo in (
                         'usuario-inactivo', 'sin-permiso', 'ubicacion-cambiada',
-                        'ubicacion-no-habilitada', 'fecha-fuera-de-rango', 'precio-distinto',
+                        'ubicacion-no-habilitada', 'fecha-fuera-de-rango', 'reloj-desfasado', 'precio-distinto',
                         'existencia-insuficiente', 'producto-invalido', 'cliente-invalido',
                         'rescate', 'otro-negocio')),
   codigo              text,
@@ -175,14 +174,14 @@ begin
 
   if (new.id, new.empresa_id, new.clave_idempotencia, new.huella, new.usuario_id, new.usuario_auth,
       new.ubicacion_id, new.dispositivo, new.numero_provisional, new.registrada_en,
-      new.reloj_dispositivo, new.recibida_en, new.fecha, new.reloj_corregido, new.forma_pago,
+      new.reloj_dispositivo, new.recibida_en, new.desfase_segundos, new.forma_pago,
       new.cliente_id, new.nombre_cliente, new.rtn_comprador, new.fecha_vencimiento, new.nota,
       new.renglones, new.tasa_isv, new.total_cobrado, new.motivo, new.codigo, new.detalle,
       new.recibida_por, new.rescatada_por)
      is distinct from
      (old.id, old.empresa_id, old.clave_idempotencia, old.huella, old.usuario_id, old.usuario_auth,
       old.ubicacion_id, old.dispositivo, old.numero_provisional, old.registrada_en,
-      old.reloj_dispositivo, old.recibida_en, old.fecha, old.reloj_corregido, old.forma_pago,
+      old.reloj_dispositivo, old.recibida_en, old.desfase_segundos, old.forma_pago,
       old.cliente_id, old.nombre_cliente, old.rtn_comprador, old.fecha_vencimiento, old.nota,
       old.renglones, old.tasa_isv, old.total_cobrado, old.motivo, old.codigo, old.detalle,
       old.recibida_por, old.rescatada_por) then
@@ -463,8 +462,7 @@ create or replace function public.guardar_venta_por_conciliar(
   p_empresa       uuid,
   p_usuario       uuid,
   p_huella        text,
-  p_fecha         timestamptz,
-  p_corregido     boolean,
+  p_desfase       integer,
   p_motivo        text,
   p_codigo        text,
   p_detalle       text,
@@ -478,7 +476,7 @@ set search_path = ''
 as $$
   insert into public.ventas_por_conciliar (
     empresa_id, clave_idempotencia, huella, usuario_id, usuario_auth, ubicacion_id,
-    dispositivo, numero_provisional, registrada_en, reloj_dispositivo, fecha, reloj_corregido,
+    dispositivo, numero_provisional, registrada_en, reloj_dispositivo, desfase_segundos,
     forma_pago, cliente_id, nombre_cliente, rtn_comprador, fecha_vencimiento, nota,
     renglones, tasa_isv, total_cobrado, motivo, codigo, detalle, recibida_por, rescatada_por
   )
@@ -486,7 +484,7 @@ as $$
     p_empresa, p_venta->>'clave', p_huella, p_usuario, (p_venta->>'usuario_auth')::uuid,
     (p_venta->>'ubicacion_id')::uuid, p_venta->>'dispositivo', p_venta->>'numero_provisional',
     (p_venta->>'registrada_en')::timestamptz, (p_venta->>'reloj_dispositivo')::timestamptz,
-    p_fecha, p_corregido, p_venta->>'forma_pago', (p_venta->>'cliente_id')::uuid,
+    p_desfase, p_venta->>'forma_pago', (p_venta->>'cliente_id')::uuid,
     btrim(coalesce(p_venta->>'nombre_cliente', '')), btrim(coalesce(p_venta->>'rtn_comprador', '')),
     (p_venta->>'fecha_vencimiento')::date, coalesce(p_venta->>'nota', ''),
     p_venta->'renglones', (p_venta->>'tasa_isv')::numeric, (p_venta->>'total_cobrado')::numeric,
@@ -499,7 +497,7 @@ revoke execute on function
   public.venta_sin_conexion_invalida(jsonb, uuid),
   public.huella_venta_sin_conexion(jsonb),
   public.venta_sin_conexion_existente(uuid, text, text),
-  public.guardar_venta_por_conciliar(jsonb, uuid, uuid, text, timestamptz, boolean, text, text, text, text, uuid)
+  public.guardar_venta_por_conciliar(jsonb, uuid, uuid, text, integer, text, text, text, text, uuid)
 from public, anon, authenticated;
 
 -- ─────────────────────────────────────────────────────────
@@ -549,9 +547,7 @@ declare
   v_huella    text;
   v_previa    jsonb;
   v_ubic      record;
-  v_desfase   interval;
-  v_fecha     timestamptz;
-  v_corregido boolean := false;
+  v_desfase   integer;
   v_motivo    text;
   v_codigo    text;
   v_detalle   text;
@@ -608,18 +604,11 @@ begin
   end if;
 
   /*
-    El reloj del teléfono: si al enviar difería más de 10 minutos del
-    servidor, se supone que difería igual al vender y se corrige la fecha.
-    La hora declarada se guarda sin tocar.
+    El reloj del teléfono: cuánto difería del servidor al enviar. La fecha
+    oficial es siempre la declarada; si el desfase pasa de 10 minutos no se
+    adivina cuál era la hora real: la venta va a conciliación.
   */
-  v_desfase := now() - p_reloj_dispositivo;
-
-  if abs(extract(epoch from v_desfase)) > 600 then
-    v_fecha := p_registrada_en + v_desfase;
-    v_corregido := true;
-  else
-    v_fecha := p_registrada_en;
-  end if;
+  v_desfase := round(extract(epoch from now() - p_reloj_dispositivo))::integer;
 
   select vende_sin_conexion, activa, vende into v_ubic from ubicaciones where id = p_ubicacion_id;
 
@@ -629,8 +618,9 @@ begin
     when v_usuario.ubicacion_id is distinct from p_ubicacion_id then 'ubicacion-cambiada'
     when not (v_ubic.vende_sin_conexion and v_ubic.activa and v_ubic.vende) then 'ubicacion-no-habilitada'
     when p_registrada_en > p_reloj_dispositivo + interval '1 minute'
-      or v_fecha > now() + interval '10 minutes'
-      or v_fecha < now() - interval '7 days' then 'fecha-fuera-de-rango'
+      or p_registrada_en > now() + interval '10 minutes'
+      or p_registrada_en < now() - interval '7 days' then 'fecha-fuera-de-rango'
+    when abs(v_desfase) > 600 then 'reloj-desfasado'
     when p_cliente_id is not null and not exists (
       select 1 from clientes c where c.id = p_cliente_id and c.empresa_id = v_usuario.empresa_id
     ) then 'cliente-invalido'
@@ -670,14 +660,14 @@ begin
       end if;
 
       update ventas
-         set fecha              = v_fecha,
+         set fecha              = p_registrada_en,
              origen             = 'sin_conexion',
              dispositivo        = p_dispositivo,
              numero_provisional = p_numero_provisional,
              registrada_en      = p_registrada_en,
              recibida_en        = now(),
              reloj_dispositivo  = p_reloj_dispositivo,
-             reloj_corregido    = v_corregido,
+             desfase_segundos   = v_desfase,
              huella_origen      = v_huella
        where id = (v_resultado->>'venta_id')::uuid;
 
@@ -706,13 +696,14 @@ begin
     when 'ubicacion-cambiada' then 'El vendedor ya no está asignado a la ubicación de la venta'
     when 'ubicacion-no-habilitada' then 'La ubicación no está habilitada para vender sin conexión'
     when 'fecha-fuera-de-rango' then 'La fecha de la venta está fuera del rango aceptado'
+    when 'reloj-desfasado' then 'El reloj del teléfono difería más de 10 minutos del servidor'
     when 'cliente-invalido' then 'El cliente de la venta no existe en la empresa'
     when 'producto-invalido' then 'Uno de los productos no existe o está inactivo'
     when 'precio-distinto' then 'El precio o el impuesto cambiaron desde la venta'
   end);
 
   v_id := guardar_venta_por_conciliar(
-    v_venta, v_usuario.empresa_id, v_usuario.id, v_huella, v_fecha, v_corregido,
+    v_venta, v_usuario.empresa_id, v_usuario.id, v_huella, v_desfase,
     v_motivo, v_codigo, v_detalle, 'vendedor', null);
 
   return jsonb_build_object(
@@ -731,8 +722,8 @@ end $$;
   no sea administrador, no lanza: responde `rechazado` con el código, y el
   rechazo queda escrito.
 
-  La fecha no se corrige por el reloj: el archivo pudo viajar días antes de
-  subirse, así que el desfase no diría nada.
+  No se mide el desfase del reloj: el archivo pudo viajar días antes de
+  subirse, así que no diría nada.
 */
 create or replace function public.rescatar_venta_sin_conexion(
   p_clave_idempotencia text,
@@ -801,7 +792,7 @@ begin
         v_respuesta := v_previa;
       else
         v_id := guardar_venta_por_conciliar(
-          v_venta, v_admin.empresa_id, v_vendedor, v_huella, p_registrada_en, false,
+          v_venta, v_admin.empresa_id, v_vendedor, v_huella, null,
           'rescate', null, 'Subida por un administrador desde el teléfono del vendedor',
           'rescate', v_admin.id);
 
