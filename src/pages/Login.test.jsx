@@ -31,16 +31,27 @@ async function renderLogin() {
     permisos: permisosDe("u-1", ["dashboard"]),
   })
 
-  falso.auth.signInWithPassword.mockImplementation(({ email, password }) => {
+  // La contraseña la comprueba la función de acceso (USR-1), no el navegador.
+  falso.functions.invoke.mockImplementation((nombre, { body }) => {
+    const ident = String(body.identificador || "").trim().toLowerCase()
     const cuenta = CUENTAS.find(
-      (c) => c.email === email && c.password === password
+      (c) => (c.email === ident || c.usuario === ident) && c.password === body.contrasena
     )
 
     return Promise.resolve(
       cuenta
-        ? { data: { user: { id: cuenta.id, email } }, error: null }
-        : { data: { user: null }, error: { message: "credenciales" } }
+        ? { data: { access_token: `tok:${cuenta.id}`, refresh_token: "renovar" }, error: null }
+        : {
+            data: null,
+            error: { name: "FunctionsHttpError", context: { json: async () => ({ error: "Usuario o contraseña incorrectos." }) } },
+          }
     )
+  })
+
+  falso.auth.setSession.mockImplementation(({ access_token }) => {
+    const cuenta = CUENTAS.find((c) => `tok:${c.id}` === access_token)
+
+    return Promise.resolve({ data: { user: { id: cuenta.id, email: cuenta.email }, session: {} }, error: null })
   })
 
   const { AuthProvider } = await import("../context/AuthContext")

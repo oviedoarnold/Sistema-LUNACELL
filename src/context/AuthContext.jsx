@@ -8,6 +8,14 @@ import {
 import { AuthContext } from "./contexts"
 import { supabase } from "../lib/supabase"
 import { marcarSesionAbierta, borrarMarcaDeSesion } from "../lib/marcaDeSesion"
+import {
+  iniciarSesionConUsuario,
+  crearEmpleado,
+  restablecerContrasena,
+  cambiarContrasena,
+  desbloquearUsuario,
+  guardarPermisosDeUsuario,
+} from "../lib/api/acceso"
 
 import {
   PERMISSIONS,
@@ -25,7 +33,7 @@ import {
 async function cargarPerfil(authId) {
   const { data, error } = await supabase
     .from("usuarios")
-    .select("id, empresa_id, email, nombre, rol, activo, ubicacion_id")
+    .select("id, empresa_id, email, nombre, nombre_usuario, rol, activo, ubicacion_id, debe_cambiar_contrasena")
     .eq("auth_id", authId)
     .eq("activo", true)
     .maybeSingle()
@@ -43,9 +51,26 @@ async function cargarPerfil(authId) {
     ...data,
     name: data.nombre,
     role: data.rol,
+    username: data.nombre_usuario || "",
     locationId: data.ubicacion_id || "",
+    /*
+      Mientras sea true la base no le deja operar (0026): la pantalla solo le
+      pide cambiar la contraseña temporal.
+    */
+    debeCambiar: Boolean(data.debe_cambiar_contrasena),
+    authId,
     permissions: (filas || []).map((f) => f.seccion),
   }
+}
+
+const NOMBRE_DE_USUARIO = /^[a-z0-9._-]{3,30}$/
+
+/* Solo un bloqueo que todavía no vence cuenta como bloqueo. */
+function bloqueoVigente(fila) {
+  const bloqueo = Array.isArray(fila.bloqueos_de_acceso) ? fila.bloqueos_de_acceso[0] : fila.bloqueos_de_acceso
+  const hasta = bloqueo?.bloqueado_hasta
+
+  return hasta && new Date(hasta) > new Date() ? hasta : null
 }
 
 /*
@@ -79,14 +104,18 @@ async function traerUsuariosDeLaEmpresa() {
 
   const { data } = await supabase
     .from("usuarios")
-    .select("id, email, nombre, rol, activo, entro_en, ubicacion_id, permisos_usuario(seccion)")
+    .select(
+      "id, email, nombre, nombre_usuario, rol, activo, entro_en, ubicacion_id, debe_cambiar_contrasena, permisos_usuario(seccion), bloqueos_de_acceso(bloqueado_hasta)"
+    )
     .order("nombre")
 
   return (data || []).map((fila) => ({
     id: fila.id,
     email: fila.email,
     name: fila.nombre,
-    username: fila.email,
+    username: fila.nombre_usuario || "",
+    debeCambiar: Boolean(fila.debe_cambiar_contrasena),
+    bloqueadoHasta: bloqueoVigente(fila),
     role: fila.rol,
     locationId: fila.ubicacion_id || "",
     active: fila.activo,
@@ -166,18 +195,28 @@ export function AuthProvider({ children }) {
     }
   }, [])
 
-  const login = useCallback(async (email, password) => {
+  /*
+    Con nombre de usuario o con correo. La contraseña se comprueba en la
+    función de acceso, que lleva la cuenta de intentos y bloquea a los
+    cinco: el navegador nunca habla directo con Supabase Auth para entrar.
+  */
+  const login = useCallback(async (identificador, password) => {
     if (!supabase) {
       return { ok: false, mensaje: "Falta configurar la conexión." }
     }
 
-    const { data, error } = await supabase.auth.signInWithPassword({
-      email: String(email || "").trim().toLowerCase(),
-      password,
-    })
+    let tokens
 
-    if (error) {
-      return { ok: false, mensaje: "Correo o contraseña incorrectos." }
+    try {
+      tokens = await iniciarSesionConUsuario(String(identificador || "").trim(), password)
+    } catch (error) {
+      return { ok: false, mensaje: error.message }
+    }
+
+    const { data, error } = await supabase.auth.setSession(tokens)
+
+    if (error || !data?.user) {
+      return { ok: false, mensaje: "No se pudo iniciar sesión. Intenta de nuevo." }
     }
 
     const perfil = await cargarPerfil(data.user.id)
@@ -239,68 +278,72 @@ export function AuthProvider({ children }) {
     }
   }, [user])
 
-  const guardarPermisos = useCallback(
-    async (usuarioId, secciones) => {
-      await supabase
-        .from("permisos_usuario")
-        .delete()
-        .eq("usuario_id", usuarioId)
-
-      if (!secciones.length) {
-        return
-      }
-
-      await supabase.from("permisos_usuario").insert(
-        secciones.map((seccion) => ({
-          usuario_id: usuarioId,
-          empresa_id: user.empresa_id,
-          seccion,
-        }))
-      )
-    },
-    [user]
-  )
-
   /*
-    Con Supabase Auth no se crean contraseñas desde aquí: se invita por
-    correo y la persona se registra con esa misma dirección. Un trigger
-    en la base la vincula a la empresa al hacerlo.
+    La identidad la crea la función de acceso con una contraseña temporal
+    individual, que se devuelve aquí una sola vez para que el administrador
+    se la entregue al empleado. No se guarda en ninguna parte.
   */
   const addUser = useCallback(
-    async ({ name, email, role = "vendedor", permissions = [], active = true, locationId = "" }) => {
-      const correo = String(email || "").trim().toLowerCase()
+    async ({ name, username, email, role = "vendedor", permissions = [], active = true, locationId = "" }) => {
       const nombre = String(name || "").trim()
+      const usuario = String(username || "").trim().toLowerCase()
+      const correo = String(email || "").trim().toLowerCase()
 
       if (!nombre) throw new Error("El nombre es obligatorio.")
+      if (!NOMBRE_DE_USUARIO.test(usuario)) {
+        throw new Error(
+          "El nombre de usuario debe tener de 3 a 30 caracteres: minúsculas, números, punto, guion o guion bajo."
+        )
+      }
       if (!correo.includes("@")) throw new Error("Escribe un correo válido.")
 
-      const { data, error } = await supabase
-        .from("usuarios")
-        .insert({
-          empresa_id: user.empresa_id,
-          email: correo,
-          nombre,
-          rol: role,
-          activo: active,
-          ubicacion_id: locationId || null,
-        })
-        .select("id")
-        .single()
-
-      if (error) {
-        throw new Error(motivoDelUsuario(error, "crear el usuario"))
-      }
-
-      await guardarPermisos(
-        data.id,
-        role === "admin" ? ADMIN_PERMISSIONS : permissions
-      )
+      const { contrasena_temporal: temporal } = await crearEmpleado({
+        nombre,
+        usuario,
+        email: correo,
+        rol: role,
+        secciones: role === "admin" ? ADMIN_PERMISSIONS : permissions,
+        ubicacion: locationId || null,
+        activo: active,
+      })
 
       await recargarUsuarios()
 
-      return data
+      return temporal
     },
-    [user, guardarPermisos, recargarUsuarios]
+    [recargarUsuarios]
+  )
+
+  /* Contraseña temporal nueva: la anterior deja de servir y hay que cambiarla. */
+  const resetUserPassword = useCallback(
+    async (id) => {
+      const { contrasena_temporal: temporal } = await restablecerContrasena(id)
+
+      await recargarUsuarios()
+
+      return temporal
+    },
+    [recargarUsuarios]
+  )
+
+  /* Limpia el bloqueo por intentos; no cambia la contraseña ni reactiva. */
+  const unlockUser = useCallback(
+    async (id) => {
+      await desbloquearUsuario(id)
+      await recargarUsuarios()
+    },
+    [recargarUsuarios]
+  )
+
+  const changePassword = useCallback(
+    async (actual, nueva) => {
+      await cambiarContrasena(actual, nueva)
+
+      // Con la exigencia levantada, la base vuelve a dejarle operar.
+      const perfil = await cargarPerfil(user.authId)
+      if (perfil) setUser(perfil)
+    },
+    [user]
   )
 
   const updateUser = useCallback(
@@ -322,22 +365,11 @@ export function AuthProvider({ children }) {
       }
 
       if (permissions !== undefined || role !== undefined) {
-        await guardarPermisos(
+        await guardarPermisosDeUsuario(
           id,
           role === "admin" ? ADMIN_PERMISSIONS : permissions || []
         )
       }
-
-      await recargarUsuarios()
-    },
-    [guardarPermisos, recargarUsuarios]
-  )
-
-  const deleteUser = useCallback(
-    async (id) => {
-      const { error } = await supabase.from("usuarios").delete().eq("id", id)
-
-      if (error) throw new Error("No se pudo eliminar el usuario.")
 
       await recargarUsuarios()
     },
@@ -389,8 +421,10 @@ export function AuthProvider({ children }) {
       users: user ? users : [],
       addUser,
       updateUser,
-      deleteUser,
       setUserActive,
+      resetUserPassword,
+      unlockUser,
+      changePassword,
       getUserById,
 
       permissions: PERMISSIONS,
@@ -408,8 +442,10 @@ export function AuthProvider({ children }) {
       users,
       addUser,
       updateUser,
-      deleteUser,
       setUserActive,
+      resetUserPassword,
+      unlockUser,
+      changePassword,
       getUserById,
     ]
   )

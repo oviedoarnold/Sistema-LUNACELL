@@ -531,7 +531,7 @@ describe("administración de usuarios", () => {
     })
 
     await expect(
-      result.current.addUser({ name: "  ", email: "x@y.test" })
+      result.current.addUser({ name: "  ", username: "alguien", email: "x@y.test" })
     ).rejects.toThrow(/nombre/i)
   })
 
@@ -541,7 +541,7 @@ describe("administración de usuarios", () => {
     })
 
     await expect(
-      result.current.addUser({ name: "Alguien", email: "no-es-correo" })
+      result.current.addUser({ name: "Alguien", username: "alguien", email: "no-es-correo" })
     ).rejects.toThrow(/correo/i)
   })
 
