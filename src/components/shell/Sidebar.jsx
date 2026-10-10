@@ -1,7 +1,9 @@
 import { NavLink, useNavigate } from "react-router-dom"
+import Swal from "sweetalert2"
 import { FaSignOutAlt, FaTimes } from "react-icons/fa"
 
 import { useAuth } from "../../hooks/useAuth"
+import { useSinConexion } from "../../hooks/useSinConexion"
 import LogoLunacell from "../LogoLunacell"
 import { GRUPOS_DEL_MENU } from "./menuDelPanel"
 
@@ -25,15 +27,41 @@ import { GRUPOS_DEL_MENU } from "./menuDelPanel"
   elegir su color. El logo oficial no se recolorea.
 */
 function Sidebar({ abierto = false, onCerrar = () => {} }) {
-  const { user, logout, hasPermission } = useAuth()
+  const { user, logout, hasPermission, isAdmin } = useAuth()
+  const sinConexion = useSinConexion()
   const navigate = useNavigate()
 
   const gruposVisibles = GRUPOS_DEL_MENU.map((grupo) => ({
     ...grupo,
-    modulos: grupo.modulos.filter((modulo) => hasPermission(modulo.permiso)),
+    modulos: grupo.modulos.filter((modulo) => hasPermission(modulo.permiso) && (!modulo.soloAdmin || isAdmin)),
   })).filter((grupo) => grupo.modulos.length > 0)
 
+  /*
+    Con ventas guardadas solo en el teléfono, cerrar sesión no las borra,
+    pero se avisa: se envían cuando ese usuario vuelva a entrar con
+    conexión, y sin conexión no podrá volver a entrar hasta que vuelva.
+  */
+  const confirmarSalida = async () => {
+    const sinConfirmar = sinConexion?.sinConfirmar || 0
+
+    if (sinConfirmar === 0) return true
+
+    const sinServidor = sinConexion.conexion !== "en_linea"
+    const respuesta = await Swal.fire({
+      icon: "warning",
+      title: "Hay ventas sin sincronizar",
+      text: `Tienes ${sinConfirmar} ${sinConfirmar === 1 ? "venta guardada" : "ventas guardadas"} solo en este teléfono. No se borran: se enviarán cuando vuelvas a entrar con tu usuario y haya conexión.${sinServidor ? " Sin conexión no podrás volver a entrar hasta que vuelva." : ""} Si vas a entregar el teléfono, guarda antes un respaldo cifrado.`,
+      showCancelButton: true,
+      confirmButtonText: "Cerrar sesión igual",
+      cancelButtonText: "Volver",
+    })
+
+    return respuesta.isConfirmed
+  }
+
   const cerrarSesion = async () => {
+    if (!(await confirmarSalida())) return
+
     await logout()
     navigate("/login")
   }

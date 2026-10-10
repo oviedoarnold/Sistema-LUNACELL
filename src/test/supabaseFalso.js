@@ -276,6 +276,11 @@ export function crearSupabaseFalso({
   fallarEn = {},
   fallarAlmacenamiento = {},
   funciones = {},
+  /*
+    RPC que una prueba quiere simular por su cuenta (por ejemplo las del
+    modo sin conexión): { nombre: (argumentos, { datos, sesion }) => respuesta }.
+  */
+  rpcsExtra = {},
 } = {}) {
   const datos = JSON.parse(JSON.stringify(tablas))
   let sesion = sesionInicial
@@ -1140,6 +1145,13 @@ export function crearSupabaseFalso({
     from: vi.fn(consulta),
 
     rpc: vi.fn((nombre, argumentos = {}) => {
+      if (rpcsExtra[nombre]) {
+        const falla = fallaDe(nombre, "rpc")
+        if (falla) return Promise.resolve({ data: null, error: falla })
+
+        return Promise.resolve(rpcsExtra[nombre](argumentos, { datos, sesion }))
+      }
+
       if (nombre === "guardar_permisos_usuario") {
         const falla = fallaDe(nombre, "rpc")
         if (falla) return Promise.resolve({ data: null, error: falla })

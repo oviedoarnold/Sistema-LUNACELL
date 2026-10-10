@@ -1,4 +1,5 @@
 import { supabase } from "../supabase"
+import { clasificarError } from "../sinConexion/clasificar"
 
 /*
   Acceso a facturas y abonos.
@@ -207,7 +208,7 @@ export class ErrorDeVenta extends Error {
 export async function crearVenta(venta, { clave = null } = {}) {
   const esCredito = venta.paymentType === "credito"
 
-  const { data, error } = await supabase.rpc("registrar_venta_ubicacion", {
+  const { data, error, status } = await supabase.rpc("registrar_venta_ubicacion", {
     p_items: (venta.items || []).map((item) => ({
       producto_id: item.productId ?? item.id,
       cantidad: Number(item.qty ?? item.quantity),
@@ -231,6 +232,19 @@ export async function crearVenta(venta, { clave = null } = {}) {
     */
     if (motivo) {
       throw new ErrorDeVenta(error.message, motivo, error.code)
+    }
+
+    /*
+      Sin respuesta no se sabe si la venta quedó registrada: no es lo mismo
+      que un rechazo. Reintentar con la misma clave es seguro; registrarla
+      de otra forma no, hasta saber qué pasó.
+    */
+    if (clasificarError(error, status) === "red") {
+      throw new ErrorDeVenta(
+        "No hubo respuesta del servidor: la venta pudo haberse registrado o no.",
+        "sin-respuesta",
+        error.code || ""
+      )
     }
 
     fallo(error, "registrar la venta")

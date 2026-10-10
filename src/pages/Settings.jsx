@@ -571,6 +571,32 @@ function Settings() {
       text: `Entrégale a ${nombre} esta contraseña temporal: ${temporal} — Solo se muestra esta vez. Al entrar deberá cambiarla.`,
     })
 
+  /*
+    Si el vendedor trabaja en una ubicación que vende sin conexión, puede
+    tener ventas guardadas en su teléfono. Cambiarle la ubicación antes de
+    que sincronice manda esas ventas a conciliación («ubicación cambiada»):
+    se avisa antes, sin impedirlo.
+  */
+  const confirmarCambioDeUbicacion = async () => {
+    const anterior = users.find((u) => String(u.id) === String(userForm.id))
+    const ubicacionAnterior = ubicacionesActivas.find((u) => u.id === anterior?.locationId)
+
+    if (!anterior?.locationId || anterior.locationId === userForm.locationId || !ubicacionAnterior?.offline) {
+      return true
+    }
+
+    const respuesta = await Swal.fire({
+      icon: "warning",
+      title: "¿Cambiar la ubicación de este usuario?",
+      text: `«${ubicacionAnterior.name}» vende sin conexión. Si ${anterior.name} tiene ventas sin sincronizar en su teléfono, al llegar quedarán en conciliación y habrá que revisarlas. Lo ideal es que sincronice antes del cambio.`,
+      showCancelButton: true,
+      confirmButtonText: "Cambiar igual",
+      cancelButtonText: "Volver",
+    })
+
+    return respuesta.isConfirmed
+  }
+
   const saveUser = async (
     event
   ) => {
@@ -582,6 +608,10 @@ function Settings() {
         : userForm.permissions
 
     try {
+      if (isEditingUser && !(await confirmarCambioDeUbicacion())) {
+        return
+      }
+
       if (isEditingUser) {
         await updateUser(userForm.id, {
           name: userForm.name,

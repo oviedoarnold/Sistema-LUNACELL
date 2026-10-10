@@ -1,0 +1,162 @@
+/*
+  Modo sin conexión (OFF-1.3): barra de estado del POS, comprobante
+  provisional y pantalla de conciliación.
+
+  El estado nunca depende solo del color: cada indicador lleva texto e
+  icono.
+*/
+
+.solo-lector {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* ── barra de estado del POS ── */
+.estado-sin-conexion {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 16px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: #fff;
+  box-shadow: var(--shadow-sm);
+}
+
+.estado-sin-conexion-fila {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 14px;
+}
+
+.estado-sin-conexion-acciones {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-left: auto;
+}
+
+.estado-conexion,
+.estado-pendientes {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.estado-conexion {
+  padding: 4px 10px;
+  border-radius: 20px;
+}
+
+.estado-conexion.is-en-linea {
+  background: var(--teal-light);
+  color: var(--teal);
+}
+
+.estado-conexion.is-comprobando {
+  background: var(--table-header);
+  color: var(--steel);
+}
+
+.estado-conexion.is-sin-conexion {
+  background: var(--red-light);
+  color: #b23326;
+}
+
+.estado-pendientes {
+  color: var(--steel);
+}
+
+.estado-pendientes.hay {
+  color: #8a6104;
+}
+
+.estado-sin-conexion-nota {
+  margin: 0;
+  font-size: 13px;
+  color: var(--steel);
+}
+
+.estado-sin-conexion-aviso {
+  margin: 0;
+  padding: 8px 10px;
+  border-radius: var(--radius);
+  background: var(--amber-light);
+  color: #7a5a04;
+  font-size: 13.5px;
+}
+
+.estado-sin-conexion .alert-banner {
+  margin-bottom: 0;
+}
+
+/* ── modo sin conexión en la pantalla de venta ── */
+.pos-modo-sin-conexion {
+  border-left: 4px solid var(--amber);
+}
+
+/* ── comprobante provisional ── */
+.comprobante-provisional .inv-doc-label {
+  color: #b23326;
+}
+
+.comprobante-aviso {
+  margin: 12px 0;
+  padding: 10px 12px;
+  border: 2px dashed #b23326;
+  border-radius: var(--radius);
+  color: #b23326;
+  font-size: 14px;
+  text-align: center;
+}
+
+/* ── conciliación ── */
+.conciliacion-pestanas {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.conciliacion-detalle dl {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 6px 14px;
+  margin: 0 0 14px;
+}
+
+.conciliacion-detalle dt {
+  color: var(--steel);
+  font-size: 13px;
+}
+
+.conciliacion-detalle dd {
+  margin: 0;
+  font-weight: 600;
+}
+
+.conciliacion-resultado {
+  margin-top: 12px;
+}
+
+@media (max-width: 640px) {
+  .estado-sin-conexion-acciones {
+    margin-left: 0;
+    width: 100%;
+  }
+
+  .estado-sin-conexion-acciones .btn {
+    flex: 1 1 auto;
+  }
+}

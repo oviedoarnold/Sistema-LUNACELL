@@ -83,6 +83,7 @@ async function renderSettings({
         nombre: u.name,
         tipo: u.type || "camion",
         activa: u.active !== false,
+        vende_sin_conexion: u.offline === true,
         creada_en: "2026-01-01",
       })),
     },
@@ -566,5 +567,49 @@ describe("Settings: inventario y ubicación operativa", () => {
 
     expect(selector).toBeDisabled()
     expect(selector).toHaveValue("todas")
+  })
+})
+
+/*
+  Cambiar la ubicación de quien trabaja en una ubicación que vende sin
+  conexión: sus ventas sin sincronizar llegarían a conciliación. Se avisa
+  antes, sin impedirlo.
+*/
+describe("Settings: cambiar la ubicación de un vendedor que vende sin conexión", () => {
+  const VENDEDOR_CAMION = {
+    ...usuarioDePrueba({ id: "u-2", authId: "auth-2", nombre: "Chofer Camión 01", email: "chofer@ferreteria.test" }),
+    ubicacion_id: "u-c1",
+  }
+  const CON_CAMION_SIN_CONEXION = UBICACIONES.map((u) => (u.id === "u-c1" ? { ...u, offline: true } : u))
+
+  async function cambiarABodega() {
+    const falso = await renderSettings({ usuariosExtra: [VENDEDOR_CAMION], ubicaciones: CON_CAMION_SIN_CONEXION })
+    const fila = (await screen.findByText("Chofer Camión 01")).closest("tr")
+    fireEvent.click(within(fila).getByRole("button", { name: /editar/i }))
+    fireEvent.change(document.querySelector('.modal [name="locationId"]'), { target: { value: "u-bodega" } })
+    fireEvent.submit(document.querySelector("#form-usuario"))
+
+    return falso
+  }
+
+  it("avisa que sus ventas sin sincronizar irían a conciliación y, si se vuelve, no cambia nada", async () => {
+    const Swal = (await import("sweetalert2")).default
+    Swal.fire.mockClear()
+
+    const falso = await cambiarABodega()
+
+    await waitFor(() => expect(Swal.fire).toHaveBeenCalledWith(expect.objectContaining({ title: "¿Cambiar la ubicación de este usuario?" })))
+    expect(Swal.fire.mock.calls.at(-1)[0].text).toMatch(/vende sin conexión.*conciliación/)
+    expect(falso.datos.usuarios.find((u) => u.id === "u-2").ubicacion_id).toBe("u-c1")
+  })
+
+  it("si confirma, la cambia", async () => {
+    const Swal = (await import("sweetalert2")).default
+    Swal.fire.mockClear()
+    Swal.fire.mockResolvedValueOnce({ isConfirmed: true })
+
+    const falso = await cambiarABodega()
+
+    await waitFor(() => expect(falso.datos.usuarios.find((u) => u.id === "u-2").ubicacion_id).toBe("u-bodega"))
   })
 })

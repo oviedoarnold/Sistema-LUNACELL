@@ -28,6 +28,7 @@ export const config = {
     "/quotes",
     "/locations",
     "/settings",
+    "/reconciliation",
   ],
 }
 

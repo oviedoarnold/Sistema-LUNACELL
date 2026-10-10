@@ -1,4 +1,5 @@
 import {
+  FaBalanceScale,
   FaBox,
   FaBoxes,
   FaCashRegister,
@@ -154,6 +155,18 @@ export const GRUPOS_DEL_MENU = [
         label: "Configuración",
         Icono: FaCog,
         permiso: PERMISSIONS.SETTINGS,
+      },
+      /*
+        Conciliar y rescatar ventas sin conexión es solo de administradores
+        (la base lo exige). Se cuelga del permiso de Configuración, que es
+        el administrativo, y además solo se dibuja para un administrador.
+      */
+      {
+        to: "/reconciliation",
+        label: "Conciliación",
+        Icono: FaBalanceScale,
+        permiso: PERMISSIONS.SETTINGS,
+        soloAdmin: true,
       },
     ],
   },

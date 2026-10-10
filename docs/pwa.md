@@ -47,6 +47,16 @@ compartan el mismo inventario.
 - **Facturar, cobrar y consultar datos.** Todo pasa por PostgREST. Sin red la
   pantalla abre pero no hay con qué llenarla.
 
+**Actualización (OFF-1.3):**
+
+- Las ubicaciones habilitadas para vender sin conexión pueden facturar sin
+  Internet desde el POS.
+- La venta se guarda en el teléfono con un comprobante provisional y se
+  sincroniza sola al volver la conexión.
+- Ver [guia-ventas-sin-conexion.md](guia-ventas-sin-conexion.md) y
+  [ventas-sin-conexion.md](ventas-sin-conexion.md).
+- Las demás pantallas siguen necesitando conexión.
+
 Esto es un retroceso deliberado y no es el estado final. **Cobrar no debería
 depender del Internet**: un mostrador desconectado tiene que poder facturar, y que
 esa factura tarde unos minutos en aparecer en la computadora del dueño es

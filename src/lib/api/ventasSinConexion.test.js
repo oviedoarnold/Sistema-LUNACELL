@@ -1,7 +1,7 @@
 // @vitest-environment node
 import { describe, it, expect, vi } from "vitest"
 
-import { aParametrosDeSincronizacion, crearEnvio } from "./ventasSinConexion"
+import { aParametrosDeSincronizacion, aParametrosDeRescate, crearEnvio, crearRescate, crearVerificacionEnLinea } from "./ventasSinConexion"
 
 const venta = {
   clave: "off-dispositivo-1-0a0b",
@@ -64,5 +64,37 @@ describe("RPC sincronizar_venta_sin_conexion", () => {
 
     expect(abortSignal).toHaveBeenCalledWith(control.signal)
     expect(r.status).toBe(200)
+  })
+})
+
+describe("RPC rescatar_venta_sin_conexion", () => {
+  it("manda los parámetros del rescate con el lote, y la señal de corte", async () => {
+    const abortSignal = vi.fn(() => Promise.resolve({ data: { estado: "en_conciliacion" }, error: null, status: 200 }))
+    const rpc = vi.fn(() => ({ abortSignal }))
+    const control = new AbortController()
+
+    const r = await crearRescate({ rpc })(venta, "lote-7", { signal: control.signal })
+
+    expect(rpc).toHaveBeenCalledWith("rescatar_venta_sin_conexion", aParametrosDeRescate(venta, "lote-7"))
+    expect(abortSignal).toHaveBeenCalledWith(control.signal)
+    expect(r).toEqual({ data: { estado: "en_conciliacion" }, error: null, status: 200 })
+  })
+})
+
+describe("verificar un intento en línea", () => {
+  it("busca la venta por su clave de idempotencia y devuelve id y número", async () => {
+    const consulta = {
+      select: vi.fn(() => consulta),
+      eq: vi.fn(() => consulta),
+      maybeSingle: vi.fn(async () => ({ data: { id: "v-1", numero_factura: "F-1" }, error: null, status: 200 })),
+    }
+    const from = vi.fn(() => consulta)
+
+    const r = await crearVerificacionEnLinea({ from })("clave-en-linea-1")
+
+    expect(from).toHaveBeenCalledWith("ventas")
+    expect(consulta.select).toHaveBeenCalledWith("id, numero_factura")
+    expect(consulta.eq).toHaveBeenCalledWith("clave_idempotencia", "clave-en-linea-1")
+    expect(r).toEqual({ data: { id: "v-1", numero_factura: "F-1" }, error: null, status: 200 })
   })
 })

@@ -12,6 +12,7 @@
 @import "./config.css";
 @import "./receivables.css";
 @import "./pos.css";
+@import "./sinConexion.css";
 @import "./quotes.css";
 @import "./inventory.css";
 *{box-sizing:border-box;} html{scroll-behavior:smooth;}

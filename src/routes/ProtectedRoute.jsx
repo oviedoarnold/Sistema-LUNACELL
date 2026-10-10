@@ -31,12 +31,14 @@ function NoAccess() {
 
         <h2>Sin acceso</h2>
 
+        {/*
+          Con el perfil sin conexión solo se factura: decir que no tiene
+          ninguna sección sería falso.
+        */}
         <p className="sub">
-          {user?.name || "Tu usuario"}{" "}
-          no tiene ninguna sección
-          habilitada. Pídele al
-          administrador que te asigne
-          permisos.
+          {user?.sinConexion
+            ? "Sin conexión solo se puede facturar, y tu usuario no tiene permiso para el punto de venta. Vuelve a entrar cuando haya conexión."
+            : `${user?.name || "Tu usuario"} no tiene ninguna sección habilitada. Pídele al administrador que te asigne permisos.`}
         </p>
 
         <button

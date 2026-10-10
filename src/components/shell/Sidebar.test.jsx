@@ -81,7 +81,7 @@ const enlaces = () =>
 const TODOS = Object.values(PERMISSIONS)
 
 describe("Sidebar · permisos", () => {
-  it("el administrador ve los doce módulos", async () => {
+  it("el administrador ve los trece módulos", async () => {
     await montarSidebar({ rol: "admin", secciones: TODOS })
 
     expect(enlaces()).toEqual([
@@ -97,7 +97,14 @@ describe("Sidebar · permisos", () => {
       "/receivables",
       "/sales-history",
       "/settings",
+      "/reconciliation",
     ])
+  })
+
+  it("Conciliación es solo para administradores, aunque se tenga el permiso de Configuración", async () => {
+    await montarSidebar({ secciones: [PERMISSIONS.SETTINGS] })
+
+    expect(enlaces()).toEqual(["/settings"])
   })
 
   it("el vendedor solo ve las secciones habilitadas", async () => {

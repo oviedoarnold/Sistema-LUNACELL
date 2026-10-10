@@ -55,3 +55,32 @@ export function crearEnvio(supabase, ahora = () => new Date()) {
     return { data, error, status }
   }
 }
+
+/*
+  El rescate lo hace un administrador con el archivo de emergencia. Igual
+  que la sincronización: { data, error, status } y señal de corte.
+*/
+export function crearRescate(supabase) {
+  return async (venta, lote, { signal } = {}) => {
+    const consulta = supabase.rpc("rescatar_venta_sin_conexion", aParametrosDeRescate(venta, lote))
+    const { data, error, status } = await (signal && consulta.abortSignal ? consulta.abortSignal(signal) : consulta)
+
+    return { data, error, status }
+  }
+}
+
+/*
+  ¿Se registró el intento en línea con esta clave? Lo pregunta el
+  sincronizador antes de enviar una venta que nació de un intento sin
+  respuesta. El vendedor ve las ventas de su ubicación (0029), que es donde
+  se registró ese intento.
+*/
+export function crearVerificacionEnLinea(supabase) {
+  return async (clave, { signal } = {}) => {
+    const consulta = supabase.from("ventas").select("id, numero_factura").eq("clave_idempotencia", clave)
+    const conSenal = signal && consulta.abortSignal ? consulta.abortSignal(signal) : consulta
+    const { data, error, status } = await conSenal.maybeSingle()
+
+    return { data: data ?? null, error, status }
+  }
+}
