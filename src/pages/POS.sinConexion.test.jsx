@@ -153,6 +153,21 @@ describe("POS con conexión", () => {
     expect(servidor.recibidas).toEqual([])
     expect(screen.queryByText(/comprobante provisional/i)).not.toBeInTheDocument()
   })
+
+  it("después de vender en línea actualiza la copia, para que sin conexión no se venda lo ya vendido", async () => {
+    const { falso } = await renderPOS()
+    await esperarCopia()
+    const consultasDeUbicacion = () => falso.from.mock.calls.filter(([t]) => t === "ubicaciones").length
+    const antes = consultasDeUbicacion()
+
+    agregar("Martillo de uña")
+    fireEvent.click(screen.getByRole("button", { name: /generar factura/i }))
+    await waitFor(() => expect(falso.datos.ventas).toHaveLength(1))
+
+    await waitFor(() => expect(consultasDeUbicacion()).toBeGreaterThan(antes))
+    await quitarConexion()
+    await waitFor(() => expect(within(filaDelCatalogo("Martillo de uña")).getByText("1 disp.")).toBeInTheDocument())
+  })
 })
 
 describe("POS sin conexión en una ubicación habilitada", () => {
