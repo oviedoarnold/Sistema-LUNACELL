@@ -14,6 +14,7 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest"
 
 import { levantarBase, consultarComo } from "./arnes.mjs"
+import { crearVendedor } from "./fixtures.mjs"
 import { escenarioSinConexion, fallo } from "./escenario-sin-conexion.mjs"
 
 let base
@@ -109,5 +110,34 @@ describe("el tipo «tienda» no se cambia desde la aplicación", () => {
     await db.query("update ubicaciones set tipo = 'bodega' where id = $1", [esc.tienda])
 
     expect((await marca(esc.tienda)).tipo).toBe("bodega")
+  })
+})
+
+describe("lo que la migración no cambia", () => {
+  it("9. la tienda sigue vendiendo en línea como siempre", async () => {
+    const esc = await escenarioSinConexion(db)
+    const cajero = await crearVendedor(db, { empresa: esc.empresa, ubicacion: esc.tienda, permisos: ["pos"] })
+    await db.query(
+      "insert into inventario_ubicacion (empresa_id, ubicacion_id, producto_id, cantidad) values ($1, $2, $3, 5)",
+      [esc.empresa, esc.tienda, esc.cargador.id]
+    )
+
+    const r = await consultarComo(db, cajero.authId, "select registrar_venta_ubicacion($1::jsonb, 'contado') as r", [
+      JSON.stringify([{ producto_id: esc.cargador.id, cantidad: 2 }]),
+    ])
+    const venta = (await db.query("select origen, ubicacion_id from ventas where id = $1", [r.rows[0].r.venta_id])).rows[0]
+
+    expect(venta).toEqual({ origen: "en_linea", ubicacion_id: esc.tienda })
+    expect((await db.query("select cantidad from inventario_ubicacion where ubicacion_id = $1 and producto_id = $2", [esc.tienda, esc.cargador.id])).rows[0].cantidad).toBe(3)
+  })
+
+  it("10. no toca la configuración fiscal: emite_fiscal y el CAI siguen siendo decisión del administrador", async () => {
+    const esc = await escenarioSinConexion(db)
+    const cai = (await db.query("select cai from empresas where id = $1", [esc.empresa])).rows[0].cai
+
+    await consultarComo(db, esc.admin.authId, "update ubicaciones set emite_fiscal = true where id = $1", [esc.tienda])
+
+    expect((await db.query("select emite_fiscal from ubicaciones where id = $1", [esc.tienda])).rows[0].emite_fiscal).toBe(true)
+    expect((await db.query("select cai from empresas where id = $1", [esc.empresa])).rows[0].cai).toBe(cai)
   })
 })
