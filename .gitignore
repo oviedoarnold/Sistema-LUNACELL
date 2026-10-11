@@ -10,6 +10,10 @@ lerna-debug.log*
 node_modules
 dist
 dist-ssr
+# Entorno local de pruebas (docs/entorno-local.md): build y archivos de la CLI de Supabase
+dist-pruebas
+supabase/.temp
+supabase/.branches
 *.local
 
 # Variables de entorno. Antes solo se ignoraba *.local, asi que un archivo
