@@ -58,8 +58,9 @@ apartado de pruebas manuales.
       1 u opción 2 de [revision-seguridad-y-fiscal.md](revision-seguridad-y-fiscal.md).
 - [ ] Tarea de seguridad de dependencias (`react-router-dom`, `npm audit fix`)
       integrada, o su riesgo aceptado por escrito.
-- [ ] Pruebas físicas hechas en el entorno aislado de
-      [entorno-de-pruebas.md](entorno-de-pruebas.md), nunca contra producción.
+- [ ] Pruebas físicas hechas en el entorno local aislado de
+      [entorno-de-pruebas.md](entorno-de-pruebas.md) (Supabase local y Tailscale
+      Serve), nunca contra producción.
 
 ## Autorización
 

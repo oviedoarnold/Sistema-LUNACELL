@@ -16,7 +16,7 @@ dependencias: todas estas vulnerabilidades ya existían.
 
 | Paquete | Gravedad | Nota |
 |---|---|---|
-| `vite` 8.0.15 (directa) | Alta | El servidor **de desarrollo** en Windows permite saltarse `server.fs.deny`. **Importa para las pruebas físicas:** no exponer `vite` (modo desarrollo) a la red local. Usar `vite preview` sobre `dist` (ver [entorno-de-pruebas.md](entorno-de-pruebas.md)). Corregido después de 8.0.15. |
+| `vite` 8.0.15 (directa) | Alta | El servidor **de desarrollo** en Windows permite saltarse `server.fs.deny`. **Importa para las pruebas físicas:** no exponer `vite` (modo desarrollo) a la red local. Usar `vite preview` sobre `dist`, solo en `127.0.0.1` (ver [entorno-de-pruebas.md](entorno-de-pruebas.md)). Corregido después de 8.0.15. |
 | `brace-expansion`, `browserslist`, `nanoid`, `postcss`, `source-map-js`, `undici`, `baseline-browser-mapping` | Alta o moderada | Denegación de servicio o lectura de archivos `.map` con entradas maliciosas en herramientas de compilación y pruebas. No se ejecutan con datos de usuarios. |
 
 ### Evaluación
@@ -47,57 +47,43 @@ La base ya prohíbe `vende_sin_conexion` en una ubicación con
 como fiscal, así que nada técnico impide habilitarla. Hoy solo la protege el
 procedimiento: la lista de aprobación.
 
-### Opción 1 (recomendada, sin código): marcar Store como fiscal
+### Decisión
 
-Basta con un cambio de configuración que hace un administrador:
+- **No se modifica `emite_fiscal`** ni se configura un CAI real. Marcar Store
+  como fiscal queda descartado mientras no termine la revisión fiscal.
+- La protección debe ser **técnica** y **no depender del nombre** de la
+  ubicación.
 
-```sql
--- SOLO con autorización. No se ejecutó.
-update public.ubicaciones
-   set emite_fiscal = true
- where nombre = 'Lunacell Store'
-   and tipo = 'tienda'
-   and vende_sin_conexion = false
-returning id, nombre, emite_fiscal, vende_sin_conexion;
-```
+### Propuesta: migración 0030 (en un PR aparte, sin aplicar en producción)
 
-- **Efecto inmediato:** la restricción de 0027 impide habilitar Store sin
-  conexión. La copia local nunca la habilita, y la conciliación rechaza aplicar
-  sus ventas como documento interno (CV007).
-- **Ventas en línea de Store: no cambian hoy.** Con el CAI vacío, 0017 sigue
-  emitiendo documentos internos aunque la ubicación sea fiscal.
-- **Cuando se configure el CAI,** Store empezará a emitir facturas fiscales.
-  Eso es lo que se espera de la tienda, pero **requiere confirmarlo con la
-  revisión fiscal**, porque es una decisión de negocio.
-- **Reversible:** `emite_fiscal = false` con el mismo procedimiento.
+Dos reglas en la base que no dependen del nombre:
 
-### Opción 2 (si Store no debe marcarse fiscal todavía): restricción por tipo
+1. **Restricción por tipo.** Solo los camiones y las bodegas pueden vender sin
+   conexión:
 
-Una migración nueva, la 0030. No modifica 0027–0029: agrega una restricción
-para que solo los camiones y las bodegas puedan vender sin conexión.
+   ```sql
+   check (not vende_sin_conexion or tipo in (camion, bodega))
+   ```
 
-```sql
--- Propuesta, NO creada ni aplicada.
-alter table public.ubicaciones
-  add constraint ubicaciones_sin_conexion_solo_camion_o_bodega
-  check (not vende_sin_conexion or tipo in ('camion', 'bodega'));
-```
+   Lunacell Store es de tipo `tienda`: la base rechaza habilitarla, la pida
+   quien la pida desde la aplicación o desde el SQL Editor.
 
-- **Seguro hoy:** todas las ubicaciones tienen `false`, así que la restricción
-  se valida sin cambiar nada.
-- **Habilitar Store más adelante** exigirá otra migración revisada, que es la
-  autorización fiscal escrita en el código.
-- **Requisitos:**
-  - prueba SQL;
-  - PR y aplicación en producción con el procedimiento de migraciones;
-  - autorización.
-- **Límite:** un administrador podría cambiar el tipo de Store a `bodega`. Es
-  un paso deliberado y quedaría a la vista, no un descuido.
+2. **El tipo `tienda` no se cambia desde la aplicación.** Un disparador impide
+   que `authenticated` (ni siquiera un administrador) cambie el tipo de una
+   ubicación **desde** o **hacia** `tienda`. Sin esto, alguien podría
+   convertir la tienda en bodega y habilitarla.
 
-### Recomendación
+**Qué hace falta para habilitar Store** después de la autorización fiscal: una
+migración nueva, revisada y aplicada con el procedimiento de migraciones. Esa
+es la autorización explícita, escrita en el código.
 
-- Si la revisión fiscal confirma que Store emitirá facturas fiscales, aplicar la
-  **Opción 1** antes de activar cualquier piloto: es mínima, usa la regla que ya
-  existe y no requiere código.
-- Si todavía no se sabe, aplicar la **Opción 2**.
-- En ambos casos, **no se cambia nada sin autorización.**
+**Seguro para producción:**
+
+- hoy ninguna ubicación tiene `vende_sin_conexion = true`, así que la
+  restricción se valida sin cambiar datos;
+- Camión 01, Camión 02 y Bodega siguen pudiendo habilitarse cuando se
+  autorice;
+- no modifica 0027–0029.
+
+**Estado:** se prepara en su propio PR, con pruebas SQL. **No se aplica a
+producción** sin autorización.
