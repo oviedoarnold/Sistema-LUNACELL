@@ -19,6 +19,18 @@ import { fileURLToPath } from "node:url"
 export const REF_PRODUCCION = "qlzkriyibpbnesidtiiy"
 export const CARPETA_DE_PRUEBAS = "dist-pruebas"
 
+/*
+  Vite se ejecuta con el mismo Node que corre este script y con la ruta
+  absoluta de su CLI, sin shell y sin buscar nada en el PATH: así nadie
+  puede colar otro «npx» u otro «vite» por delante.
+*/
+function vite(raiz, argumentos) {
+  return spawnSync(process.execPath, [path.join(raiz, "node_modules", "vite", "bin", "vite.js"), ...argumentos], {
+    cwd: raiz,
+    stdio: "inherit",
+  })
+}
+
 const LOCAL = /^http:\/\/(127\.0\.0\.1|localhost)(:\d+)?\/?$/
 const TAILSCALE = /^https:\/\/[a-z0-9-]+\.[a-z0-9-]+\.ts\.net(:\d+)?\/?$/
 
@@ -82,11 +94,7 @@ async function principal(orden) {
 
   if (orden === "compilar") {
     const salida = path.join(raiz, CARPETA_DE_PRUEBAS)
-    const compilado = spawnSync("npx", ["vite", "build", "--mode", "pruebas", "--outDir", CARPETA_DE_PRUEBAS, "--emptyOutDir"], {
-      cwd: raiz,
-      stdio: "inherit",
-      shell: true,
-    })
+    const compilado = vite(raiz, ["build", "--mode", "pruebas", "--outDir", CARPETA_DE_PRUEBAS, "--emptyOutDir"])
 
     if (compilado.status !== 0) process.exit(compilado.status || 1)
 
@@ -110,11 +118,7 @@ async function principal(orden) {
     }
 
     // Solo en 127.0.0.1: a los teléfonos llega por Tailscale Serve, no por la red local.
-    spawnSync(
-      "npx",
-      ["vite", "preview", "--mode", "pruebas", "--outDir", CARPETA_DE_PRUEBAS, "--host", "127.0.0.1", "--port", "4173", "--strictPort"],
-      { cwd: raiz, stdio: "inherit", shell: true }
-    )
+    vite(raiz, ["preview", "--mode", "pruebas", "--outDir", CARPETA_DE_PRUEBAS, "--host", "127.0.0.1", "--port", "4173", "--strictPort"])
   }
 }
 
