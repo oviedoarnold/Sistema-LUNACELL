@@ -109,23 +109,9 @@ la fecha y quién la hizo. **No se dan por hechas sin ese registro.**
 
 ## Entorno aislado (C): cómo prepararlo sin tocar producción
 
-1. **Base aislada.** Crear un proyecto de Supabase de pruebas (o una rama de
-   Supabase, que tiene costo).
-   - Aplicar en orden **todas** las migraciones del repositorio (0001 a 0029),
-     con el mismo procedimiento que se usó en producción.
-   - Cargar datos de prueba: empresa, Camión 01 y Camión 02, productos,
-     existencias, dos vendedores y un administrador.
-2. **Habilitar Camión 01** en ese entorno, con el SQL de
-   [piloto-camion-01.md](piloto-camion-01.md#12-activación).
-3. **Despliegue de vista previa** en Vercel, apuntando a ese proyecto
-   (`VITE_SUPABASE_URL` y `VITE_SUPABASE_PUBLISHABLE_KEY` del entorno de
-   pruebas).
-   - La CSP de `vercel.json` hoy solo permite el proyecto de producción. Hay que
-     autorizar el host de pruebas en ese despliegue, y nunca en el de
-     producción.
-4. **Ejecutar las pruebas B** con teléfonos reales contra esa vista previa.
-5. **Al terminar,** borrar el proyecto de pruebas. En producción no se hace
-   nada.
+El entorno aislado es **local**: Supabase local con Docker, datos ficticios y
+HTTPS privado para los teléfonos con Tailscale Serve. No se crean proyectos en
+la nube ni se toca `software-2`.
 
-Preparar este entorno requiere autorización y, posiblemente, costo. No se ha
-creado.
+- Estrategia y motivos: [entorno-de-pruebas.md](entorno-de-pruebas.md).
+- Pasos: [entorno-local.md](entorno-local.md).
