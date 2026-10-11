@@ -464,7 +464,7 @@ describe("resoluciones de las ventas en conciliación", () => {
 
     await sincronizador.sincronizar()
 
-    expect(consultar).toHaveBeenCalledWith([venta.clave])
+    expect(consultar).toHaveBeenCalledWith([venta.clave], expect.objectContaining({ signal: expect.anything() }))
     expect(await almacen.leer("ventas", venta.clave)).toMatchObject({
       estado: ESTADOS.EN_CONCILIACION,
       conciliacion: { estado: "aplicada", resueltaEn: "2026-10-10T13:00:00.000Z", ventaId: "v-9" },

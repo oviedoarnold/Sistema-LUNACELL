@@ -74,11 +74,12 @@ export function crearRescate(supabase) {
   vendedor solo ve las suyas (0027, ventas_por_conciliar_lectura).
 */
 export function crearConsultaDeConciliaciones(supabase) {
-  return async (claves) => {
-    const { data, error, status } = await supabase
+  return async (claves, { signal } = {}) => {
+    const consulta = supabase
       .from("ventas_por_conciliar")
       .select("clave_idempotencia, estado, resuelta_en, venta_id")
       .in("clave_idempotencia", claves)
+    const { data, error, status } = await (signal && consulta.abortSignal ? consulta.abortSignal(signal) : consulta)
 
     return { data: data ?? null, error, status }
   }

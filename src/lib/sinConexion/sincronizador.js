@@ -41,6 +41,9 @@ import {
 
 export const LIMITE_DE_ENVIO = 30000
 
+// Cuántas ventas en conciliación se consultan por ronda (la URL tiene un largo máximo).
+const CONSULTA_MAXIMA = 100
+
 const TIEMPO_AGOTADO = { code: "", message: "Tiempo de espera agotado: el servidor no respondió" }
 const SIN_VERIFICACION = { code: "", message: "No se puede comprobar si el intento en línea se registró" }
 
@@ -84,11 +87,17 @@ export function crearSincronizador({
       .filter((v) => v.estado === ESTADOS.EN_CONCILIACION)
       .filter((v) => !["aplicada", "anulada"].includes(v.conciliacion?.estado))
       .map((v) => v.clave)
+      .slice(0, CONSULTA_MAXIMA)
 
     if (sinDecision.length === 0) return
 
     try {
-      const { data, error } = await consultarConciliaciones(sinDecision)
+      // Con el mismo tiempo límite que los envíos: una consulta colgada no puede retener la ronda.
+      const { data, error } = await enviarConLimite(
+        (claves, opciones) => consultarConciliaciones(claves, opciones),
+        sinDecision,
+        limiteDeEnvio
+      )
       if (!error && Array.isArray(data)) await guardarResoluciones(almacen, data)
     } catch {
       // Se vuelve a preguntar en la próxima ronda.
