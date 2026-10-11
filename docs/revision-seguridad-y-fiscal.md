@@ -85,5 +85,4 @@ es la autorización explícita, escrita en el código.
   autorice;
 - no modifica 0027–0029.
 
-**Estado:** se prepara en su propio PR, con pruebas SQL. **No se aplica a
-producción** sin autorización.
+**Estado:** preparada en `supabase/migrations/0030_tienda_sin_conexion_bloqueada.sql`, con 8 pruebas SQL en `pruebas-sql/tienda-sin-conexion.test.mjs`. **No aplicada a producción:** se aplica con el procedimiento de migraciones, solo con autorización.

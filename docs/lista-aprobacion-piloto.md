@@ -54,8 +54,9 @@ apartado de pruebas manuales.
       revisión fiscal.
 - [ ] Revisión fiscal de Store pendiente y registrada como requisito para
       cualquier activación de Store.
-- [ ] Protección técnica de Store decidida y aplicada con autorización: opción
-      1 u opción 2 de [revision-seguridad-y-fiscal.md](revision-seguridad-y-fiscal.md).
+- [ ] Migración 0030 (la tienda no vende sin conexión) aplicada en producción
+      con autorización y registrada; ver
+      [revision-seguridad-y-fiscal.md](revision-seguridad-y-fiscal.md).
 - [ ] Tarea de seguridad de dependencias (`react-router-dom`, `npm audit fix`)
       integrada, o su riesgo aceptado por escrito.
 - [ ] Pruebas físicas hechas en el entorno local aislado de
