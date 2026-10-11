@@ -117,7 +117,11 @@ function POS() {
   const copiaLocal = modoSinConexion ? sinConexion.copia : null
   const mostrarEstado =
     Boolean(sinConexion) &&
-    (sinConexion.ubicacionAutorizada || sinConexion.ventas.length > 0 || sinServidor || sinConexion.actualizacionPendiente)
+    (sinConexion.ubicacionAutorizada ||
+      sinConexion.ventas.length > 0 ||
+      sinConexion.ventasDeOtrosUsuarios > 0 ||
+      sinServidor ||
+      sinConexion.actualizacionPendiente)
 
   const productosDeLaCopia = useMemo(() => (copiaLocal?.productos || []).map(aProductoDeLaCopia), [copiaLocal])
   const clientesDeLaCopia = useMemo(() => (copiaLocal?.clientes || []).map(aClienteDeLaCopia), [copiaLocal])

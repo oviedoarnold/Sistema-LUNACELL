@@ -128,3 +128,36 @@ describe("antigüedad de la copia", () => {
     expect(antiguedadDeCopia(copia, new Date("2026-10-11T01:00:00.000Z")).aviso).toBe("fuerte")
   })
 })
+
+/*
+  Una venta en conciliación ya salió del camión pero el servidor no la
+  descontó: se resta mientras nadie decide. Cuando un administrador decide,
+  la copia que se tome DESPUÉS ya refleja esa decisión y no hay que
+  restarla otra vez.
+*/
+describe("disponible local con ventas conciliadas", () => {
+  const enConciliacion = (conciliacion) => ({
+    ...sesionDe(),
+    estado: "en_conciliacion",
+    renglones: [{ producto_id: CARGADOR.id, cantidad: 1 }],
+    ...(conciliacion ? { conciliacion } : {}),
+  })
+
+  it("sin decisión se resta siempre", () => {
+    expect(disponibleLocal(copiaDePrueba(), [enConciliacion({ estado: "pendiente" })], CARGADOR.id)).toBe(9)
+    expect(disponibleLocal(copiaDePrueba(), [enConciliacion()], CARGADOR.id)).toBe(9)
+  })
+
+  it("resuelta antes de tomar la copia ya no se resta: la copia refleja la decisión", () => {
+    const aplicada = enConciliacion({ estado: "aplicada", resueltaEn: "2026-10-10T09:30:00.000Z" })
+    const anulada = enConciliacion({ estado: "anulada", resueltaEn: "2026-10-10T09:30:00.000Z" })
+
+    expect(disponibleLocal(copiaDePrueba(), [aplicada, anulada], CARGADOR.id)).toBe(10)
+  })
+
+  it("resuelta después de tomar la copia se sigue restando hasta la próxima copia", () => {
+    const aplicada = enConciliacion({ estado: "aplicada", resueltaEn: "2026-10-10T11:00:00.000Z" })
+
+    expect(disponibleLocal(copiaDePrueba(), [aplicada], CARGADOR.id)).toBe(9)
+  })
+})

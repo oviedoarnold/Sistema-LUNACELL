@@ -27,10 +27,29 @@ const ESTADO_DE_VENTA = {
   error: { texto: "Error", variante: "overdue", Icono: FaExclamationCircle },
 }
 
+// Una venta en conciliación sobre la que un administrador ya decidió.
+const DECIDIDA = {
+  aplicada: { texto: "Aplicada en conciliación", variante: "ok", Icono: FaCheckCircle },
+  anulada: { texto: "Anulada en conciliación", variante: "neutral", Icono: FaBalanceScale },
+}
+
+const estadoVisible = (venta) =>
+  (venta.estado === "en_conciliacion" && DECIDIDA[venta.conciliacion?.estado]) ||
+  ESTADO_DE_VENTA[venta.estado] ||
+  ESTADO_DE_VENTA.pendiente
+
 
 function detalleDe(venta) {
   if (venta.estado === "registrada") {
     return venta.numeroFactura ? `Factura ${venta.numeroFactura}` : "Registrada"
+  }
+
+  if (venta.estado === "en_conciliacion" && venta.conciliacion?.estado === "aplicada") {
+    return "Un administrador la aplicó: ya está en los libros del servidor."
+  }
+
+  if (venta.estado === "en_conciliacion" && venta.conciliacion?.estado === "anulada") {
+    return "Un administrador la anuló. Si crees que es un error, consúltalo con él."
   }
 
   if (venta.estado === "en_conciliacion") {
@@ -48,7 +67,8 @@ function detalleDe(venta) {
 
 function PanelDeVentasLocales({ estado, onCerrar, onVerComprobante }) {
   const [respaldoAbierto, setRespaldoAbierto] = useState(false)
-  const { ventas, sinConfirmar, sincronizarAhora, sincronizando, exportarRespaldo } = estado
+  const { ventas, sinConfirmar, sincronizarAhora, sincronizando, exportarRespaldo, ventasDeOtrosUsuarios = 0, puedeRespaldarTodo } = estado
+  const hayQueRespaldar = sinConfirmar > 0 || (puedeRespaldarTodo && ventasDeOtrosUsuarios > 0)
   const ordenadas = [...ventas].reverse()
 
   if (respaldoAbierto) {
@@ -60,7 +80,7 @@ function PanelDeVentasLocales({ estado, onCerrar, onVerComprobante }) {
       <button type="button" className="btn btn-ghost" onClick={onCerrar}>
         Cerrar
       </button>
-      <button type="button" className="btn btn-secondary" onClick={() => setRespaldoAbierto(true)} disabled={sinConfirmar === 0}>
+      <button type="button" className="btn btn-secondary" onClick={() => setRespaldoAbierto(true)} disabled={!hayQueRespaldar}>
         Respaldo cifrado
       </button>
       <button type="button" className="btn btn-primary" onClick={() => sincronizarAhora()} disabled={sincronizando}>
@@ -71,6 +91,16 @@ function PanelDeVentasLocales({ estado, onCerrar, onVerComprobante }) {
 
   return (
     <ModalShell titulo="Ventas sin conexión de este teléfono" onCerrar={onCerrar} ancho="modal-lg" acciones={acciones}>
+      {ventasDeOtrosUsuarios > 0 && (
+        <p className="estado-sin-conexion-aviso" role="note">
+          Hay {ventasDeOtrosUsuarios} {ventasDeOtrosUsuarios === 1 ? "venta" : "ventas"} de otro usuario en este teléfono.
+          Se enviarán cuando ese usuario vuelva a entrar con conexión.{" "}
+          {puedeRespaldarTodo
+            ? "Como administrador, puedes incluirlas en el respaldo cifrado."
+            : "Si no puede hacerlo, un administrador puede respaldarlas desde este teléfono."}
+        </p>
+      )}
+
       {ordenadas.length === 0 ? (
         <p>No hay ventas sin conexión en este teléfono.</p>
       ) : (
@@ -94,7 +124,7 @@ function PanelDeVentasLocales({ estado, onCerrar, onVerComprobante }) {
 
             <tbody>
               {ordenadas.map((venta) => {
-                const { texto, variante, Icono } = ESTADO_DE_VENTA[venta.estado] || ESTADO_DE_VENTA.pendiente
+                const { texto, variante, Icono } = estadoVisible(venta)
 
                 return (
                   <tr key={venta.clave}>

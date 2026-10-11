@@ -224,6 +224,32 @@ convierta en una forma de conservar permisos revocados:
   con conexión, o un administrador las rescata con un respaldo cifrado.
 
 
+### Decisiones de conciliación en el teléfono (OFF-1.4)
+
+Al final de cada ronda con servidor, el sincronizador pregunta en qué quedaron
+las ventas del vendedor que siguen en conciliación sin decisión. Lee
+`ventas_por_conciliar`; el vendedor solo ve las suyas.
+
+- **Qué guarda:** la decisión (`aplicada` o `anulada`, cuándo y la venta
+  creada). La venta sigue en su estado final.
+- **Qué ve el vendedor:** "Aplicada en conciliación" o "Anulada en
+  conciliación". El contador "en conciliación" cuenta solo las que esperan una
+  decisión.
+- **Disponible sin conexión:** una venta en conciliación se resta mientras no
+  haya decisión. Si la decisión es anterior a la copia, la copia ya la refleja y
+  deja de restarse. Antes, el teléfono la restaba para siempre y el inventario
+  sin conexión se quedaba corto de forma acumulativa.
+- **Si la consulta falla,** no pasa nada: se repite en la próxima ronda.
+
+### Contingencia y límites del teléfono (OFF-1.4)
+
+- **Ventas de otros usuarios del teléfono:** no se muestran ni se mezclan, solo
+  se cuentan para avisar. Un administrador que entra en ese teléfono puede
+  incluirlas en el respaldo cifrado.
+- **Sin espacio** (`QuotaExceededError`): el POS lo dice con un mensaje claro y
+  no guarda la venta. Las ya guardadas siguen intactas y el carrito no se
+  pierde.
+
 ### Venta en línea sin respuesta
 
 `crearVenta` distingue "sin respuesta" (red caída o tiempo agotado) de un
