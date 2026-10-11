@@ -143,7 +143,7 @@ export default defineConfig({
     setupFiles: ['./src/test/setup.js'],
     // La lógica de las Edge Functions se prueba aquí también; su entrada en
     // Deno (index.ts) solo enruta.
-    include: ['src/**/*.{test,spec}.{js,jsx}', 'supabase/functions/**/*.test.js'],
+    include: ['src/**/*.{test,spec}.{js,jsx}', 'supabase/functions/**/*.test.js', 'scripts/**/*.test.mjs'],
 
     coverage: {
       provider: 'v8',

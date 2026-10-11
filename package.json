@@ -12,7 +12,10 @@
     "test:watch": "vitest",
     "coverage": "vitest run --coverage",
     "coverage:ci": "vitest run --coverage --reporter=default --reporter=json --outputFile=test-report.json",
-    "test:sql": "vitest run --config vitest.sql.config.js"
+    "test:sql": "vitest run --config vitest.sql.config.js",
+    "pruebas:verificar": "node scripts/entornoDePruebas.mjs verificar",
+    "pruebas:compilar": "node scripts/entornoDePruebas.mjs compilar",
+    "pruebas:servir": "node scripts/entornoDePruebas.mjs servir"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.112.4",
