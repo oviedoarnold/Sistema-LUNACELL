@@ -34,6 +34,7 @@ duda de si ya se aplicó, correrla de nuevo es seguro.
 | 0027 | Ventas sin conexión (OFF-1.1): marca `vende_sin_conexion` por ubicación (nunca junto con `emite_fiscal`), trazabilidad en `ventas`, recepción idempotente por clave y huella que aplica con `registrar_venta_ubicacion` o guarda en `ventas_por_conciliar` (inmutable) sin perder la venta, y rescate administrativo auditado |
 | 0028 | Conciliación (OFF-1.1): `conciliar_venta` aplica una venta por conciliar con su vendedor, ubicación, fecha y precio cobrados (siempre documento interno), la aplica con un ajuste explícito y justificado de lo que falte (sin existencias negativas) o la anula con su motivo; solo administradores, serializada por fila |
 | 0029 | Historial y cobros por ubicación (OFF-1.1): un vendedor lee solo las ventas, el detalle, los abonos y los pagos de su ubicación y `registrar_pago_cliente` reparte su cobro solo entre las facturas de su ubicación (LC005 sin ubicación); cobrar exige `sales-history`, el permiso de Cuentas por cobrar; el administrador ve y cobra todo, como antes. Los pagos guardan la ubicación de quien cobró |
+| 0030 | La tienda no vende sin conexión (OFF-1.4): solo camiones y bodegas pueden tener `vende_sin_conexion`, y la aplicación —ni un administrador— no puede sacar a una ubicación del tipo `tienda`. Habilitar la tienda exige una migración nueva y autorizada |
 
 ## Instalación en una base vacía
 
@@ -72,6 +73,7 @@ LUNACELL.
 | 0027 | **Correr antes de activar ventas sin conexión.** No toca ningún dato ni modifica `registrar_venta_ubicacion`: agrega la marca `vende_sin_conexion` (apagada en todas las ubicaciones), columnas de trazabilidad en `ventas` (las existentes quedan `en_linea`), `ventas_por_conciliar` y `auditoria_rescates` inmutables, y las RPC `sincronizar_venta_sin_conexion` y `rescatar_venta_sin_conexion` |
 | 0028 | **Correr después de la 0027 y antes de activar ventas sin conexión.** No toca ningún dato: solo crea `conciliar_venta` |
 | 0029 | **Correr antes de que un vendedor use el historial o cobre.** No toca ningún dato: reemplaza políticas de lectura de `ventas`, `detalle_venta`, `abonos` y `pagos`, agrega `pagos.ubicacion_id` y redefine `registrar_pago_cliente` con el mismo contrato. Las ventas sin ubicación solo las verá el administrador |
+| 0030 | **Correr antes de activar el piloto de Camión 01, y solo con autorización.** No toca ningún dato (hoy ninguna ubicación vende sin conexión): agrega la restricción por tipo y el disparador que protege el tipo de la tienda |
 
 Ninguna de las que se corren borra datos: solo la 0010 tiene un `delete`,
 y es de las que se omiten. Lo que sí hacen varias es recrear vistas y
