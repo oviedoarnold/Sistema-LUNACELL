@@ -517,3 +517,62 @@ describe("resoluciones de las ventas en conciliación", () => {
     expect(consultar).not.toHaveBeenCalled()
   })
 })
+
+describe("consulta de resoluciones que no responde", () => {
+  it("se corta por tiempo: la ronda termina, la venta sigue igual y el candado se libera", async () => {
+    const servidor = crearServidorFalso({ existencias: { [CARGADOR.id]: 0 } })
+    const almacen = await nuevoNavegador().abrir()
+    const copia = copiaDePrueba()
+    await guardarCopia(almacen, copia)
+    const id = await idDelDispositivo(almacen)
+    const venta = await guardarVenta(
+      almacen,
+      construirVentaLocal({ copia, sesion: sesionDe(), dispositivo: id, carrito: [{ productoId: CARGADOR.id, cantidad: 1 }], ahora: ahoraDePrueba() })
+    )
+    let senal = null
+    const consultar = vi.fn((_claves, opciones) => {
+      senal = opciones?.signal
+      return new Promise(() => {})
+    })
+    const sincronizador = crearSincronizador({
+      almacen,
+      enviar: (v) => servidor.enviar(v),
+      consultarConciliaciones: consultar,
+      sesionActual: async () => sesionDe(),
+      ahora: ahoraDePrueba,
+      locks: null,
+      limiteDeEnvio: 20,
+    })
+
+    const primera = await sincronizador.sincronizar()
+    const segunda = await sincronizador.sincronizar()
+
+    expect(primera.enConciliacion).toBe(1)
+    expect(segunda.omitido).toBeUndefined()
+    expect(senal?.aborted).toBe(true)
+    expect((await almacen.leer("ventas", venta.clave)).conciliacion).toBeUndefined()
+  })
+
+  it("pregunta como máximo por 100 ventas por ronda", async () => {
+    const almacen = await nuevoNavegador().abrir()
+    await almacen.transaccion(["ventas"], "readwrite", async (t) => {
+      for (let i = 0; i < 130; i++) {
+        await t.poner("ventas", { ...sesionDe(), clave: `off-dispositivo-${String(i).padStart(8, "0")}`, estado: "en_conciliacion", creadaEn: `2026-10-10T10:${String(i % 60).padStart(2, "0")}:00.000Z`, renglones: [] })
+      }
+    })
+    const consultar = vi.fn(async () => ({ data: [], error: null }))
+    const sincronizador = crearSincronizador({
+      almacen,
+      enviar: vi.fn(),
+      consultarConciliaciones: consultar,
+      sesionActual: async () => sesionDe(),
+      ahora: ahoraDePrueba,
+      locks: null,
+    })
+
+    await sincronizador.sincronizar()
+
+    expect(consultar).toHaveBeenCalledTimes(1)
+    expect(consultar.mock.calls[0][0]).toHaveLength(100)
+  })
+})
