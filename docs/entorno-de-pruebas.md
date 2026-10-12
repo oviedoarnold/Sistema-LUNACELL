@@ -38,8 +38,8 @@ un tercero sería de pago. Por eso el entorno de pruebas es **local**:
 - El certificado es válido para Android e iOS sin instalar nada raro, porque
   Tailscale lo emite con Let's Encrypt para `*.ts.net`.
 - **Solo se publican dos cosas:** el frontend de pruebas y la API local de
-  Supabase. **Nunca** la base de datos (puerto 54322) ni el panel Studio
-  (54323).
+  Supabase. **Nunca** la base de datos (puerto 34322) ni el panel Studio
+  (34323).
 
 **Limitaciones:**
 
