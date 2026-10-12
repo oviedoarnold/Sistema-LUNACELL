@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
 import { renderHook, act, waitFor } from "@testing-library/react"
+import { EVENTO_VENTAS_SINCRONIZADAS } from "../lib/sinConexion/eventos"
 
 /*
   La existencia que usa el punto de venta: la de la ubicación operativa de
@@ -145,5 +146,21 @@ describe("useExistenciaDeMiUbicacion", () => {
     expect(result.current.lista).toBe(false)
     await waitFor(() => expect(result.current.existenciaDe(CARGADOR)).toBe(4))
     expect(traerExistenciasPorUbicacion).toHaveBeenCalledTimes(2)
+  })
+})
+
+describe("ventas sincronizadas por el modo sin conexión", () => {
+  it("al recibir el aviso, vuelve a pedir la existencia de la ubicación", async () => {
+    usuarioEnSesion = { id: "u-camion", locationId: "camion-01" }
+    traerExistenciasPorUbicacion.mockResolvedValue(TODAS)
+    const { result } = renderHook(() => useExistenciaDeMiUbicacion())
+    await waitFor(() => expect(result.current.lista).toBe(true))
+    const antes = traerExistenciasPorUbicacion.mock.calls.length
+
+    act(() => {
+      window.dispatchEvent(new CustomEvent(EVENTO_VENTAS_SINCRONIZADAS, { detail: { registradas: 1 } }))
+    })
+
+    await waitFor(() => expect(traerExistenciasPorUbicacion.mock.calls.length).toBeGreaterThan(antes))
   })
 })

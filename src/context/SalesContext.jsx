@@ -10,6 +10,7 @@ import {
 } from "../lib/api/ventas"
 
 import { hasEnoughStock } from "../utils/cart"
+import { EVENTO_VENTAS_SINCRONIZADAS } from "../lib/sinConexion/eventos"
 
 function SalesProvider({ children }) {
   const { user } = useAuth()
@@ -67,6 +68,22 @@ function SalesProvider({ children }) {
   const refrescarVentas = useCallback(async () => {
     setFilas(await traerVentas())
   }, [])
+
+  /*
+    Las ventas que sincroniza el modo sin conexión las registra el servidor
+    sin pasar por aquí. Cuando avisa, se recargan el historial y el
+    catálogo; si falla, queda lo que había y se verá en la próxima carga.
+  */
+  useEffect(() => {
+    const alSincronizar = () => {
+      refrescarVentas().catch(() => {})
+      refrescarProductos?.().catch(() => {})
+    }
+
+    window.addEventListener(EVENTO_VENTAS_SINCRONIZADAS, alSincronizar)
+
+    return () => window.removeEventListener(EVENTO_VENTAS_SINCRONIZADAS, alSincronizar)
+  }, [refrescarVentas, refrescarProductos])
 
   const buscarProducto = useCallback(
     (id) => products.find((p) => String(p.id) === String(id)),

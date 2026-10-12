@@ -7,6 +7,7 @@ import { supabase } from "../lib/supabase"
 import { descargarCopia } from "../lib/api/copiaSinConexion"
 import { crearConsultaDeConciliaciones, crearEnvio, crearVerificacionEnLinea } from "../lib/api/ventasSinConexion"
 import { almacenDeLaApp, EVENTO_DE_VERSION } from "../lib/sinConexion/almacenDeLaApp"
+import { EVENTO_VENTAS_SINCRONIZADAS } from "../lib/sinConexion/eventos"
 import { crearProgramador, hayServidor } from "../lib/sinConexion/conectividad"
 import { antiguedadDeCopia, disponibleLocal, guardarCopia, leerCopia } from "../lib/sinConexion/copiaLocal"
 import { ESTADOS, guardarVenta, marcar, ventasDelUsuario, ventasNoConfirmadas } from "../lib/sinConexion/cola"
@@ -252,6 +253,19 @@ export function SinConexionProvider({
 
         if (resumen.registradas > 0 || resumen.enConciliacion > 0) void actualizarCopiaRef.current?.({ forzar: true })
 
+        /*
+          Las ventas registradas las escribió el servidor sin pasar por el
+          resto de la aplicación: se avisa para que el historial y las
+          existencias se recarguen sin refrescar la pantalla.
+        */
+        if (resumen.registradas > 0) {
+          ventana?.dispatchEvent?.(
+            new CustomEvent(EVENTO_VENTAS_SINCRONIZADAS, {
+              detail: { registradas: resumen.registradas, enConciliacion: resumen.enConciliacion || 0 },
+            })
+          )
+        }
+
         return resumen
       } catch (error) {
         setErrorDeSincronizacion(error?.message || "No se pudo sincronizar.")
@@ -260,7 +274,7 @@ export function SinConexionProvider({
         setSincronizando(false)
       }
     },
-    [ahora, refrescarLocal]
+    [ahora, refrescarLocal, ventana]
   )
 
   const comprobar = useCallback(async () => {

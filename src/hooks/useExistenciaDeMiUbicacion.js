@@ -1,7 +1,8 @@
-import { useCallback, useMemo } from "react"
+import { useCallback, useEffect, useMemo } from "react"
 
 import { useAuth } from "./useAuth"
 import { useExistencias } from "./useExistencias"
+import { EVENTO_VENTAS_SINCRONIZADAS } from "../lib/sinConexion/eventos"
 
 /*
   Cuánto hay de cada producto en la ubicación operativa de quien está en
@@ -58,6 +59,19 @@ export function useExistenciaDeMiUbicacion() {
     (producto) => (lista ? porProducto.get(String(producto?.id)) ?? 0 : 0),
     [lista, porProducto]
   )
+
+  // Ventas sincronizadas sin conexión: el servidor ya descontó, la pantalla también.
+  useEffect(() => {
+    if (!ubicacionId) return undefined
+
+    const alSincronizar = () => {
+      recargar()
+    }
+
+    window.addEventListener(EVENTO_VENTAS_SINCRONIZADAS, alSincronizar)
+
+    return () => window.removeEventListener(EVENTO_VENTAS_SINCRONIZADAS, alSincronizar)
+  }, [ubicacionId, recargar])
 
   return {
     existenciaDe,
