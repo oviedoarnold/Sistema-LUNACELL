@@ -1,7 +1,7 @@
 // @vitest-environment node
 import { describe, it, expect } from "vitest"
 
-import { revisarConfiguracion, buscarProduccionEnElBuild, REF_PRODUCCION } from "./entornoDePruebas.mjs"
+import { revisarConfiguracion, buscarProduccionEnElBuild, opcionesDeVistaPrevia, REF_PRODUCCION } from "./entornoDePruebas.mjs"
 
 /*
   El modo de pruebas nunca puede apuntar a Supabase en la nube: ni a
@@ -51,5 +51,20 @@ describe("revisión del build de pruebas", () => {
   it("un build apuntando al local está limpio, aunque supabase-js traiga el literal *.supabase.co", () => {
     expect(buscarProduccionEnElBuild(['const u="https://mi-pc.tail1234.ts.net:8443"'])).toBe(false)
     expect(buscarProduccionEnElBuild(["return t.push(`*.supabase.co`,`*.supabase.in`),t"])).toBe(false)
+  })
+})
+
+/*
+  pruebas:servir escucha solo en 127.0.0.1 y acepta el nombre *.ts.net con
+  el que Tailscale Serve entrega las peticiones de los teléfonos. Sin eso,
+  Vite responde «Blocked request. This host is not allowed».
+*/
+describe("vista previa del modo de pruebas", () => {
+  it("escucha solo en 127.0.0.1:4173 y acepta los nombres de Tailscale", () => {
+    const opciones = opcionesDeVistaPrevia("C:/repo")
+
+    expect(opciones.mode).toBe("pruebas")
+    expect(opciones.preview).toMatchObject({ host: "127.0.0.1", port: 4173, strictPort: true, allowedHosts: [".ts.net"] })
+    expect(opciones.build.outDir).toBe("dist-pruebas")
   })
 })
