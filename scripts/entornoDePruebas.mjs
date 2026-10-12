@@ -34,6 +34,24 @@ function vite(raiz, argumentos) {
 const LOCAL = /^http:\/\/(127\.0\.0\.1|localhost)(:\d+)?\/?$/
 const TAILSCALE = /^https:\/\/[a-z0-9-]+\.[a-z0-9-]+\.ts\.net(:\d+)?\/?$/
 
+/*
+  Opciones de la vista previa del modo de pruebas, por la API de Vite:
+  - escucha solo en 127.0.0.1: a los teléfonos llega por Tailscale Serve,
+    nunca por la red local;
+  - acepta los nombres *.ts.net, con los que Tailscale Serve entrega las
+    peticiones (si no, Vite responde «Blocked request. This host is not
+    allowed»). No cambia vite.config.js ni la vista previa normal.
+*/
+export function opcionesDeVistaPrevia(raiz) {
+  return {
+    root: raiz,
+    configFile: path.join(raiz, "vite.config.js"),
+    mode: "pruebas",
+    build: { outDir: CARPETA_DE_PRUEBAS },
+    preview: { host: "127.0.0.1", port: 4173, strictPort: true, allowedHosts: [".ts.net"] },
+  }
+}
+
 // La lista de problemas; vacía si la configuración es segura.
 export function revisarConfiguracion(variables) {
   const url = String(variables.VITE_SUPABASE_URL || "").trim()
@@ -117,8 +135,10 @@ async function principal(orden) {
       process.exit(1)
     }
 
-    // Solo en 127.0.0.1: a los teléfonos llega por Tailscale Serve, no por la red local.
-    vite(raiz, ["preview", "--mode", "pruebas", "--outDir", CARPETA_DE_PRUEBAS, "--host", "127.0.0.1", "--port", "4173", "--strictPort"])
+    const { preview } = await import("vite")
+    const servidor = await preview(opcionesDeVistaPrevia(raiz))
+
+    servidor.printUrls()
   }
 }
 
