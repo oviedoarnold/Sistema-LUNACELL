@@ -6,6 +6,11 @@
 # aplican con su procedimiento manual (supabase/migrations/README.md).
 # Guía: docs/entorno-local.md. Plantilla: `supabase init` de la CLI 2.120.
 #
+# Puertos 34320–34329 y no los 543xx por omisión: Windows (Hyper-V/WSL)
+# reserva tramos del rango dinámico 49152–65535, que incluye 54320–54329, y
+# Docker no puede abrirlos («bind: … forbidden by its access permissions»).
+# Por debajo de 49152 Windows no reserva puertos.
+#
 # For detailed configuration reference documentation, visit:
 # https://supabase.com/docs/guides/local-development/cli/config
 # A string used to distinguish different Supabase projects on the same host. Defaults to the
@@ -15,7 +20,7 @@ project_id = "lunacell-local"
 [api]
 enabled = true
 # Port to use for the API URL.
-port = 54321
+port = 34321
 # Schemas to expose in your API. Tables, views and stored procedures in this schema will get API
 # endpoints. `public` and `graphql_public` schemas are included by default.
 schemas = ["public", "graphql_public"]
@@ -39,9 +44,9 @@ enabled = false
 
 [db]
 # Port to use for the local database URL.
-port = 54322
+port = 34322
 # Port used by db diff command to initialize the shadow database.
-shadow_port = 54320
+shadow_port = 34320
 # Maximum amount of time to wait for health check when starting the local database.
 health_timeout = "2m"
 # The database major version to use. This has to be the same as your remote database's. Run `SHOW
@@ -53,7 +58,7 @@ orioledb_version = ""
 [db.pooler]
 enabled = false
 # Port to use for the local connection pooler.
-port = 54329
+port = 34329
 # Specifies when a server connection can be reused by other clients.
 # Configure one of the supported pooler modes: `transaction`, `session`.
 pool_mode = "transaction"
@@ -67,7 +72,12 @@ max_client_conn = 100
 
 [db.migrations]
 # If disabled, migrations will be skipped during a db push or reset.
-enabled = true
+# LUNACELL: apagado. La CLI aplicaría TODAS las migraciones, incluidas las de
+# demostración (0002, 0006, 0010), que no se corren en una base de LUNACELL
+# (supabase/migrations/README.md) y rompen la 0014 (la empresa demo no tiene
+# bodega). Se aplican desde [db.seed], en orden y sin las de demostración:
+# lo mismo que aplican las pruebas SQL (pruebas-sql/arnes.mjs).
+enabled = false
 # Specifies an ordered list of schema files, directories, or glob patterns that describe your database.
 # Supports paths relative to supabase directory: "./schemas/*.sql", "./database".
 schema_paths = []
@@ -77,7 +87,38 @@ schema_paths = []
 enabled = true
 # Specifies an ordered list of seed files to load during db reset.
 # Supports glob patterns relative to supabase directory: "./seeds/*.sql"
-sql_paths = ["./seed.sql"]
+# LUNACELL: primero las migraciones de LUNACELL (sin las de demostración), en
+# orden, y después los datos ficticios. Una prueba (scripts/configuracionLocal.test.mjs)
+# exige que esta lista tenga todas las migraciones nuevas.
+sql_paths = [
+  "./migrations/0001_esquema_inicial.sql",
+  "./migrations/0003_permisos_solo_propios.sql",
+  "./migrations/0004_vistas_con_seguridad.sql",
+  "./migrations/0005_correlativos.sql",
+  "./migrations/0007_imagenes_de_producto.sql",
+  "./migrations/0009_claves_de_idempotencia.sql",
+  "./migrations/0011_ubicaciones.sql",
+  "./migrations/0012_pagos_del_cliente.sql",
+  "./migrations/0013_registrar_pago_cliente.sql",
+  "./migrations/0014_inventario_por_ubicacion.sql",
+  "./migrations/0015_visibilidad_por_ubicacion.sql",
+  "./migrations/0016_registrar_venta_ubicacion.sql",
+  "./migrations/0017_documento_fiscal_o_interno.sql",
+  "./migrations/0018_movimiento_por_ubicacion.sql",
+  "./migrations/0019_movimientos_solo_por_rpc.sql",
+  "./migrations/0020_traslados.sql",
+  "./migrations/0021_seguridad_permisos_y_escrituras.sql",
+  "./migrations/0022_nombres_de_usuarios.sql",
+  "./migrations/0023_permisos_de_escritura_por_seccion.sql",
+  "./migrations/0024_imagenes_de_producto_por_permiso.sql",
+  "./migrations/0025_permisos_clientes_proveedores_cotizaciones.sql",
+  "./migrations/0026_usuarios_acceso_por_nombre.sql",
+  "./migrations/0027_recepcion_de_ventas_sin_conexion.sql",
+  "./migrations/0028_conciliacion_de_ventas.sql",
+  "./migrations/0029_historial_y_cobros_por_ubicacion.sql",
+  "./migrations/0030_tienda_sin_conexion_bloqueada.sql",
+  "./seed.sql",
+]
 
 [db.network_restrictions]
 # Enable management of network restrictions.
@@ -103,7 +144,7 @@ enabled = true
 [studio]
 enabled = true
 # Port to use for Supabase Studio.
-port = 54323
+port = 34323
 # External URL of the API server that frontend connects to.
 api_url = "http://127.0.0.1"
 # OpenAI API Key to use for Supabase AI in the Supabase Studio.
@@ -114,7 +155,7 @@ openai_api_key = "env(OPENAI_API_KEY)"
 [local_smtp]
 enabled = true
 # Port to use for the email testing server web interface.
-port = 54324
+port = 34324
 # Uncomment to expose additional ports for testing user applications that send emails.
 # smtp_port = 54325
 # pop3_port = 54326
@@ -228,8 +269,10 @@ web3 = 30
 
 [auth.email]
 # Allow/disallow new user signups via email to your project.
-# LUNACELL: sin altas libres; los usuarios los crea la semilla o el administrador.
-enable_signup = false
+# LUNACELL: en true a propósito. En la CLI, false aquí APAGA el proveedor de
+# correo y nadie puede iniciar sesión («Email logins are disabled»). Las altas
+# libres ya las impide [auth] enable_signup = false.
+enable_signup = true
 # If enabled, a user will be required to confirm any email change on both the old, and new email
 # addresses. If disabled, only the new email is required to confirm.
 double_confirm_changes = true
@@ -399,7 +442,7 @@ deno_version = 2
 [analytics]
 # LUNACELL: apagado para que el entorno local consuma menos memoria.
 enabled = false
-port = 54327
+port = 34327
 # Configure one of the supported backends: `postgres`, `bigquery`.
 backend = "postgres"
 

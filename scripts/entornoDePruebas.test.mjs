@@ -12,8 +12,8 @@ const config = (url, clave = "sb_publishable_local") => ({ VITE_SUPABASE_URL: ur
 
 describe("configuración del modo de pruebas", () => {
   it.each([
-    "http://127.0.0.1:54321",
-    "http://localhost:54321",
+    "http://127.0.0.1:34321",
+    "http://localhost:34321",
     "https://mi-pc.tail1234.ts.net:8443",
     "https://lunacell-pc.mi-red.ts.net",
   ])("acepta el Supabase local: %s", (url) => {
@@ -30,7 +30,7 @@ describe("configuración del modo de pruebas", () => {
     "https://jfddkmjrpyjtsbuvgxgh.supabase.co",
     "https://otro.supabase.co",
     "https://mi-dominio.com",
-    "http://192.168.1.20:54321",
+    "http://192.168.1.20:34321",
     "https://mi-pc.ts.net.engano.com",
   ])("rechaza cualquier otro destino: %s", (url) => {
     expect(revisarConfiguracion(config(url))).not.toEqual([])
@@ -38,7 +38,7 @@ describe("configuración del modo de pruebas", () => {
 
   it("exige la URL y la clave publicable", () => {
     expect(revisarConfiguracion({})).toHaveLength(2)
-    expect(revisarConfiguracion(config("http://127.0.0.1:54321", ""))).toHaveLength(1)
+    expect(revisarConfiguracion(config("http://127.0.0.1:34321", ""))).toHaveLength(1)
   })
 })
 

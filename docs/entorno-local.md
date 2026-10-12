@@ -15,22 +15,33 @@ teléfonos reales, sin tocar producción. Los motivos de esta estrategia están 
   no Internet.
 
 > **Nunca:** `supabase link`, `supabase db push`, `--linked` ni
-> `tailscale funnel`. Tampoco compartir la base (54322) ni Studio (54323).
+> `tailscale funnel`. Tampoco compartir la base (34322) ni Studio (34323).
 
 ## 1. Qué instalar (una sola vez)
 
 | Herramienta | Para qué | Costo | Notas |
 |---|---|---|---|
-| **Docker Desktop** (con WSL2) | Ejecutar Supabase local | Gratis (uso personal o empresa pequeña) | Windows 10/11 de 64 bits, virtualización activada en la BIOS, 8 GB de RAM (16 recomendados) y unos 10 GB de disco para las imágenes. |
-| **Node.js y Git** | Ya los usas con el repositorio | Gratis | Node 20 o superior. |
+| **Docker Desktop** (con WSL2) | Ejecutar Supabase local | Gratis (uso personal o empresa con menos de 250 empleados y menos de USD 10 millones de ingresos) | Windows 11 23H2 o superior, o Windows 10 22H2. WSL 2.1.5 o superior. Virtualización activada en la BIOS/UEFI. 8 GB de RAM como mínimo y unos 10 GB de disco para las imágenes. |
+| **Node.js y Git** | Ya los usas con el repositorio | Gratis | Node 22.12 o superior (lo exige `package.json`). |
 | **Tailscale** en la PC | Dar HTTPS privado a los teléfonos | Gratis (plan Personal) | Inicia sesión con tu cuenta. |
 | **Tailscale** en cada teléfono | Llegar a la PC por la red privada | Gratis | App de Google Play o App Store, con la **misma** cuenta. |
 
 **Instalación en la PC:**
 
-1. Instala Docker Desktop y elige **Use WSL 2**. Reinicia si te lo pide.
-   - Ábrelo y espera a que diga *Engine running*.
-   - Comprueba en PowerShell: `docker --version`.
+1. Instala WSL y Docker Desktop (PowerShell **como administrador**):
+
+   ```powershell
+   wsl --install
+   wsl --update
+   wsl --version
+   winget install -e --id Docker.DockerDesktop
+   ```
+
+   - `wsl --version` debe mostrar 2.1.5 o más.
+   - Reinicia si te lo pide, abre Docker Desktop, elige **Use WSL 2** y espera
+     a que diga *Engine running*.
+   - Comprueba: `docker version`, `docker compose version` y
+     `docker run --rm hello-world` (debe decir «Hello from Docker!»).
 2. Instala Tailscale e inicia sesión.
 3. En la [consola de Tailscale](https://login.tailscale.com/admin/dns) activa
    **MagicDNS** y **HTTPS Certificates**.
@@ -41,13 +52,14 @@ teléfonos reales, sin tocar producción. Los motivos de esta estrategia están 
    tailscale status --json | Select-String DNSName
    ```
 
-**Protección de red (recomendada).** Docker puede publicar los puertos de
-Supabase para toda la red local. Bloquéalos para que solo los use tu PC.
-Tailscale Serve sigue funcionando, porque entra por `127.0.0.1`. Ejecuta en
-PowerShell **como administrador**:
+**Protección de red (obligatoria).** Docker publica los puertos de Supabase en
+**todas** las interfaces de la PC, es decir, también en la red local
+(comprobado). Bloquéalos para que solo los use tu PC. Tailscale Serve sigue
+funcionando, porque entra por `127.0.0.1`. Ejecuta en PowerShell **como
+administrador**:
 
 ```powershell
-New-NetFirewallRule -DisplayName "LUNACELL local: bloquear Supabase desde la red" -Direction Inbound -Protocol TCP -LocalPort 54320-54329,8083,4173 -Action Block
+New-NetFirewallRule -DisplayName "LUNACELL local: bloquear Supabase desde la red" -Direction Inbound -Protocol TCP -LocalPort 34320-34329,8083,4173 -Action Block
 ```
 
 Si Docker pregunta por el acceso a la red, **no** marques las redes públicas.
@@ -60,34 +72,43 @@ En PowerShell, desde la carpeta del repositorio:
 npx supabase@2.120.0 start
 ```
 
-- **La primera vez** descarga las imágenes y tarda varios minutos. Aplica
-  `supabase/migrations/` en orden (avisa que se salta `README.md`, es normal) y
-  carga `supabase/seed.sql`.
-- **Al terminar** muestra `API URL` (`http://127.0.0.1:54321`), `Publishable
+- **La primera vez** descarga las imágenes y tarda varios minutos.
+- **Qué aplica:** las migraciones de LUNACELL en orden, sin las tres de
+  demostración, y después `supabase/seed.sql`. Lo hace desde `[db.seed]` de
+  `supabase/config.toml`, por eso verás «Seeding data from
+  supabase/migrations/0001_…» y no «Applying migration». Es lo mismo que
+  aplican las pruebas SQL de CI.
+- **Puertos:** 34320–34329, no los 543xx habituales. Windows reserva tramos
+  del rango 49152–65535, y en esta PC tenía reservados 54006–54705.
+- **Al terminar** muestra `API URL` (`http://127.0.0.1:34321`), `Publishable
   key` y `Studio URL`. Puedes volver a verlos con `npx supabase@2.120.0 status`.
-- **Studio** (`http://127.0.0.1:54323`) se abre solo en tu PC. Ahí puedes mirar
+- **Studio** (`http://127.0.0.1:34323`) se abre solo en tu PC. Ahí puedes mirar
   las tablas de prueba.
 
-**Función de inicio de sesión (`acceso`).**
+**Función de inicio de sesión (`acceso`).** `supabase start` ya la sirve en
+`http://127.0.0.1:34321/functions/v1/acceso`; no hace falta `functions
+serve`. En local, el gateway de Supabase responde con
+`Access-Control-Allow-Origin: *`, así que el navegador acepta el inicio de
+sesión desde la dirección de Tailscale sin configurar `ORIGENES_PERMITIDOS`.
 
-1. Crea `supabase\functions\.env`. Git lo ignora, igual que todos los `.env`.
-   Pon tu nombre DNS de Tailscale:
+**Verificar que levantó bien** (solo lectura, base **local**):
 
-   ```
-   ORIGENES_PERMITIDOS=https://mi-pc.tailXXXX.ts.net,http://127.0.0.1:4173
-   ```
+```powershell
+docker exec supabase_db_lunacell-local psql -U postgres -At -c "select nombre, cai from empresas;" -c "select nombre, tipo, vende_sin_conexion from ubicaciones order by nombre;" -c "select count(*) from auth.users;"
+```
 
-2. En **otra** ventana de PowerShell, que se queda abierta:
+Debe mostrar:
 
-   ```powershell
-   npx supabase@2.120.0 functions serve --env-file supabase/functions/.env --no-verify-jwt
-   ```
+- solo `LUNACELL PRUEBAS (ficticia)`, con el CAI vacío;
+- las cuatro ubicaciones «Pruebas», con `t` (true) únicamente en «Camión 01
+  Pruebas»;
+- `4` usuarios.
 
 ## 3. Publicar en tu red privada (Tailscale Serve)
 
 ```powershell
 tailscale serve --bg --https=443 http://127.0.0.1:4173
-tailscale serve --bg --https=8443 http://127.0.0.1:54321
+tailscale serve --bg --https=8443 http://127.0.0.1:34321
 tailscale serve status
 ```
 
@@ -96,8 +117,8 @@ tailscale serve status
 | `https://mi-pc.tailXXXX.ts.net` | Frontend de pruebas |
 | `https://mi-pc.tailXXXX.ts.net:8443` | API de Supabase local |
 
-Solo las ven los dispositivos con tu sesión de Tailscale. La base (54322) y
-Studio (54323) **no** se publican.
+Solo las ven los dispositivos con tu sesión de Tailscale. La base (34322) y
+Studio (34323) **no** se publican.
 
 ## 4. Iniciar LUNACELL en modo de pruebas
 
@@ -228,19 +249,20 @@ Fecha: ____  Persona: ____  Commit de LUNACELL: ____ (git rev-parse --short HEAD
 
 | Quiero… | Comandos |
 |---|---|
-| **Detener** sin perder los datos de prueba | Cierra las ventanas de `functions serve` y `pruebas:servir` (Ctrl+C). Luego `npx supabase@2.120.0 stop` y `tailscale serve reset`. |
-| **Volver a iniciar** | `npx supabase@2.120.0 start`, `functions serve …` (sección 2), los dos `tailscale serve …` (sección 3) y `npm run pruebas:servir`. |
+| **Detener** sin perder los datos de prueba | Cierra la ventana de `pruebas:servir` (Ctrl+C). Luego `npx supabase@2.120.0 stop` y `tailscale serve reset`. |
+| **Volver a iniciar** | `npx supabase@2.120.0 start`, los dos `tailscale serve …` (sección 3) y `npm run pruebas:servir`. |
 | **Empezar de cero**, solo con los datos de prueba | `npx supabase@2.120.0 db reset` borra la base **local**, vuelve a aplicar las migraciones y la semilla. **Nunca** con `--linked`. |
-| **Borrar todo el entorno** | `npx supabase@2.120.0 stop --no-backup` (borra los volúmenes locales de Docker) y `tailscale serve reset`. Borra `dist-pruebas\`, `.env.pruebas` y `supabase\functions\.env`. |
+| **Borrar todo el entorno** | `npx supabase@2.120.0 stop --no-backup` (borra los volúmenes locales de Docker) y `tailscale serve reset`. Borra `dist-pruebas\` y `.env.pruebas`. |
 | **Borrar los datos de prueba de un teléfono** | Desinstala la app de LUNACELL de pruebas. Borra los datos del sitio `mi-pc.tailXXXX.ts.net`: en **Chrome**, Configuración → Configuración de sitios → Datos almacenados; en **iPhone**, Ajustes → Safari → Avanzado → Datos de sitios web. Solo afecta a esa dirección de pruebas, no a la app de producción. |
 
 ## 10. Si algo falla
 
 | Síntoma | Causa probable | Qué hacer |
 |---|---|---|
-| "Correo o contraseña incorrectos" con un usuario de prueba | La función `acceso` no está corriendo, o falta tu dirección en `ORIGENES_PERMITIDOS` | Sección 2; reinicia `functions serve` |
+| "Usuario o contraseña incorrectos" con un usuario de prueba | Supabase local no está levantado, o la contraseña no es `Pruebas-Local-2026` | `npx supabase@2.120.0 status`; si hace falta, `npx supabase@2.120.0 stop` y `start` |
 | El teléfono no abre la dirección | Tailscale apagado en el teléfono, o HTTPS no activado en la consola | Activa Tailscale; revisa `tailscale serve status` |
 | "No se pudo guardar la venta" o falla el respaldo | La página no se abrió por HTTPS | Usa siempre `https://…ts.net`, nunca la IP |
 | `pruebas:compilar` dice ✖ | `.env.pruebas` apunta a la nube | Corrige la URL (sección 4) |
 | `supabase start` falla | Docker Desktop no está corriendo | Ábrelo y espera *Engine running* |
+| `ports are not available … bind: An attempt was made to access a socket in a way forbidden` | Windows reservó esos puertos (`netsh interface ipv4 show excludedportrange protocol=tcp`) | Este repositorio ya usa 34320–34329, fuera del rango que Windows reserva. Si aun así coincide, avisa para elegir otro tramo |
 | No aparece la barra «En línea» en Facturar | El usuario no es de Camión 01 Pruebas | Entra con `camion01.pruebas` |

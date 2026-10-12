@@ -47,7 +47,7 @@ export function revisarConfiguracion(variables) {
   } else if (/supabase\.(co|in)/i.test(url)) {
     errores.push("VITE_SUPABASE_URL apunta a un proyecto de Supabase en la nube. En pruebas solo se usa el Supabase local.")
   } else if (!LOCAL.test(url) && !TAILSCALE.test(url)) {
-    errores.push("VITE_SUPABASE_URL debe ser el Supabase local: http://127.0.0.1:54321 o la URL https://<pc>.<red>.ts.net:8443 de Tailscale Serve.")
+    errores.push("VITE_SUPABASE_URL debe ser el Supabase local: http://127.0.0.1:34321 o la URL https://<pc>.<red>.ts.net:8443 de Tailscale Serve.")
   }
 
   if (!clave) errores.push("Falta VITE_SUPABASE_PUBLISHABLE_KEY (la clave publicable LOCAL que muestra `npx supabase status`).")
