@@ -5,7 +5,8 @@ import reactRefresh from 'eslint-plugin-react-refresh'
 import { defineConfig, globalIgnores } from 'eslint/config'
 
 export default defineConfig([
-  globalIgnores(['dist', 'coverage']),
+  // dist-pruebas: el build del entorno local de pruebas (docs/entorno-local.md).
+  globalIgnores(['dist', 'dist-pruebas', 'coverage']),
   {
     files: ['**/*.{js,jsx}'],
     extends: [
