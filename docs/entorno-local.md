@@ -261,6 +261,8 @@ Fecha: ____  Persona: ____  Commit de LUNACELL: ____ (git rev-parse --short HEAD
 |---|---|---|
 | "Usuario o contraseña incorrectos" con un usuario de prueba | Supabase local no está levantado, o la contraseña no es `Pruebas-Local-2026` | `npx supabase@2.120.0 status`; si hace falta, `npx supabase@2.120.0 stop` y `start` |
 | El teléfono no abre la dirección | Tailscale apagado en el teléfono, o HTTPS no activado en la consola | Activa Tailscale; revisa `tailscale serve status` |
+| `DNS_PROBE_FINISHED_NXDOMAIN` al abrir `https://…ts.net` | MagicDNS desactivado en la red de Tailscale (`tailscale dns status` dice «MagicDNS: disabled tailnet-wide») | Actívalo en la consola de Tailscale (DNS → **Enable MagicDNS**). Si Chrome sigue sin abrirla, en `chrome://settings/security` pon **Usar DNS seguro** en «Con tu proveedor actual» |
+| «Blocked request. This host (…ts.net) is not allowed» | Se sirvió con una versión anterior de `pruebas:servir` | Actualiza el repositorio y vuelve a correr `npm run pruebas:servir`, que ya acepta los nombres `*.ts.net` |
 | "No se pudo guardar la venta" o falla el respaldo | La página no se abrió por HTTPS | Usa siempre `https://…ts.net`, nunca la IP |
 | `pruebas:compilar` dice ✖ | `.env.pruebas` apunta a la nube | Corrige la URL (sección 4) |
 | `supabase start` falla | Docker Desktop no está corriendo | Ábrelo y espera *Engine running* |
