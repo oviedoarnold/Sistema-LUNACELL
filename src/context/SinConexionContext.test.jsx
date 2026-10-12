@@ -7,6 +7,7 @@ import { SinConexionProvider } from "./SinConexionContext"
 import { useSinConexion } from "../hooks/useSinConexion"
 import { abrirAlmacen } from "../lib/sinConexion/almacen"
 import { EVENTO_DE_VERSION } from "../lib/sinConexion/almacenDeLaApp"
+import { EVENTO_VENTAS_SINCRONIZADAS } from "../lib/sinConexion/eventos"
 import { guardarCopia } from "../lib/sinConexion/copiaLocal"
 import { guardarVenta } from "../lib/sinConexion/cola"
 import { construirVentaLocal } from "../lib/sinConexion/venta"
@@ -264,5 +265,35 @@ describe("sin espacio en el teléfono", () => {
       vista.result.current.guardarVentaSinConexion({ carrito: [{ productoId: CARGADOR.id, cantidad: 1 }] })
     ).rejects.toThrow(/no tiene espacio/i)
     expect(vista.result.current.pendientes).toBe(1)
+  })
+})
+
+describe("aviso a la aplicación al registrar ventas", () => {
+  it("cuando la sincronización registra ventas, lo avisa para que el historial y las existencias se recarguen", async () => {
+    await venderEnElTelefono()
+    const ventana = new EventTarget()
+    ventana.navigator = { onLine: true }
+    const avisos = []
+    ventana.addEventListener(EVENTO_VENTAS_SINCRONIZADAS, (e) => avisos.push(e.detail))
+
+    const vista = montar({ ventana, comprobarServidor: async () => true })
+    await waitFor(() => expect(vista.result.current.disponible).toBe(true))
+    await act(() => vista.result.current.sincronizarAhora())
+
+    await waitFor(() => expect(vista.result.current.pendientes).toBe(0))
+    expect(avisos).toEqual([expect.objectContaining({ registradas: 1 })])
+  })
+
+  it("si no se registró nada, no avisa", async () => {
+    const ventana = new EventTarget()
+    ventana.navigator = { onLine: true }
+    const avisos = []
+    ventana.addEventListener(EVENTO_VENTAS_SINCRONIZADAS, (e) => avisos.push(e.detail))
+
+    const vista = montar({ ventana, comprobarServidor: async () => true })
+    await waitFor(() => expect(vista.result.current.disponible).toBe(true))
+    await act(() => vista.result.current.sincronizarAhora())
+
+    expect(avisos).toEqual([])
   })
 })

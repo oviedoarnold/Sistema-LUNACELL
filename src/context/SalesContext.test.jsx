@@ -7,6 +7,7 @@ import ProductProvider from "./ProductContext"
 import SalesProvider from "./SalesContext"
 import { SalesContext } from "./contexts"
 import { EMPRESA_PRUEBA, esperarQueSeAsiente, montarDatos } from "../test/pantallas"
+import { EVENTO_VENTAS_SINCRONIZADAS } from "../lib/sinConexion/eventos"
 
 vi.mock("../lib/supabase", () => ({
   get supabase() {
@@ -423,5 +424,27 @@ describe("búsqueda de facturas", () => {
     const { result } = await montarVentas()
 
     expect(result.current.getSaleByInvoiceNumber("FAC-99999")).toBeUndefined()
+  })
+})
+
+/*
+  Las ventas que el modo sin conexión sincroniza las registra el servidor
+  sin pasar por este contexto. Cuando el modo sin conexión avisa que
+  registró ventas, el historial y el catálogo se recargan solos: sin esto,
+  había que refrescar la pantalla para verlas.
+*/
+describe("ventas sincronizadas por el modo sin conexión", () => {
+  it("al recibir el aviso, recarga el historial y los productos sin refrescar la pantalla", async () => {
+    const { falso } = await montarVentas()
+    const consultas = (tabla) => falso.from.mock.calls.filter(([t]) => t === tabla).length
+    const ventasAntes = consultas("ventas")
+    const productosAntes = consultas("productos_con_stock")
+
+    act(() => {
+      window.dispatchEvent(new CustomEvent(EVENTO_VENTAS_SINCRONIZADAS, { detail: { registradas: 1 } }))
+    })
+
+    await waitFor(() => expect(consultas("ventas")).toBeGreaterThan(ventasAntes))
+    await waitFor(() => expect(consultas("productos_con_stock")).toBeGreaterThan(productosAntes))
   })
 })
