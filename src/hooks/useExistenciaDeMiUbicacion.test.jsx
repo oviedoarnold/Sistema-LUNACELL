@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
 import { renderHook, act, waitFor } from "@testing-library/react"
 import { EVENTO_VENTAS_SINCRONIZADAS } from "../lib/sinConexion/eventos"
+import { ESPERA_ENTRE_RECARGAS } from "./useAlVolverALaApp"
 
 /*
   La existencia que usa el punto de venta: la de la ubicación operativa de
@@ -162,5 +163,29 @@ describe("ventas sincronizadas por el modo sin conexión", () => {
     })
 
     await waitFor(() => expect(traerExistenciasPorUbicacion.mock.calls.length).toBeGreaterThan(antes))
+  })
+})
+
+describe("al volver a la app", () => {
+  it("vuelve a pedir la existencia de la ubicación (otros dispositivos pudieron vender)", async () => {
+    let visibilidad = "visible"
+    Object.defineProperty(document, "visibilityState", { configurable: true, get: () => visibilidad })
+    usuarioEnSesion = { id: "u-camion", locationId: "camion-01" }
+    traerExistenciasPorUbicacion.mockResolvedValue(TODAS)
+    const { result } = renderHook(() => useExistenciaDeMiUbicacion())
+    await waitFor(() => expect(result.current.lista).toBe(true))
+    const antes = traerExistenciasPorUbicacion.mock.calls.length
+    const ahora = Date.now()
+    const espiaFecha = vi.spyOn(Date, "now").mockReturnValue(ahora + ESPERA_ENTRE_RECARGAS + 1000)
+
+    act(() => {
+      visibilidad = "hidden"
+      document.dispatchEvent(new Event("visibilitychange"))
+      visibilidad = "visible"
+      document.dispatchEvent(new Event("visibilitychange"))
+    })
+
+    await waitFor(() => expect(traerExistenciasPorUbicacion.mock.calls.length).toBeGreaterThan(antes))
+    espiaFecha.mockRestore()
   })
 })
