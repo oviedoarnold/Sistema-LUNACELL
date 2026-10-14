@@ -195,7 +195,7 @@ Hazlo **antes de cada sesión**:
 
 ## 7. Hacer las pruebas sin conexión
 
-Sigue las 12 pruebas manuales de
+Sigue las 13 pruebas manuales de
 [matriz-validacion-sin-conexion.md](matriz-validacion-sin-conexion.md). En
 resumen:
 
@@ -219,6 +219,9 @@ resumen:
    - **Cierre de sesión** con ventas pendientes: debe aparecer el aviso.
    - **Cambio de ubicación:** desde Configuración, con `admin.pruebas`.
    - **Varias pestañas** en la PC.
+7. **Otro dispositivo:** vende en un teléfono y, en el otro, sal a otra app y
+   vuelve a LUNACELL. Sin recargar a mano, la venta aparece en el historial y
+   las existencias se actualizan.
 
 ## 8. Registrar los resultados
 
@@ -243,6 +246,7 @@ Fecha: ____  Persona: ____  Commit de LUNACELL: ____ (git rev-parse --short HEAD
 | 10 | Varias pestañas en la PC | | | | |
 | 11 | Cambio de ubicación con pendientes | | | | |
 | 12 | Crédito a cliente existente | | | | |
+| 13 | Venta de otro dispositivo visible al volver a la app | | | | |
 ```
 
 ## 9. Iniciar, detener, reconstruir y borrar
