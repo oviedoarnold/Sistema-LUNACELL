@@ -106,6 +106,10 @@ la fecha y quién la hizo. **No se dan por hechas sin ese registro.**
     - Debe decir «Sin conexión con el servidor», no «En línea».
 12. Dos pestañas abiertas en la computadora.
     - Una venta pendiente se envía una sola vez.
+13. Dos dispositivos con la misma ubicación, con conexión.
+    - Vender en uno; en el otro, ir a otra app y volver a LUNACELL.
+    - Sin recargar a mano, la venta aparece en el historial y las existencias
+      se actualizan.
 
 ## Entorno aislado (C): cómo prepararlo sin tocar producción
 

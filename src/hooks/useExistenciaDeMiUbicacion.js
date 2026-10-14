@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo } from "react"
 import { useAuth } from "./useAuth"
 import { useExistencias } from "./useExistencias"
 import { EVENTO_VENTAS_SINCRONIZADAS } from "../lib/sinConexion/eventos"
+import { useAlVolverALaApp } from "./useAlVolverALaApp"
 
 /*
   Cuánto hay de cada producto en la ubicación operativa de quien está en
@@ -72,6 +73,9 @@ export function useExistenciaDeMiUbicacion() {
 
     return () => window.removeEventListener(EVENTO_VENTAS_SINCRONIZADAS, alSincronizar)
   }, [ubicacionId, recargar])
+
+  // Otros dispositivos de la misma ubicación pudieron vender: al volver, se recarga.
+  useAlVolverALaApp(() => recargar(), { activo: Boolean(ubicacionId) })
 
   return {
     existenciaDe,

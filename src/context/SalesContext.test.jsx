@@ -8,6 +8,7 @@ import SalesProvider from "./SalesContext"
 import { SalesContext } from "./contexts"
 import { EMPRESA_PRUEBA, esperarQueSeAsiente, montarDatos } from "../test/pantallas"
 import { EVENTO_VENTAS_SINCRONIZADAS } from "../lib/sinConexion/eventos"
+import { ESPERA_ENTRE_RECARGAS } from "../hooks/useAlVolverALaApp"
 
 vi.mock("../lib/supabase", () => ({
   get supabase() {
@@ -446,5 +447,33 @@ describe("ventas sincronizadas por el modo sin conexión", () => {
 
     await waitFor(() => expect(consultas("ventas")).toBeGreaterThan(ventasAntes))
     await waitFor(() => expect(consultas("productos_con_stock")).toBeGreaterThan(productosAntes))
+  })
+})
+
+/*
+  Las ventas que hacen OTROS dispositivos no avisan a este. Al volver a la
+  app (después de la espera mínima) se recargan el historial y el catálogo.
+*/
+describe("al volver a la app", () => {
+  it("recarga el historial y el catálogo para ver lo que vendieron otros dispositivos", async () => {
+    let visibilidad = "visible"
+    Object.defineProperty(document, "visibilityState", { configurable: true, get: () => visibilidad })
+    const { falso } = await montarVentas()
+    const consultas = (tabla) => falso.from.mock.calls.filter(([t]) => t === tabla).length
+    const ventasAntes = consultas("ventas")
+    const productosAntes = consultas("productos_con_stock")
+    const ahora = Date.now()
+    const espiaFecha = vi.spyOn(Date, "now").mockReturnValue(ahora + ESPERA_ENTRE_RECARGAS + 1000)
+
+    act(() => {
+      visibilidad = "hidden"
+      document.dispatchEvent(new Event("visibilitychange"))
+      visibilidad = "visible"
+      document.dispatchEvent(new Event("visibilitychange"))
+    })
+
+    await waitFor(() => expect(consultas("ventas")).toBeGreaterThan(ventasAntes))
+    await waitFor(() => expect(consultas("productos_con_stock")).toBeGreaterThan(productosAntes))
+    espiaFecha.mockRestore()
   })
 })
