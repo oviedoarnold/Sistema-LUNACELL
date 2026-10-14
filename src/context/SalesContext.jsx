@@ -11,6 +11,7 @@ import {
 
 import { hasEnoughStock } from "../utils/cart"
 import { EVENTO_VENTAS_SINCRONIZADAS } from "../lib/sinConexion/eventos"
+import { useAlVolverALaApp } from "../hooks/useAlVolverALaApp"
 
 function SalesProvider({ children }) {
   const { user } = useAuth()
@@ -84,6 +85,15 @@ function SalesProvider({ children }) {
 
     return () => window.removeEventListener(EVENTO_VENTAS_SINCRONIZADAS, alSincronizar)
   }, [refrescarVentas, refrescarProductos])
+
+  // Lo que vendieron otros dispositivos se ve al volver a la app.
+  useAlVolverALaApp(
+    () => {
+      refrescarVentas().catch(() => {})
+      refrescarProductos?.().catch(() => {})
+    },
+    { activo: Boolean(empresaId) }
+  )
 
   const buscarProducto = useCallback(
     (id) => products.find((p) => String(p.id) === String(id)),
