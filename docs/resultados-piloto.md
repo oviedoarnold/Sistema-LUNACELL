@@ -70,8 +70,26 @@ Según las capturas entregadas el 2026-10-16:
 ### Prueba 2: diagnóstico
 
 Lo esperado según la matriz es que, sin red, la app reabra y entre al POS con
-las ventas pendientes. No ocurrió. Falta saber qué pantalla apareció, en qué
-teléfono, y si la app se abrió desde el ícono instalado o desde el navegador.
+las ventas pendientes. No ocurrió.
+
+Evidencia entregada el 2026-10-16: capturas de Android, desde la app instalada
+y desde Chrome. El dueño reporta lo mismo en iPhone. La app **sí carga**, pero
+queda en «Iniciar sesión», y al intentar entrar con `camion01.pruebas` responde
+«No se pudo completar la operación. Revisa tu conexión e intenta de nuevo».
+
+Causa probable, según la revisión del código (falta confirmarla en el
+teléfono):
+
+- la app instalada abre en `/`, que es la página pública (`start_url` del
+  manifiesto), y de ahí se va a `/login`;
+- `/login` siempre muestra el formulario: no revisa si ya hay una sesión o un
+  perfil sin conexión vigente;
+- iniciar sesión exige el servidor;
+- el perfil sin conexión solo se usa en las rutas protegidas, como `/pos`.
+
+Para confirmarla: sin red, abrir directamente
+`https://<pc>.<red>.ts.net/pos`. Si entra al POS con las ventas pendientes, la
+causa es esa.
 
 Hallazgo en el entorno de pruebas, confirmado el 2026-10-16: el build de
 `pruebas:compilar` (`dist-pruebas/`) sale **sin la lista de precarga del
@@ -79,9 +97,10 @@ service worker** (`ARCHIVOS_DEL_BUILD = []`) y **sin `login.html`**. Los dos
 pasos de `vite.config.js` que los generan escriben siempre en `dist/`. El build
 de producción (`dist/`) sí los tiene.
 
-Puede ser la causa de la falla, o no: el service worker también guarda los
-archivos cuando se usan con conexión. No se da por resuelta hasta corregir el
-build de pruebas y repetir la prueba.
+No parece ser la causa de esta falla, porque la app sí cargó sin red, pero
+hay que corregirlo: una instalación nueva podría no abrir sin red en el entorno
+de pruebas. La prueba 2 no se da por resuelta hasta corregir ambos problemas y
+repetirla.
 
 ### Reingreso sin conexión después de cerrar sesión
 
@@ -107,7 +126,7 @@ sin sincronizar) se hizo aparte; ver su detalle.
 
 ## Lo que falta para cerrar este registro
 
-- La prueba 2: corregir el build de pruebas y repetirla.
+- La prueba 2: confirmar la causa, corregirla (entrada al POS sin conexión desde `/` y `/login`, y el build de pruebas) y repetirla.
 - La observación de la prueba 10.
 - Para cada prueba física: fecha, modelo, sistema y navegador, y si la PWA
   estaba instalada. La [lista de aprobación](lista-aprobacion-piloto.md) lo
