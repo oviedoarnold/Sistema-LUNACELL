@@ -100,6 +100,21 @@ async function perfilParaSinConexion(sesion, fallo) {
   return guardada ? perfilSinConexion(guardada) : null
 }
 
+/*
+  Cuánto se espera al servidor al abrir la aplicación antes de entrar con el
+  perfil sin conexión. Sin red, la librería de Supabase reintenta por su
+  cuenta (renovar el token, hasta ~26 s; consultar el perfil, hasta ~7 s) y
+  en un teléfono sin señal cada intento puede quedarse colgado: el vendedor
+  vería «Comprobando tu sesión…» durante minutos. Si el navegador ya sabe
+  que no hay red, no se espera nada.
+
+  No cambia quién entra: es perfilParaSinConexion, con sus mismas
+  condiciones. Cuando el servidor por fin responde, manda lo que diga él.
+*/
+export const ESPERA_DEL_SERVIDOR = 5000
+
+const sinRedSegunElNavegador = () => globalThis.navigator?.onLine === false
+
 const NOMBRE_DE_USUARIO = /^[a-z0-9._-]{3,30}$/
 
 /* Solo un bloqueo que todavía no vence cuenta como bloqueo. */
@@ -204,6 +219,7 @@ export function AuthProvider({ children }) {
     }
 
     let vigente = true
+    let respondio = false
 
     /*
       Nunca rechaza. Si consultar el perfil falla —sin red, o la consulta
@@ -248,10 +264,27 @@ export function AuthProvider({ children }) {
       }
 
       if (vigente) {
+        respondio = true
+        clearTimeout(plazo)
         setUser(perfil)
         setCargando(false)
       }
     }
+
+    /*
+      Si el servidor tarda, entra con el perfil sin conexión mientras tanto.
+      Sin perfil vigente del mismo usuario no hace nada: se sigue esperando.
+    */
+    const entrarSinEsperar = async () => {
+      const perfil = await perfilParaSinConexion(null, null)
+
+      if (vigente && !respondio && perfil) {
+        setUser(perfil)
+        setCargando(false)
+      }
+    }
+
+    const plazo = setTimeout(entrarSinEsperar, sinRedSegunElNavegador() ? 0 : ESPERA_DEL_SERVIDOR)
 
     /*
       Las dos llamadas se lanzan sin esperar a proposito: la sesión se
@@ -271,6 +304,7 @@ export function AuthProvider({ children }) {
 
     return () => {
       vigente = false
+      clearTimeout(plazo)
       suscripcion.subscription.unsubscribe()
     }
   }, [])
