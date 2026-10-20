@@ -253,6 +253,118 @@ describe("revocaciones y vencimiento del perfil sin conexión", () => {
   })
 })
 
+/*
+  Sin red, la librería de Supabase reintenta por su cuenta (renovar el token
+  hasta ~26 s, consultar el perfil hasta ~7 s) y en un teléfono sin señal
+  cada intento puede quedarse colgado. El vendedor no puede esperar eso: si
+  el navegador ya sabe que no hay red, o el servidor no responde en
+  ESPERA_DEL_SERVIDOR, entra con el perfil guardado, con las MISMAS
+  condiciones de siempre. Cuando el servidor responde, manda lo que diga él.
+*/
+describe("sin red, sin esperar los reintentos del servidor", () => {
+  let navegadorEnLinea
+
+  // Abre la aplicación con un servidor que no contesta; devuelve cómo contestar después.
+  async function abrirSinRespuesta({ sesionGuardada = { user: { id: "auth-vendedor" } }, enLinea = true } = {}) {
+    const falso = montar({ sesionInicial: null })
+    let responder
+    falso.auth.getSession.mockReturnValue(new Promise((r) => (responder = r)))
+    navegadorEnLinea = enLinea
+
+    if (sesionGuardada) localStorage.setItem(LLAVE_DE_SESION, JSON.stringify(sesionGuardada))
+    else localStorage.removeItem(LLAVE_DE_SESION)
+
+    const { AuthProvider, ESPERA_DEL_SERVIDOR } = await import("./AuthContext")
+    const { useAuth } = await import("../hooks/useAuth")
+    const vista = renderHook(() => useAuth(), { wrapper: AuthProvider })
+
+    return { falso, vista, responder: (respuesta) => act(async () => responder(respuesta)), ESPERA_DEL_SERVIDOR }
+  }
+
+  beforeEach(() => {
+    navegadorEnLinea = true
+    Object.defineProperty(navigator, "onLine", { configurable: true, get: () => navegadorEnLinea })
+  })
+
+  afterEach(() => {
+    delete navigator.onLine
+  })
+
+  it("si el navegador sabe que no hay red, entra con el perfil guardado sin esperar al servidor", async () => {
+    await entrarConConexion()
+
+    const { vista } = await abrirSinRespuesta({ enLinea: false })
+
+    await waitFor(() => expect(vista.result.current.cargando).toBe(false))
+    expect(vista.result.current.user).toMatchObject({ id: "u-vendedor", sinConexion: true })
+    expect(vista.result.current.hasPermission("pos")).toBe(true)
+  })
+
+  it("si el servidor no responde en el plazo, entra con el perfil guardado", async () => {
+    await entrarConConexion()
+    vi.useFakeTimers({ shouldAdvanceTime: true, toFake: ["setTimeout", "clearTimeout"] })
+
+    const { vista, ESPERA_DEL_SERVIDOR } = await abrirSinRespuesta()
+    expect(vista.result.current.cargando).toBe(true)
+
+    await act(() => vi.advanceTimersByTimeAsync(ESPERA_DEL_SERVIDOR))
+
+    await waitFor(() => expect(vista.result.current.user).toMatchObject({ id: "u-vendedor", sinConexion: true }))
+    expect(vista.result.current.cargando).toBe(false)
+  })
+
+  it("sin perfil guardado no entra: sigue esperando al servidor", async () => {
+    const { vista } = await abrirSinRespuesta({ enLinea: false })
+
+    await new Promise((r) => setTimeout(r, 100))
+    expect(vista.result.current.user).toBeNull()
+    expect(vista.result.current.cargando).toBe(true)
+  })
+
+  it("después de cerrar sesión no entra", async () => {
+    await entrarConConexion()
+
+    const { vista } = await abrirSinRespuesta({ sesionGuardada: null, enLinea: false })
+
+    await new Promise((r) => setTimeout(r, 100))
+    expect(vista.result.current.user).toBeNull()
+  })
+
+  it("no usa el perfil guardado de otro usuario", async () => {
+    await entrarConConexion()
+
+    const { vista } = await abrirSinRespuesta({ sesionGuardada: { user: { id: "auth-otro" } }, enLinea: false })
+
+    await new Promise((r) => setTimeout(r, 100))
+    expect(vista.result.current.user).toBeNull()
+  })
+
+  it("si el servidor responde después que ya no tiene acceso, sale y se borra el perfil", async () => {
+    await entrarConConexion()
+    const { falso, vista, responder } = await abrirSinRespuesta({ enLinea: false })
+    await waitFor(() => expect(vista.result.current.user?.sinConexion).toBe(true))
+
+    falso.datos.usuarios[0].activo = false
+    await responder({ data: { session: { user: { id: "auth-vendedor" } } }, error: null })
+
+    await waitFor(() => expect(vista.result.current.user).toBeNull())
+    const { almacenDeLaApp } = await import("../lib/sinConexion/almacenDeLaApp")
+    const { leerPerfilLocal } = await import("../lib/sinConexion/perfilLocal")
+    expect(await leerPerfilLocal(await almacenDeLaApp(), "auth-vendedor")).toBeNull()
+  })
+
+  it("si el servidor responde después y confirma, deja de estar sin conexión", async () => {
+    await entrarConConexion()
+    const { vista, responder } = await abrirSinRespuesta({ enLinea: false })
+    await waitFor(() => expect(vista.result.current.user?.sinConexion).toBe(true))
+
+    await responder({ data: { session: { user: { id: "auth-vendedor" } } }, error: null })
+
+    await waitFor(() => expect(vista.result.current.user?.sinConexion).toBeFalsy())
+    expect(vista.result.current.user?.id).toBe("u-vendedor")
+  })
+})
+
 describe("datos del teléfono al cerrar sesión", () => {
   it("borra la copia local del usuario (clientes, precios) pero conserva sus ventas sin sincronizar", async () => {
     await entrarConConexion()
