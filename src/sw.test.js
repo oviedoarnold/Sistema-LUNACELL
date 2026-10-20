@@ -23,8 +23,9 @@ const FUENTE = readFileSync("public/sw.js", "utf8")
 const CACHE_ACTUAL = "lunacell-v1"
 const CACHE_HEREDADO = "ferreteria-v1"
 
-function montarServiceWorker({ cachesExistentes = [] } = {}) {
+function montarServiceWorker({ cachesExistentes = [], fetch: pedir } = {}) {
   const borradas = []
+  const guardadas = []
   const manejadores = {}
 
   const cacheFalso = {
@@ -32,7 +33,10 @@ function montarServiceWorker({ cachesExistentes = [] } = {}) {
     keys: () => Promise.resolve([]),
     delete: () => Promise.resolve(true),
     match: () => Promise.resolve(undefined),
-    put: () => Promise.resolve(),
+    put: (clave) => {
+      guardadas.push(clave)
+      return Promise.resolve()
+    },
   }
 
   const contexto = {
@@ -40,7 +44,7 @@ function montarServiceWorker({ cachesExistentes = [] } = {}) {
     URL,
     Set,
     Promise,
-    fetch: () => Promise.resolve({ ok: true, clone: () => ({}) }),
+    fetch: pedir || (() => Promise.resolve({ ok: true, clone: () => ({}) })),
 
     caches: {
       open: () => Promise.resolve(cacheFalso),
@@ -85,7 +89,17 @@ function montarServiceWorker({ cachesExistentes = [] } = {}) {
     await trabajo
   }
 
-  return { contexto, borradas, manejadores, disparar }
+  // Una petición como la entrega el navegador; devuelve lo que respondió.
+  const pedirPagina = async (url, mode = "navigate") => {
+    let respuesta
+    manejadores.fetch({
+      request: { url, mode, method: "GET" },
+      respondWith: (p) => (respuesta = p),
+    })
+    return respuesta
+  }
+
+  return { contexto, borradas, guardadas, manejadores, disparar, pedirPagina }
 }
 
 describe("service worker · migración de caché", () => {
@@ -164,5 +178,57 @@ describe("service worker · nombre de la caché", () => {
 
   it("no declara el nombre heredado como caché activa", () => {
     expect(FUENTE).not.toContain(`const CACHE_NAME = "${CACHE_HEREDADO}"`)
+  })
+})
+
+/*
+  La aplicación instalada abre en /pos. Si quien la abre con conexión no tiene
+  la marca de sesión, el middleware responde 307 hacia /login, y el navegador
+  entrega esa redirección al service worker sin seguirla. Guardarla como
+  «/index.html» haría que, sin red, la aplicación respondiera con esa
+  redirección en vez de abrir: el vendedor no podría facturar sin conexión.
+*/
+describe("service worker · navegación", () => {
+  const respuesta = (datos) => ({ ...datos, clone: () => ({ ...datos }) })
+
+  it("guarda la aplicación cuando el servidor la entrega bien", async () => {
+    const sw = montarServiceWorker({
+      fetch: () => Promise.resolve(respuesta({ ok: true, status: 200, type: "basic", redirected: false })),
+    })
+
+    await sw.pedirPagina("https://lunacell.oviedoarnold.lat/pos")
+
+    expect(sw.guardadas).toEqual(["/index.html"])
+  })
+
+  it("no guarda la redirección del middleware al login", async () => {
+    const sw = montarServiceWorker({
+      fetch: () => Promise.resolve(respuesta({ ok: false, status: 0, type: "opaqueredirect", redirected: false })),
+    })
+
+    const entregada = await sw.pedirPagina("https://lunacell.oviedoarnold.lat/pos")
+
+    expect(entregada.type).toBe("opaqueredirect")
+    expect(sw.guardadas).toEqual([])
+  })
+
+  it("no guarda una respuesta que llegó tras una redirección", async () => {
+    const sw = montarServiceWorker({
+      fetch: () => Promise.resolve(respuesta({ ok: true, status: 200, type: "basic", redirected: true })),
+    })
+
+    await sw.pedirPagina("https://lunacell.oviedoarnold.lat/pos")
+
+    expect(sw.guardadas).toEqual([])
+  })
+
+  it("no guarda un error del servidor", async () => {
+    const sw = montarServiceWorker({
+      fetch: () => Promise.resolve(respuesta({ ok: false, status: 500, type: "basic", redirected: false })),
+    })
+
+    await sw.pedirPagina("https://lunacell.oviedoarnold.lat/pos")
+
+    expect(sw.guardadas).toEqual([])
   })
 })
