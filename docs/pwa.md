@@ -7,7 +7,8 @@
 | Ruta del service worker | `public/sw.js` → servido en `/sw.js` |
 | Nombre del caché en `caches.open()` | `lunacell-v1` |
 | Manifest | `public/manifest.webmanifest` → servido en `/manifest.webmanifest` |
-| `start_url` | `/` |
+| `id` | `/` (identidad de la app instalada; no cambia con `start_url`) |
+| `start_url` | `/pos`: con red y sin sesión, el middleware la manda al login; sin red, entra al POS con el perfil sin conexión vigente |
 | `scope` | `/` |
 | `display` | `standalone` |
 | Iconos | 192×192, 512×512 y 512×512 maskable |
@@ -24,6 +25,10 @@ tener el último byte: el cajero necesita cobrar, no la versión más reciente d
 La navegación tiene un caso aparte: siempre resuelve a `/index.html`, porque la
 aplicación es de una sola página y el enrutado ocurre en el navegador. Si no hay red
 ni copia en caché, se sirve `/offline.html`.
+
+Como `/index.html` solo se guarda una página servida bien y sin redirección: el 307
+del middleware hacia `/login` no se guarda, porque sin red la aplicación respondería
+con esa redirección en vez de abrir.
 
 ## Qué funciona sin Internet
 

@@ -165,13 +165,25 @@ async function responderConCacheYActualizar(request) {
 /*
   La navegación siempre resuelve al index: la aplicación es de una sola
   página y el enrutado ocurre en el navegador.
+
+  Solo se guarda como index una página servida bien y sin redirección. El
+  middleware manda al login a quien abre una pantalla privada sin sesión, y
+  el navegador entrega ese 307 aquí sin seguirlo: guardado como index, sin
+  red la aplicación respondería con esa redirección en vez de abrir.
 */
+function esLaAplicacion(respuesta) {
+  return respuesta.ok && respuesta.type === "basic" && !respuesta.redirected
+}
+
 async function responderNavegacion(request) {
   try {
     const respuesta = await fetch(request)
-    const cache = await caches.open(CACHE_NAME)
 
-    await guardarEnCache(cache, "/index.html", respuesta.clone())
+    if (esLaAplicacion(respuesta)) {
+      const cache = await caches.open(CACHE_NAME)
+
+      await guardarEnCache(cache, "/index.html", respuesta.clone())
+    }
 
     return respuesta
   } catch {

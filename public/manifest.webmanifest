@@ -3,7 +3,7 @@
   "short_name": "LUNACELL",
   "description": "Inventario, facturación, cotizaciones y abonos de LUNACELL.",
   "id": "/",
-  "start_url": "/",
+  "start_url": "/pos",
   "scope": "/",
   "display": "standalone",
   "orientation": "portrait-primary",
