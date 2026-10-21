@@ -1,10 +1,22 @@
 import { readFileSync, writeFileSync, rmSync } from 'node:fs'
+import path from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 
 import { defineConfig, build as construir } from 'vite'
 import react from '@vitejs/plugin-react'
 
 const CARPETA_TEMPORAL = 'dist-prerender'
+
+/*
+  La carpeta de salida de la compilación en curso: dist/ en producción,
+  dist-pruebas/ en el entorno local de pruebas (scripts/entornoDePruebas.mjs).
+  Los dos pasos de abajo escriben ahí y no en un dist/ fijo: si no, el build
+  de pruebas salía sin login.html y sin la lista de precarga, y pisaba los
+  archivos de dist/.
+*/
+function carpetaDeSalida(configuracion) {
+  return path.resolve(configuracion.root, configuracion.build.outDir)
+}
 
 /*
   Escribe dist/login.html con el formulario de acceso ya dibujado dentro.
@@ -16,6 +28,7 @@ const CARPETA_TEMPORAL = 'dist-prerender'
 */
 function prerenderizarLogin() {
   let esCompilacionDeServidor = false
+  let salida = 'dist'
 
   return {
     name: 'prerenderizar-login',
@@ -23,6 +36,7 @@ function prerenderizarLogin() {
 
     configResolved(configuracion) {
       esCompilacionDeServidor = Boolean(configuracion.build.ssr)
+      salida = carpetaDeSalida(configuracion)
     },
 
     async closeBundle() {
@@ -45,14 +59,14 @@ function prerenderizarLogin() {
         pathToFileURL(`${process.cwd()}/${CARPETA_TEMPORAL}/login.js`).href
       )
 
-      const plantilla = readFileSync('dist/index.html', 'utf8')
+      const plantilla = readFileSync(path.join(salida, 'index.html'), 'utf8')
 
       const conFormulario = plantilla.replace(
         '<div id="root"></div>',
         `<div id="root">${modulo.renderizarLogin()}</div>`
       )
 
-      writeFileSync('dist/login.html', conFormulario)
+      writeFileSync(path.join(salida, 'login.html'), conFormulario)
 
       rmSync(CARPETA_TEMPORAL, { recursive: true, force: true })
     },
@@ -69,14 +83,22 @@ function prerenderizarLogin() {
   había entrado antes con red y el navegador había cacheado los archivos
   por su cuenta.
 */
-function precargarArchivosDelBuild() {
+export function precargarArchivosDelBuild() {
+  let esCompilacionDeServidor = false
+  let salida = 'dist'
+
   return {
     name: 'precargar-archivos-del-build',
     apply: 'build',
 
-    writeBundle(opciones, paquete) {
-      // Solo la compilación del cliente escribe en dist/.
-      if (opciones.dir && !opciones.dir.endsWith('dist')) return
+    configResolved(configuracion) {
+      esCompilacionDeServidor = Boolean(configuracion.build.ssr)
+      salida = carpetaDeSalida(configuracion)
+    },
+
+    writeBundle(_opciones, paquete) {
+      // La lista es de la compilación del cliente, no de la del prerender.
+      if (esCompilacionDeServidor) return
 
       /*
         El orden se fija con un comparador explicito. El .sort() a secas
@@ -93,10 +115,11 @@ function precargarArchivosDelBuild() {
           unaRuta < otraRuta ? -1 : unaRuta > otraRuta ? 1 : 0
         )
 
-      const sw = readFileSync('dist/sw.js', 'utf8')
+      const archivo = path.join(salida, 'sw.js')
+      const sw = readFileSync(archivo, 'utf8')
 
       writeFileSync(
-        'dist/sw.js',
+        archivo,
         sw.replace(
           'const ARCHIVOS_DEL_BUILD = []',
           'const ARCHIVOS_DEL_BUILD = ' + JSON.stringify(rutas, null, 2)

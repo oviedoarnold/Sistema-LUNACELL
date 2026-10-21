@@ -84,6 +84,28 @@ export function buscarProduccionEnElBuild(contenidos) {
   return contenidos.some((texto) => texto.includes(REF_PRODUCCION) || PROYECTO_EN_LA_NUBE.test(texto))
 }
 
+/*
+  ¿El build trae lo necesario para abrir sin red? La lista de precarga del
+  service worker (sin ella, una instalación nueva no abre sin conexión) y la
+  página de login. La lista vacía es la marca de que la compilación no la
+  escribió.
+*/
+const LISTA_VACIA = /const ARCHIVOS_DEL_BUILD = \[\s*\]/
+
+export function revisarBuildParaAbrirSinRed({ sw, hayLogin }) {
+  const errores = []
+
+  if (typeof sw !== "string" || !sw.includes("const ARCHIVOS_DEL_BUILD")) {
+    errores.push("Falta el service worker (sw.js) o su lista de precarga.")
+  } else if (LISTA_VACIA.test(sw)) {
+    errores.push("El service worker salió con la lista de precarga vacía: la aplicación no abriría sin red.")
+  }
+
+  if (!hayLogin) errores.push("Falta login.html en el build.")
+
+  return errores
+}
+
 function archivosDe(carpeta) {
   return readdirSync(carpeta).flatMap((nombre) => {
     const ruta = path.join(carpeta, nombre)
@@ -126,7 +148,18 @@ async function principal(orden) {
       process.exit(1)
     }
 
-    console.log(`✔ Build de pruebas listo en ${CARPETA_DE_PRUEBAS}/ y sin rastros de Supabase en la nube.`)
+    const swDelBuild = path.join(salida, "sw.js")
+    const incompleto = revisarBuildParaAbrirSinRed({
+      sw: existsSync(swDelBuild) ? readFileSync(swDelBuild, "utf8") : null,
+      hayLogin: existsSync(path.join(salida, "login.html")),
+    })
+
+    if (incompleto.length) {
+      for (const error of incompleto) console.error(`✖ ${error}`)
+      process.exit(1)
+    }
+
+    console.log(`✔ Build de pruebas listo en ${CARPETA_DE_PRUEBAS}/, completo para abrir sin red y sin rastros de Supabase en la nube.`)
   }
 
   if (orden === "servir") {

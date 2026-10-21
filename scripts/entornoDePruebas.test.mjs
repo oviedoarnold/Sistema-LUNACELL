@@ -1,7 +1,7 @@
 // @vitest-environment node
 import { describe, it, expect } from "vitest"
 
-import { revisarConfiguracion, buscarProduccionEnElBuild, opcionesDeVistaPrevia, REF_PRODUCCION } from "./entornoDePruebas.mjs"
+import { revisarConfiguracion, buscarProduccionEnElBuild, opcionesDeVistaPrevia, revisarBuildParaAbrirSinRed, REF_PRODUCCION } from "./entornoDePruebas.mjs"
 
 /*
   El modo de pruebas nunca puede apuntar a Supabase en la nube: ni a
@@ -66,5 +66,26 @@ describe("vista previa del modo de pruebas", () => {
     expect(opciones.mode).toBe("pruebas")
     expect(opciones.preview).toMatchObject({ host: "127.0.0.1", port: 4173, strictPort: true, allowedHosts: [".ts.net"] })
     expect(opciones.build.outDir).toBe("dist-pruebas")
+  })
+})
+
+/*
+  pruebas:compilar rechaza un build al que le falte lo necesario para abrir
+  sin red: la lista de precarga del service worker y la página de login.
+*/
+describe("build de pruebas completo", () => {
+  const SW_LLENO = 'const ARCHIVOS_DEL_BUILD = [\n  "/assets/index-abc.js"\n]'
+
+  it("acepta un build con la lista de precarga y el login", () => {
+    expect(revisarBuildParaAbrirSinRed({ sw: SW_LLENO, hayLogin: true })).toEqual([])
+  })
+
+  it("rechaza la lista de precarga vacía", () => {
+    expect(revisarBuildParaAbrirSinRed({ sw: "const ARCHIVOS_DEL_BUILD = []", hayLogin: true }).join(" ")).toMatch(/precarga/)
+  })
+
+  it("rechaza un build sin service worker o sin login", () => {
+    expect(revisarBuildParaAbrirSinRed({ sw: null, hayLogin: true })).not.toEqual([])
+    expect(revisarBuildParaAbrirSinRed({ sw: SW_LLENO, hayLogin: false }).join(" ")).toMatch(/login/)
   })
 })
