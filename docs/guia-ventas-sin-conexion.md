@@ -12,8 +12,10 @@ administradores de LUNACELL.
 
 ### Antes de salir a ruta
 
-1. Instala LUNACELL en el teléfono ("Agregar a la pantalla de inicio"). Así el
-   teléfono conserva mejor las ventas guardadas.
+1. Instala LUNACELL en el teléfono desde **`https://lunacell.oviedoarnold.lat`**
+   ("Agregar a la pantalla de inicio"), la única dirección oficial. Así el
+   teléfono conserva mejor las ventas guardadas. Desde otra dirección (por
+   ejemplo, `lunacell.vercel.app`) no podrás iniciar sesión.
 2. Entra con tu usuario **con conexión** y abre **Facturar** unos segundos. Con
    eso se descarga la copia de productos, precios, existencias y clientes de tu
    ubicación.

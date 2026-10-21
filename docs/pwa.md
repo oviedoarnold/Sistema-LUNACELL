@@ -30,6 +30,19 @@ Como `/index.html` solo se guarda una página servida bien y sin redirección: e
 del middleware hacia `/login` no se guarda, porque sin red la aplicación respondería
 con esa redirección en vez de abrir.
 
+## Dominio oficial
+
+La aplicación se usa e instala solo desde `https://lunacell.oviedoarnold.lat`.
+El mismo despliegue también responde en `lunacell.vercel.app`, la dirección
+técnica que asigna Vercel, pero **no es una dirección de acceso**: la función
+`acceso` solo acepta los orígenes de `ORIGENES_PERMITIDOS`, y sin ese valor
+solo el dominio oficial, así que desde ahí no se puede iniciar sesión.
+
+Cada dominio es un origen distinto para el navegador: la cookie
+`lunacell-sesion`, la sesión de Supabase, la caché del service worker y la base
+local (perfil sin conexión y ventas pendientes) no se comparten. Una PWA
+instalada desde `vercel.app` es otra aplicación, con sus propios datos.
+
 ## Qué funciona sin Internet
 
 - **Abrir la aplicación completa.** El HTML, el JavaScript, los estilos y los iconos

@@ -24,10 +24,19 @@ Para el uso diario consulta también la
 
 ## 2. Instalar la aplicación (PWA)
 
-- **Android (Chrome):** abre `https://lunacell.vercel.app` y elige el menú ⋮ →
-  **Instalar aplicación**.
+La única dirección oficial es **`https://lunacell.oviedoarnold.lat`**. Instala
+y abre la aplicación siempre desde ahí.
+
+- **Android (Chrome):** abre `https://lunacell.oviedoarnold.lat` y elige el
+  menú ⋮ → **Instalar aplicación**.
 - **iPhone (Safari):** abre la misma dirección y elige **Compartir** →
   **Agregar a inicio**.
+- **No uses `lunacell.vercel.app`.** Es la dirección técnica de Vercel: la
+  aplicación abre, pero no deja iniciar sesión («Revisa tu conexión»), porque
+  la función de acceso solo acepta el dominio oficial. Además, cada dirección
+  es una aplicación aparte en el teléfono, con su propia sesión y sus propias
+  ventas pendientes. Si el teléfono ya tiene instalada la de `vercel.app`,
+  desinstálala **con conexión y sin ventas pendientes** e instala la oficial.
   - Safari puede borrar los datos de un sitio que no se usa en 7 días si **no**
     está instalado: instálalo siempre.
 - Abre LUNACELL **desde el ícono instalado**, no desde el navegador.
