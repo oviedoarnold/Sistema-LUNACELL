@@ -14,7 +14,7 @@ Fecha: ver cada prueba  Persona: el dueño del proyecto  Commit de LUNACELL: 66c
 | # | Prueba | Dispositivo (modelo / sistema / navegador) | PWA instalada | Resultado (OK / FALLA) | Observaciones y capturas |
 |---|--------|--------------------------------------------|---------------|------------------------|--------------------------|
 | 1 | Ventas en modo avión con comprobante PROV | PC, iPhone y Android (modelos y versiones no indicados) | No indicado | OK | Reportado por el dueño. Fecha no indicada. |
-| 2 | Cerrar y reabrir sin red | No indicado | No indicado | **FALLA (en diagnóstico)** | Reportado por el dueño, 2026-10-16: con una venta pendiente, cerró la app y sin red no pudo volver a abrirla («necesito tener conexión»). La venta no se perdió: al volver la conexión entró y se subió sin problema. Ver «Prueba 2: diagnóstico». |
+| 2 | Cerrar y reabrir sin red | Android e iPhone (modelos y versiones no indicados) | No indicado | **FALLA (limitación aceptada)** | Reportado por el dueño, 2026-10-16: con una venta pendiente, cerró la app y sin red no pudo volver a abrirla («necesito tener conexión»). La venta no se perdió: al volver la conexión entró y se subió sin problema. Repetida con el build del PR #56 y reportada por el dueño el 2026-10-20: sigue sin entrar sin red. El dueño decidió aceptarla como limitación conocida. Ver «Prueba 2: diagnóstico». |
 | 3 | Reiniciar el teléfono | No indicado | No indicado | OK | Reportado por el dueño: reinicio con una venta pendiente, sin pérdida. Fecha no indicada. |
 | 4 | Respaldo cifrado y rescate en la PC | Teléfono: no indicado (la captura parece de iPhone, sin confirmar). PC: no indicado | No indicado | OK | 2026-10-16. Capturas entregadas. Ver el detalle abajo. |
 | 5 | Sincronización automática al volver la red | PC, iPhone y Android (modelos y versiones no indicados) | No indicado | OK | Reportado por el dueño. Fecha no indicada. |
@@ -70,37 +70,44 @@ Según las capturas entregadas el 2026-10-16:
 ### Prueba 2: diagnóstico
 
 Lo esperado según la matriz es que, sin red, la app reabra y entre al POS con
-las ventas pendientes. No ocurrió.
+las ventas pendientes. **No ocurre en los teléfonos.** El dueño aceptó la falla
+como limitación conocida (2026-10-20) para no detener el piloto.
 
-Evidencia entregada el 2026-10-16: capturas de Android, desde la app instalada
-y desde Chrome. El dueño reporta lo mismo en iPhone. La app **sí carga**, pero
-queda en «Iniciar sesión», y al intentar entrar con `camion01.pruebas` responde
-«No se pudo completar la operación. Revisa tu conexión e intenta de nuevo».
+Primer intento, con evidencia entregada el 2026-10-16: capturas de Android,
+desde la app instalada y desde Chrome. El dueño reporta lo mismo en iPhone.
+La app **sí carga**, pero queda en «Iniciar sesión», y al intentar entrar con
+`camion01.pruebas` responde «No se pudo completar la operación. Revisa tu
+conexión e intenta de nuevo».
 
-Causa probable, según la revisión del código (falta confirmarla en el
-teléfono):
+Lo que se encontró y se corrigió en el PR #56:
 
-- la app instalada abre en `/`, que es la página pública (`start_url` del
-  manifiesto), y de ahí se va a `/login`;
-- `/login` siempre muestra el formulario: no revisa si ya hay una sesión o un
-  perfil sin conexión vigente;
-- iniciar sesión exige el servidor;
-- el perfil sin conexión solo se usa en las rutas protegidas, como `/pos`.
+- la app instalada abría en `/` (la página pública) y de ahí iba a `/login`,
+  que no revisaba el perfil sin conexión: ahora abre en `/pos`, y `/login`
+  lleva al POS a quien tiene un perfil sin conexión vigente;
+- el service worker podía guardar la redirección al login como si fuera la
+  aplicación: ahora solo guarda una página servida bien y sin redirección;
+- el build de `pruebas:compilar` salía sin la lista de precarga del service
+  worker y sin `login.html`: ahora sale completo, y la compilación falla si no;
+- sin red, la librería de Supabase reintenta renovar el token (hasta ~26 s) y
+  consultar el perfil (hasta ~7 s) antes de que la app use el perfil sin
+  conexión: ahora entra con el perfil guardado si el navegador sabe que no hay
+  red, o a los 5 segundos si el servidor no contesta.
 
-Para confirmarla: sin red, abrir directamente
-`https://<pc>.<red>.ts.net/pos`. Si entra al POS con las ventas pendientes, la
-causa es esa.
+Comprobado en Chrome de escritorio contra el Supabase local, con el servidor
+inaccesible: entra al POS en 5 s (antes, 7 s con el token vigente y 30 s con el
+token vencido); en modo avión, en menos de 1 s; después de cerrar sesión, no
+entra. **No es una prueba física.**
 
-Hallazgo en el entorno de pruebas, confirmado el 2026-10-16: el build de
-`pruebas:compilar` (`dist-pruebas/`) sale **sin la lista de precarga del
-service worker** (`ARCHIVOS_DEL_BUILD = []`) y **sin `login.html`**. Los dos
-pasos de `vite.config.js` que los generan escriben siempre en `dist/`. El build
-de producción (`dist/`) sí los tiene.
+Segundo intento, reportado por el dueño el 2026-10-20 con el build del PR #56:
+en los teléfonos **sigue sin entrar sin red**. No se indicaron el modelo, el
+sistema, si se reinstaló la app ni la pantalla en la que quedó. La causa en el
+teléfono no está identificada.
 
-No parece ser la causa de esta falla, porque la app sí cargó sin red, pero
-hay que corregirlo: una instalación nueva podría no abrir sin red en el entorno
-de pruebas. La prueba 2 no se da por resuelta hasta corregir ambos problemas y
-repetirla.
+**Limitación aceptada y procedimiento:** abrir la app **con conexión** al
+empezar el día y no cerrarla. Mientras siga abierta, se puede facturar sin red
+y las ventas suben solas al volver la conexión (pruebas 1, 5 y 7). Si se
+cierra sin red, hay que esperar a tener conexión para volver a entrar; las
+ventas pendientes no se pierden (prueba 2, primer intento).
 
 ### Reingreso sin conexión después de cerrar sesión
 
@@ -126,7 +133,9 @@ sin sincronizar) se hizo aparte; ver su detalle.
 
 ## Lo que falta para cerrar este registro
 
-- La prueba 2: confirmar la causa, corregirla (entrada al POS sin conexión desde `/` y `/login`, y el build de pruebas) y repetirla.
+- La prueba 2: falla aceptada como limitación conocida. Falta registrar el
+  dispositivo del segundo intento y, si se retoma, identificar la causa en el
+  teléfono.
 - La observación de la prueba 10.
 - Para cada prueba física: fecha, modelo, sistema y navegador, y si la PWA
   estaba instalada. La [lista de aprobación](lista-aprobacion-piloto.md) lo
