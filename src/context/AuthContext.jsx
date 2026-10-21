@@ -2,6 +2,7 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react"
 
@@ -213,6 +214,15 @@ export function AuthProvider({ children }) {
   */
   const [cargando, setCargando] = useState(() => Boolean(supabase))
 
+  /*
+    Cada respuesta del servidor sobre la sesión lleva un turno, y solo
+    cuenta la del último. Con la red débil una consulta puede contestar
+    mucho después: si entretanto el vendedor cerró sesión (o entró otro),
+    esa respuesta vieja lo devolvería a la aplicación y volvería a guardar
+    el perfil que el cierre de sesión borró.
+  */
+  const turnoDeSesion = useRef(0)
+
   useEffect(() => {
     if (!supabase) {
       return
@@ -228,7 +238,9 @@ export function AuthProvider({ children }) {
       avanzaría nunca. Ante el fallo se deja de cargar sin usuario, que es
       lo honesto: no se pudo establecer quién es, así que no entra.
     */
-    const aplicarSesion = async (sesion) => {
+    // El turno se toma al preguntar, no al recibir: así una respuesta tardía conserva el suyo.
+    const aplicarSesion = async (sesion, turno = ++turnoDeSesion.current) => {
+      const sigueVigente = () => vigente && turno === turnoDeSesion.current
       let perfil = null
       let fallo = null
 
@@ -238,6 +250,8 @@ export function AuthProvider({ children }) {
         fallo = error
         console.error("No se pudo cargar el perfil de la sesión:", error)
       }
+
+      if (!sigueVigente()) return
 
       /*
         La marca acompaña al perfil y no a la sesión de Supabase: una
@@ -263,7 +277,7 @@ export function AuthProvider({ children }) {
         if (!perfil) borrarMarcaDeSesion()
       }
 
-      if (vigente) {
+      if (sigueVigente()) {
         respondio = true
         clearTimeout(plazo)
         setUser(perfil)
@@ -276,9 +290,10 @@ export function AuthProvider({ children }) {
       Sin perfil vigente del mismo usuario no hace nada: se sigue esperando.
     */
     const entrarSinEsperar = async () => {
+      const turno = turnoDeSesion.current
       const perfil = await perfilParaSinConexion(null, null)
 
-      if (vigente && !respondio && perfil) {
+      if (vigente && !respondio && turno === turnoDeSesion.current && perfil) {
         setUser(perfil)
         setCargando(false)
       }
@@ -292,9 +307,11 @@ export function AuthProvider({ children }) {
       lo dice explícitamente, y es seguro porque aplicarSesion ya no
       rechaza.
     */
+    const turnoInicial = ++turnoDeSesion.current
+
     void supabase.auth
       .getSession()
-      .then(({ data }) => aplicarSesion(data.session))
+      .then(({ data }) => aplicarSesion(data.session, turnoInicial))
 
     const { data: suscripcion } = supabase.auth.onAuthStateChange(
       (_evento, sesion) => {
@@ -360,6 +377,8 @@ export function AuthProvider({ children }) {
   const authIdEnSesion = user?.authId || null
 
   const logout = useCallback(async () => {
+    turnoDeSesion.current += 1
+
     if (supabase) {
       const resultado = await supabase.auth.signOut()
 
@@ -379,10 +398,14 @@ export function AuthProvider({ children }) {
   const revalidarSesion = useCallback(async () => {
     if (!supabase) return
 
+    const turno = turnoDeSesion.current
     const { data } = await supabase.auth.getSession()
     if (!data?.session?.user) return
 
     const { perfil, error } = await consultarPerfil(data.session.user.id).catch((fallo) => ({ perfil: null, error: fallo }))
+
+    // Mientras se preguntaba, cerró sesión o cambió la sesión: esta respuesta ya no vale.
+    if (turno !== turnoDeSesion.current) return
 
     if (perfil) {
       marcarSesionAbierta()
