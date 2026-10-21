@@ -363,6 +363,41 @@ describe("sin red, sin esperar los reintentos del servidor", () => {
     await waitFor(() => expect(vista.result.current.user?.sinConexion).toBeFalsy())
     expect(vista.result.current.user?.id).toBe("u-vendedor")
   })
+
+  /*
+    Entró sin conexión mientras la consulta al servidor seguía pendiente, y
+    cerró sesión. Si después vuelve la red y esa consulta tardía contesta
+    bien, su respuesta ya no vale: no puede devolverlo a la aplicación ni
+    volver a guardar el perfil que el cierre de sesión borró.
+  */
+  it("si cierra sesión y el servidor responde después, la respuesta tardía no lo hace entrar", async () => {
+    await entrarConConexion()
+    const { vista, responder } = await abrirSinRespuesta({ enLinea: false })
+    await waitFor(() => expect(vista.result.current.user?.sinConexion).toBe(true))
+
+    await act(() => vista.result.current.logout())
+    expect(vista.result.current.user).toBeNull()
+
+    await responder({ data: { session: { user: { id: "auth-vendedor" } } }, error: null })
+    await new Promise((r) => setTimeout(r, 100))
+
+    expect(vista.result.current.user).toBeNull()
+    const { almacenDeLaApp } = await import("../lib/sinConexion/almacenDeLaApp")
+    const { leerPerfilLocal } = await import("../lib/sinConexion/perfilLocal")
+    expect(await leerPerfilLocal(await almacenDeLaApp(), "auth-vendedor")).toBeNull()
+  })
+
+  it("si inicia sesión mientras el servidor no contesta, el plazo no cambia su perfil por el de sin conexión", async () => {
+    await entrarConConexion()
+    vi.useFakeTimers({ shouldAdvanceTime: true, toFake: ["setTimeout", "clearTimeout"] })
+    const { vista, ESPERA_DEL_SERVIDOR } = await abrirSinRespuesta()
+
+    await act(() => vista.result.current.login(VENDEDOR.email, "Vende2026"))
+    await act(() => vi.advanceTimersByTimeAsync(ESPERA_DEL_SERVIDOR))
+
+    expect(vista.result.current.user?.id).toBe("u-vendedor")
+    expect(vista.result.current.user?.sinConexion).toBeFalsy()
+  })
 })
 
 describe("datos del teléfono al cerrar sesión", () => {
