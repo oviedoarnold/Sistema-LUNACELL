@@ -437,7 +437,7 @@ describe("Locations · ventas sin conexión", () => {
     expect(screen.queryByLabelText(/permitir ventas sin conexión/i)).not.toBeInTheDocument()
 
     escribirNombre("Camión 04")
-    fireEvent.change(screen.getByLabelText(/tipo/i), { target: { value: LOCATION_TYPES.TRUCK } })
+    fireEvent.change(screen.getByLabelText(/^tipo$/i), { target: { value: LOCATION_TYPES.TRUCK } })
     guardar()
 
     await waitFor(() => expect(falso.datos.ubicaciones).toHaveLength(1))
