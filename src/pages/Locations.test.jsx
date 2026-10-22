@@ -516,6 +516,22 @@ describe("Locations · ventas sin conexión", () => {
       expect(screen.getByRole("button", { name: /reintentar/i })).toBeInTheDocument()
       expect(fila(falso, "u3").vende_sin_conexion).toBe(true)
     })
+
+    it("al reintentar con la consulta ya disponible, muestra lo pendiente y deja continuar", async () => {
+      const fallarEn = { ventas_por_conciliar: { message: "Failed to fetch" } }
+      await montar({ fallarEn })
+
+      desmarcarYGuardar()
+      await screen.findByText(/no se pudo comprobar el estado de las ventas sin conexión/i)
+
+      delete fallarEn.ventas_por_conciliar
+      fireEvent.click(screen.getByRole("button", { name: /reintentar/i }))
+
+      expect(await screen.findByTestId("resumen-por-conciliar")).toHaveTextContent("0")
+      fireEvent.click(confirmo())
+      fireEvent.change(nombre(), { target: { value: "Camión 01" } })
+      expect(botonDesactivar()).toBeEnabled()
+    })
   })
 
   describe("errores de la base", () => {

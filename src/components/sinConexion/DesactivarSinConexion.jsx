@@ -25,18 +25,24 @@ function DesactivarSinConexion({ ubicacion, onCancelar, onConfirmar }) {
   const [confirmado, setConfirmado] = useState(false)
   const [nombre, setNombre] = useState("")
 
-  const comprobar = useCallback(() => {
-    setConsulta({ estado: "cargando", resumen: null, error: "" })
-
-    return resumenParaDesactivarSinConexion(ubicacion.id).then(
-      (resumen) => setConsulta({ estado: "listo", resumen, error: "" }),
-      (error) => setConsulta({ estado: "error", resumen: null, error: error.message })
-    )
-  }, [ubicacion.id])
+  // Solo actualiza el estado cuando llega la respuesta; «cargando» lo pone quien la pide.
+  const consultar = useCallback(
+    () =>
+      resumenParaDesactivarSinConexion(ubicacion.id).then(
+        (resumen) => setConsulta({ estado: "listo", resumen, error: "" }),
+        (error) => setConsulta({ estado: "error", resumen: null, error: error.message })
+      ),
+    [ubicacion.id]
+  )
 
   useEffect(() => {
-    void comprobar()
-  }, [comprobar])
+    void consultar()
+  }, [consultar])
+
+  const reintentar = () => {
+    setConsulta({ estado: "cargando", resumen: null, error: "" })
+    void consultar()
+  }
 
   const { estado, resumen, error } = consulta
   const puedeDesactivar = estado === "listo" && confirmado && nombre.trim() === ubicacion.name
@@ -66,7 +72,7 @@ function DesactivarSinConexion({ ubicacion, onCancelar, onConfirmar }) {
         <div className="alert-banner" role="alert">
           <span>
             {error} No se puede desactivar sin comprobarlo.{" "}
-            <button type="button" className="btn btn-secondary btn-sm" onClick={comprobar}>Reintentar</button>
+            <button type="button" className="btn btn-secondary btn-sm" onClick={reintentar}>Reintentar</button>
           </span>
         </div>
       )}
