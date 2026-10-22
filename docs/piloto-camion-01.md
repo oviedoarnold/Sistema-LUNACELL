@@ -205,7 +205,30 @@ ubicación que no sea camión o bodega.
   `false`; `emite_fiscal = false` en las cuatro; 0 ventas por conciliar.
   Inventario, usuarios, permisos y correlativos con las mismas huellas md5 que
   antes de activar.
-- Prueba final en el teléfono del vendedor: **pendiente**.
+- Prueba final en el teléfono del vendedor: **satisfactoria**, ver abajo.
+
+### Prueba final en producción (2026-10-22)
+
+Dos ventas sin conexión hechas por el dueño con el usuario `camion01`, una en
+cada uno de dos teléfonos (modelos no indicados), con la app abierta y en modo
+avión:
+
+| Documento | Comprobante provisional | Hecha (UTC) | Recibida (UTC) | Venta | Inventario |
+|---|---|---|---|---|---|
+| VTA-000009 | PROV-90BB-000001 | 2026-10-22 02:26:43 | 02:27:15 | 1 Cargador, contado, L 138.00 con ISV | −1 en Camión 01 |
+| VTA-000010 | PROV-038C-000001 | 2026-10-22 03:16:57 | 03:17:10 | 1 Cubo Iphone, contado, L 115.00 con ISV | −1 en Camión 01 |
+
+Verificado en el servidor (solo lectura):
+
+- cada venta llegó una sola vez: sin claves de idempotencia, comprobantes
+  provisionales ni números de documento repetidos;
+- origen «sin conexión», documento interno (no fiscal), desfase de reloj 0 s;
+- Camión 01 quedó con 4 Cargador y 4 Cubo Iphone (de 5 y 5); Bodega sin
+  cambios;
+- 0 ventas por conciliar y 0 rescates;
+- correlativos internos 1 a 10 sin huecos ni repetidos, próximo 11; el
+  correlativo fiscal sin cambios;
+- Camión 01 sigue habilitado; Camión 02, Bodega y Store, no.
 
 ## 13. Reversión: desactivar sin perder ventas
 
