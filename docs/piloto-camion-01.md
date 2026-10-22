@@ -3,9 +3,15 @@
 Esta guía es para el administrador que activará el piloto y para quien vende en
 Camión 01.
 
-> **Estado:** preparado, **no activado**. Activar el piloto requiere completar
-> la [lista de aprobación](lista-aprobacion-piloto.md) y una autorización
-> expresa. Camión 02, Bodega y Store no se activan en este piloto.
+> **Estado:** **activado como piloto técnico con datos de prueba** el
+> 2026-10-22 a las 02:14 UTC (2026-10-21, 8:14 p. m. en Honduras), con
+> autorización expresa del dueño. Solo Camión 01. Camión 02, Bodega y Store no
+> se activan en este piloto. **No está aprobado el uso comercial real**: ver la
+> [lista de aprobación](lista-aprobacion-piloto.md), que registra lo que falta.
+>
+> **Limitación conocida (prueba 2):** en Android e iPhone la app no se vuelve a
+> abrir sin conexión. Abre la app **con conexión** al empezar y no la cierres ni
+> cierres sesión sin conexión. Iniciar sesión siempre requiere conexión.
 
 Para el uso diario consulta también la
 [guía de ventas sin conexión](guia-ventas-sin-conexion.md).
@@ -145,21 +151,84 @@ Antes de cerrar la jornada o entregar el camión:
 
 ## 12. Activación
 
-Solo con la lista de aprobación completa y con autorización. Ejecutar como
-administrador en el **SQL Editor de Supabase**. El disparador de 0027 deja
-cambiar la marca solo a un administrador o al dueño de la base.
+Solo con autorización expresa. La ejecuta el dueño de la base (SQL Editor de
+Supabase o la conexión autorizada). El disparador de 0027 deja cambiar la marca
+solo a un administrador o al dueño de la base, y la 0030 impide habilitar una
+ubicación que no sea camión o bodega.
 
-```sql
--- Activar el piloto SOLO en Camión 01. Comprueba antes el nombre exacto.
-update public.ubicaciones
-   set vende_sin_conexion = true
- where nombre = 'Camión 01'
-   and emite_fiscal = false
-   and activa = true
-returning id, nombre, vende_sin_conexion;
-```
+1. Verificación previa (solo lectura): las cuatro marcas en `false`, ninguna
+   venta por conciliar, Camión 01 con existencias y su vendedor activo.
 
-Debe devolver **una sola fila**. Si devuelve otra cosa, no continúes.
+   ```sql
+   select
+     (select string_agg(nombre || '=' || vende_sin_conexion, ', ' order by nombre) from public.ubicaciones) as banderas,
+     (select count(*) from public.ventas_por_conciliar where estado = 'pendiente') as por_conciliar,
+     (select coalesce(sum(cantidad), 0) from public.inventario_ubicacion where ubicacion_id = '92d87f2a-fab6-4f5d-b445-2a9d0f28c66b') as existencias_camion01,
+     (select count(*) from public.usuarios where ubicacion_id = '92d87f2a-fab6-4f5d-b445-2a9d0f28c66b' and activo and rol = 'vendedor') as vendedores_camion01;
+   ```
+
+2. Activación por `id`. Si no cambia **exactamente una fila**, falla y no deja
+   nada aplicado.
+
+   ```sql
+   do $$
+   declare n int;
+   begin
+     update public.ubicaciones
+        set vende_sin_conexion = true
+      where id = '92d87f2a-fab6-4f5d-b445-2a9d0f28c66b'
+        and nombre = 'Camión 01' and tipo = 'camion'
+        and activa and vende and not emite_fiscal and not vende_sin_conexion;
+     get diagnostics n = row_count;
+     if n <> 1 then
+       raise exception 'Se esperaba activar 1 ubicación y se activaron %', n;
+     end if;
+   end $$;
+   ```
+
+3. Verificación posterior: Camión 01 en `true`; Camión 02, Bodega y Store en
+   `false`; `emite_fiscal = false` en las cuatro.
+
+   ```sql
+   select nombre, tipo, vende_sin_conexion, emite_fiscal, activa, vende
+     from public.ubicaciones order by nombre;
+   ```
+
+### Registro de la activación
+
+- **2026-10-22 02:14 UTC**, con la conexión autorizada de Supabase, proyecto
+  `sistemalunacell`.
+- Antes: las cuatro marcas en `false`, 0 ventas por conciliar, Camión 01 con
+  5 Cargador y 5 Cubo Iphone (trasladados desde Bodega por el administrador),
+  vendedor `camion01` activo.
+- Después: Camión 01 en `true`; Camión 02, Lunacell Bodega y Lunacell Store en
+  `false`; `emite_fiscal = false` en las cuatro; 0 ventas por conciliar.
+  Inventario, usuarios, permisos y correlativos con las mismas huellas md5 que
+  antes de activar.
+- Prueba final en el teléfono del vendedor: **satisfactoria**, ver abajo.
+
+### Prueba final en producción (2026-10-22)
+
+Dos ventas sin conexión hechas por el dueño con el usuario `camion01`, una en
+cada uno de dos teléfonos (modelos no indicados), con la app abierta y en modo
+avión:
+
+| Documento | Comprobante provisional | Hecha (UTC) | Recibida (UTC) | Venta | Inventario |
+|---|---|---|---|---|---|
+| VTA-000009 | PROV-90BB-000001 | 2026-10-22 02:26:43 | 02:27:15 | 1 Cargador, contado, L 138.00 con ISV | −1 en Camión 01 |
+| VTA-000010 | PROV-038C-000001 | 2026-10-22 03:16:57 | 03:17:10 | 1 Cubo Iphone, contado, L 115.00 con ISV | −1 en Camión 01 |
+
+Verificado en el servidor (solo lectura):
+
+- cada venta llegó una sola vez: sin claves de idempotencia, comprobantes
+  provisionales ni números de documento repetidos;
+- origen «sin conexión», documento interno (no fiscal), desfase de reloj 0 s;
+- Camión 01 quedó con 4 Cargador y 4 Cubo Iphone (de 5 y 5); Bodega sin
+  cambios;
+- 0 ventas por conciliar y 0 rescates;
+- correlativos internos 1 a 10 sin huecos ni repetidos, próximo 11; el
+  correlativo fiscal sin cambios;
+- Camión 01 sigue habilitado; Camión 02, Bodega y Store, no.
 
 ## 13. Reversión: desactivar sin perder ventas
 
@@ -175,7 +244,7 @@ sin conexión que lleguen después. Por eso, **primero se vacían los teléfonos
    ```sql
    update public.ubicaciones
       set vende_sin_conexion = false
-    where nombre = 'Camión 01'
+    where id = '92d87f2a-fab6-4f5d-b445-2a9d0f28c66b'
    returning id, nombre, vende_sin_conexion;
    ```
 
