@@ -1,6 +1,11 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
 
-import { cambiarEstadoUbicacion, crearUbicacion, actualizarUbicacion } from "./ubicaciones"
+import {
+  actualizarUbicacion,
+  cambiarEstadoUbicacion,
+  crearUbicacion,
+  resumenParaDesactivarSinConexion,
+} from "./ubicaciones"
 import { crearSupabaseFalso } from "../../test/supabaseFalso"
 
 vi.mock("../supabase", () => ({
@@ -193,6 +198,178 @@ describe("ubicaciones sin permiso", () => {
 
     await expect(cambiarEstadoUbicacion("u1", false)).rejects.toThrow(
       "No tienes permiso para cambiar el estado de la ubicación."
+    )
+  })
+})
+
+/*
+  Ventas sin conexión por ubicación: la marca vende_sin_conexion se cambia
+  desde la pantalla de Ubicaciones. La base ya decide quién puede (0027) y
+  dónde (0030); esta capa solo envía el cambio cuando lo hay, sin pisar
+  nada más, y avisa si la ubicación cambió mientras se editaba.
+*/
+describe("actualizarUbicacion · ventas sin conexión", () => {
+  const ANTERIOR = { id: "u1", name: "Camión 01", type: "camion", active: true, offline: false }
+
+  const filaGuardada = (falso) => falso.datos.ubicaciones.find((u) => u.id === "u1")
+
+  /*
+    Como en la base, la marca existe siempre y empieza en false. Se anota
+    cada update para comprobar qué columnas se enviaron.
+  */
+  const montar = (fallarEn = {}) => {
+    const falso = crearSupabaseFalso({
+      tablas: { ubicaciones: [{ ...UBICACION, vende_sin_conexion: false }] },
+      fallarEn,
+    })
+    const consultar = falso.from.getMockImplementation()
+    falso.enviados = []
+    falso.from.mockImplementation((tabla) => {
+      const constructor = consultar(tabla)
+      const update = constructor.update
+      constructor.update = (registro) => {
+        falso.enviados.push(registro)
+        return update(registro)
+      }
+      return constructor
+    })
+    globalThis.__supabaseFalso = falso
+    return falso
+  }
+
+  it("si la marca no cambió, no la envía", async () => {
+    const falso = montar()
+
+    await actualizarUbicacion("u1", { ...ANTERIOR, name: "Camión 1" }, "e1", ANTERIOR)
+
+    expect(filaGuardada(falso).nombre).toBe("Camión 1")
+    expect(falso.enviados[0]).not.toHaveProperty("vende_sin_conexion")
+  })
+
+  it("sin la ubicación anterior no envía la marca aunque venga en el formulario", async () => {
+    const falso = montar()
+
+    await actualizarUbicacion("u1", { ...ANTERIOR, offline: true }, "e1")
+
+    expect(falso.enviados[0]).not.toHaveProperty("vende_sin_conexion")
+    expect(filaGuardada(falso).vende_sin_conexion).toBe(false)
+  })
+
+  it("si cambió, la envía junto con el nombre y el tipo, y nada más", async () => {
+    const falso = montar()
+
+    await actualizarUbicacion("u1", { ...ANTERIOR, offline: true }, "e1", ANTERIOR)
+
+    expect(falso.enviados[0]).toEqual({ empresa_id: "e1", nombre: "Camión 01", tipo: "camion", vende_sin_conexion: true })
+    expect(filaGuardada(falso)).toEqual({ ...UBICACION, empresa_id: "e1", vende_sin_conexion: true })
+  })
+
+  it("si la ubicación cambió mientras se editaba, no guarda una configuración vieja", async () => {
+    const falso = montar()
+    filaGuardada(falso).activa = false
+
+    await expect(actualizarUbicacion("u1", { ...ANTERIOR, offline: true }, "e1", ANTERIOR)).rejects.toThrow(
+      "La ubicación cambió mientras la editabas. Cierra el formulario y vuelve a abrirla."
+    )
+    expect(filaGuardada(falso).vende_sin_conexion).toBe(false)
+  })
+
+  const violacion = (restriccion) =>
+    `new row for relation "ubicaciones" violates check constraint "${restriccion}"`
+
+  it.each([
+    [
+      "42501: solo un administrador puede",
+      { code: "42501", message: "Solo un administrador decide si una ubicación vende sin conexión" },
+      "Solo un administrador puede cambiar si una ubicación vende sin conexión.",
+    ],
+    [
+      "23514 de la 0030: solo camiones y bodegas",
+      { code: "23514", message: violacion("ubicaciones_sin_conexion_solo_camion_o_bodega") },
+      "Solo los camiones y las bodegas pueden vender sin conexión.",
+    ],
+    [
+      "23514 de la 0027: una ubicación fiscal no vende sin conexión",
+      { code: "23514", message: violacion("ubicaciones_sin_conexion_no_fiscal") },
+      "Una ubicación que emite factura fiscal no puede vender sin conexión.",
+    ],
+  ])("%s", async (_caso, error, mensaje) => {
+    montar({ ubicaciones: { update: error } })
+
+    await expect(actualizarUbicacion("u1", { ...ANTERIOR, offline: true }, "e1", ANTERIOR)).rejects.toThrow(mensaje)
+  })
+
+  it("crear nunca envía la marca: las ubicaciones nuevas nacen sin ventas sin conexión", async () => {
+    const falso = montar()
+
+    await crearUbicacion({ name: "Camión 03", type: "camion", offline: true }, "e1")
+
+    const creada = falso.datos.ubicaciones.find((u) => u.nombre === "Camión 03")
+    expect(creada.vende_sin_conexion).not.toBe(true)
+  })
+})
+
+describe("resumenParaDesactivarSinConexion", () => {
+  const AHORA = new Date("2026-10-22T12:00:00Z")
+
+  const montarResumen = (tablas = {}, fallarEn = {}) => {
+    globalThis.__supabaseFalso = crearSupabaseFalso({
+      tablas: {
+        ubicaciones: [{ ...UBICACION, vende_sin_conexion: true }],
+        ventas_por_conciliar: [],
+        ventas: [],
+        usuarios: [],
+        ...tablas,
+      },
+      fallarEn,
+    })
+  }
+
+  it("cuenta lo que el servidor sabe de esa ubicación y de nada más", async () => {
+    montarResumen({
+      ventas_por_conciliar: [
+        { id: "c1", ubicacion_id: "u1", estado: "pendiente" },
+        { id: "c2", ubicacion_id: "u1", estado: "aplicada" },
+        { id: "c3", ubicacion_id: "otra", estado: "pendiente" },
+      ],
+      ventas: [
+        { id: "v1", ubicacion_id: "u1", origen: "sin_conexion", dispositivo: "tel-a", recibida_en: "2026-10-21T10:00:00Z" },
+        { id: "v2", ubicacion_id: "u1", origen: "sin_conexion", dispositivo: "tel-a", recibida_en: "2026-10-22T09:00:00Z" },
+        { id: "v3", ubicacion_id: "u1", origen: "sin_conexion", dispositivo: "tel-b", recibida_en: "2026-10-20T09:00:00Z" },
+        { id: "v4", ubicacion_id: "u1", origen: "sin_conexion", dispositivo: "tel-c", recibida_en: "2026-10-01T09:00:00Z" },
+        { id: "v5", ubicacion_id: "u1", origen: "en_linea", dispositivo: null, recibida_en: null },
+        { id: "v6", ubicacion_id: "otra", origen: "sin_conexion", dispositivo: "tel-z", recibida_en: "2026-10-22T11:00:00Z" },
+      ],
+      usuarios: [
+        { id: "us1", ubicacion_id: "u1", activo: true },
+        { id: "us2", ubicacion_id: "u1", activo: false },
+        { id: "us3", ubicacion_id: "otra", activo: true },
+      ],
+    })
+
+    const resumen = await resumenParaDesactivarSinConexion("u1", { ahora: AHORA })
+
+    expect(resumen).toEqual({
+      porConciliar: 1,
+      ultimaRecibida: "2026-10-22T09:00:00Z",
+      telefonosUltimos7Dias: 2,
+      usuariosAsignados: 1,
+    })
+  })
+
+  it("sin ventas sin conexión, la última recibida es null, no una fecha inventada", async () => {
+    montarResumen()
+
+    const resumen = await resumenParaDesactivarSinConexion("u1", { ahora: AHORA })
+
+    expect(resumen).toEqual({ porConciliar: 0, ultimaRecibida: null, telefonosUltimos7Dias: 0, usuariosAsignados: 0 })
+  })
+
+  it("si una consulta falla, lanza: nunca devuelve ceros que no comprobó", async () => {
+    montarResumen({}, { ventas_por_conciliar: { message: "Failed to fetch" } })
+
+    await expect(resumenParaDesactivarSinConexion("u1", { ahora: AHORA })).rejects.toThrow(
+      "No se pudo comprobar el estado de las ventas sin conexión de esta ubicación."
     )
   })
 })

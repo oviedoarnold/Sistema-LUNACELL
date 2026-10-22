@@ -56,6 +56,15 @@ export function filterLocationsBySearchText(locations, searchText) {
 }
 
 /*
+  Solo los camiones y las bodegas pueden vender sin conexión: lo exige la
+  base desde la migración 0030, y la pantalla lo respeta para no ofrecer
+  algo que la base va a rechazar.
+*/
+export function puedeVenderSinConexion(type) {
+  return type === LOCATION_TYPES.TRUCK || type === LOCATION_TYPES.WAREHOUSE
+}
+
+/*
   El nombre es lo único obligatorio. Devuelve el aviso a mostrar, o null si
   el nombre sirve, para que quien llame decida cómo enseñarlo.
 */

@@ -76,9 +76,10 @@ function LocationsProvider({ children }) {
     [empresaId, refrescar]
   )
 
+  // `anterior`: la ubicación como estaba al abrir el formulario (ver actualizarUbicacion).
   const editarUbicacion = useCallback(
-    async (id, ubicacion) => {
-      await actualizarUbicacion(id, ubicacion, empresaId)
+    async (id, ubicacion, anterior = null) => {
+      await actualizarUbicacion(id, ubicacion, empresaId, anterior)
       await refrescar()
     },
     [empresaId, refrescar]
