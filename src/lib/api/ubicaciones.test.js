@@ -274,42 +274,29 @@ describe("actualizarUbicacion · ventas sin conexión", () => {
     expect(filaGuardada(falso).vende_sin_conexion).toBe(false)
   })
 
-  it("42501 al cambiar la marca: solo un administrador puede", async () => {
-    montar({ ubicaciones: { update: { code: "42501", message: "Solo un administrador decide si una ubicación vende sin conexión" } } })
+  const violacion = (restriccion) =>
+    `new row for relation "ubicaciones" violates check constraint "${restriccion}"`
 
-    await expect(actualizarUbicacion("u1", { ...ANTERIOR, offline: true }, "e1", ANTERIOR)).rejects.toThrow(
-      "Solo un administrador puede cambiar si una ubicación vende sin conexión."
-    )
-  })
+  it.each([
+    [
+      "42501: solo un administrador puede",
+      { code: "42501", message: "Solo un administrador decide si una ubicación vende sin conexión" },
+      "Solo un administrador puede cambiar si una ubicación vende sin conexión.",
+    ],
+    [
+      "23514 de la 0030: solo camiones y bodegas",
+      { code: "23514", message: violacion("ubicaciones_sin_conexion_solo_camion_o_bodega") },
+      "Solo los camiones y las bodegas pueden vender sin conexión.",
+    ],
+    [
+      "23514 de la 0027: una ubicación fiscal no vende sin conexión",
+      { code: "23514", message: violacion("ubicaciones_sin_conexion_no_fiscal") },
+      "Una ubicación que emite factura fiscal no puede vender sin conexión.",
+    ],
+  ])("%s", async (_caso, error, mensaje) => {
+    montar({ ubicaciones: { update: error } })
 
-  it("23514 de la 0030: solo camiones y bodegas", async () => {
-    montar({
-      ubicaciones: {
-        update: {
-          code: "23514",
-          message: 'new row for relation "ubicaciones" violates check constraint "ubicaciones_sin_conexion_solo_camion_o_bodega"',
-        },
-      },
-    })
-
-    await expect(actualizarUbicacion("u1", { ...ANTERIOR, offline: true }, "e1", ANTERIOR)).rejects.toThrow(
-      "Solo los camiones y las bodegas pueden vender sin conexión."
-    )
-  })
-
-  it("23514 de la 0027: una ubicación fiscal no vende sin conexión", async () => {
-    montar({
-      ubicaciones: {
-        update: {
-          code: "23514",
-          message: 'new row for relation "ubicaciones" violates check constraint "ubicaciones_sin_conexion_no_fiscal"',
-        },
-      },
-    })
-
-    await expect(actualizarUbicacion("u1", { ...ANTERIOR, offline: true }, "e1", ANTERIOR)).rejects.toThrow(
-      "Una ubicación que emite factura fiscal no puede vender sin conexión."
-    )
+    await expect(actualizarUbicacion("u1", { ...ANTERIOR, offline: true }, "e1", ANTERIOR)).rejects.toThrow(mensaje)
   })
 
   it("crear nunca envía la marca: las ubicaciones nuevas nacen sin ventas sin conexión", async () => {
