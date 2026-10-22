@@ -17,7 +17,7 @@ export const aUbicacionDeApp = (fila) => ({
   name: fila.nombre,
   type: fila.tipo,
   active: fila.activa,
-  // Solo la decide un administrador en la base (0027); aquí se lee.
+  // Solo la cambia un administrador (0027) y solo en camiones y bodegas (0030).
   offline: fila.vende_sin_conexion === true,
   createdAt: fila.creada_en || "",
 })
@@ -86,6 +86,38 @@ function falloAlGuardar(error, queHacia) {
 }
 
 /*
+  Lo que dice la base al rechazar un cambio de la marca de ventas sin
+  conexión. 23514 es una restricción CHECK, y en esta tabla hay dos que la
+  tocan: la de 0030 (solo camiones y bodegas) y la de 0027 (nunca una
+  ubicación fiscal). Se distinguen por el nombre de la restricción, que es
+  un identificador estable, no una frase.
+*/
+const RESTRICCIONES_SIN_CONEXION = {
+  ubicaciones_sin_conexion_solo_camion_o_bodega: "Solo los camiones y las bodegas pueden vender sin conexión.",
+  ubicaciones_sin_conexion_no_fiscal: "Una ubicación que emite factura fiscal no puede vender sin conexión.",
+}
+
+function falloAlCambiarSinConexion(error) {
+  if (error.code === "42501") {
+    console.error("No se pudo cambiar la venta sin conexión:", error)
+    throw new Error("Solo un administrador puede cambiar si una ubicación vende sin conexión.")
+  }
+
+  if (error.code === "23514") {
+    const restriccion = Object.keys(RESTRICCIONES_SIN_CONEXION).find((nombre) =>
+      String(error.message || "").includes(nombre)
+    )
+
+    if (restriccion) {
+      console.error("No se pudo cambiar la venta sin conexión:", error)
+      throw new Error(RESTRICCIONES_SIN_CONEXION[restriccion])
+    }
+  }
+
+  falloAlGuardar(error, "actualizar la ubicación")
+}
+
+/*
   Trae también las desactivadas: la pantalla necesita poder volver a
   encenderlas, y esconderlas dejaría un nombre ocupado por algo invisible.
 */
@@ -112,13 +144,87 @@ export async function crearUbicacion(ubicacion, empresaId) {
   return aUbicacionDeApp(data)
 }
 
-export async function actualizarUbicacion(id, ubicacion, empresaId) {
-  const { error } = await supabase
-    .from("ubicaciones")
-    .update(aUbicacionDeBase(ubicacion, empresaId))
-    .eq("id", id)
+/*
+  `anterior` es la ubicación como estaba al abrir el formulario. Solo con
+  ella se envía la marca de ventas sin conexión, y solo si cambió: así una
+  edición del nombre nunca la toca, y quien no es administrador no dispara
+  el rechazo de la base por un valor que ni siquiera cambió.
 
-  if (error) falloAlGuardar(error, "actualizar la ubicación")
+  Cuando la marca cambia, la escritura exige que la ubicación siga como se
+  vio (marca, tipo y estado). Si otro administrador la cambió entretanto,
+  no se guarda una decisión tomada sobre datos viejos.
+*/
+export async function actualizarUbicacion(id, ubicacion, empresaId, anterior = null) {
+  const cambiaSinConexion = Boolean(anterior) && Boolean(ubicacion.offline) !== Boolean(anterior.offline)
+
+  if (!cambiaSinConexion) {
+    const { error } = await supabase
+      .from("ubicaciones")
+      .update(aUbicacionDeBase(ubicacion, empresaId))
+      .eq("id", id)
+
+    if (error) falloAlGuardar(error, "actualizar la ubicación")
+    return
+  }
+
+  const { data, error } = await supabase
+    .from("ubicaciones")
+    .update({ ...aUbicacionDeBase(ubicacion, empresaId), vende_sin_conexion: Boolean(ubicacion.offline) })
+    .eq("id", id)
+    .eq("vende_sin_conexion", Boolean(anterior.offline))
+    .eq("tipo", anterior.type)
+    .eq("activa", anterior.active !== false)
+    .select("id")
+
+  if (error) falloAlCambiarSinConexion(error)
+
+  if (!data?.length) {
+    throw new Error("La ubicación cambió mientras la editabas. Cierra el formulario y vuelve a abrirla.")
+  }
+}
+
+/*
+  Lo que el servidor sabe de las ventas sin conexión de una ubicación, para
+  el aviso antes de desactivarlas. Solo lectura.
+
+  No dice si quedan ventas en los teléfonos: eso el servidor no lo sabe.
+  Por eso, si una consulta falla, lanza en vez de devolver ceros: un cero
+  sin comprobar haría creer que no hay nada pendiente.
+*/
+export async function resumenParaDesactivarSinConexion(ubicacionId, { ahora = new Date() } = {}) {
+  const haceSieteDias = new Date(ahora.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString()
+
+  const [porConciliar, ultima, recientes, asignados] = await Promise.all([
+    supabase.from("ventas_por_conciliar").select("id").eq("ubicacion_id", ubicacionId).eq("estado", "pendiente"),
+    supabase
+      .from("ventas")
+      .select("recibida_en")
+      .eq("ubicacion_id", ubicacionId)
+      .eq("origen", "sin_conexion")
+      .order("recibida_en", { ascending: false })
+      .limit(1),
+    supabase
+      .from("ventas")
+      .select("dispositivo")
+      .eq("ubicacion_id", ubicacionId)
+      .eq("origen", "sin_conexion")
+      .gte("recibida_en", haceSieteDias),
+    supabase.from("usuarios").select("id").eq("ubicacion_id", ubicacionId).eq("activo", true),
+  ])
+
+  const conError = [porConciliar, ultima, recientes, asignados].find((r) => r.error)
+
+  if (conError) {
+    console.error("No se pudo preparar el aviso de ventas sin conexión:", conError.error)
+    throw new Error("No se pudo comprobar el estado de las ventas sin conexión de esta ubicación.")
+  }
+
+  return {
+    porConciliar: porConciliar.data.length,
+    ultimaRecibida: ultima.data[0]?.recibida_en || null,
+    telefonosUltimos7Dias: new Set(recientes.data.map((v) => v.dispositivo).filter(Boolean)).size,
+    usuariosAsignados: asignados.data.length,
+  }
 }
 
 /*
