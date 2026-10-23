@@ -192,19 +192,38 @@ describe("la migración", () => {
     expect(await contadores(esc.empresa)).toEqual({ factura: 100, interno: 200, cotizacion: 300 })
   })
 
-  it("10. conserva la firma, el retorno, SECURITY DEFINER y el search_path", async () => {
+  /*
+    La aplicación sigue llamando lo mismo con lo mismo. Deja de ser
+    SECURITY DEFINER a propósito: así sabe quién la llama. Lo único que
+    corre como el dueño es entregar el número de cotización.
+  */
+  it("10. conserva la firma y el retorno; solo la cotización corre como el dueño", async () => {
     const r = await db.query(`
       select p.oid::regprocedure::text as firma, p.prorettype::regtype::text as retorno,
-             p.prosecdef, p.proconfig, pg_get_userbyid(p.proowner) as dueno
+             p.prosecdef, p.proconfig,
+             has_function_privilege('authenticated', p.oid, 'execute') as app,
+             has_function_privilege('anon', p.oid, 'execute') as anonimo
         from pg_proc p join pg_namespace n on n.oid = p.pronamespace
-       where n.nspname = 'public' and p.proname = 'siguiente_correlativo'`)
+       where n.nspname = 'public' and p.proname in ('siguiente_correlativo', 'siguiente_correlativo_de_cotizacion')
+       order by p.proname`)
 
-    expect(r.rows).toHaveLength(1)
-    expect(r.rows[0]).toMatchObject({
-      firma: "siguiente_correlativo(text)",
-      retorno: "bigint",
-      prosecdef: true,
-      proconfig: ["search_path=public"],
-    })
+    expect(r.rows).toEqual([
+      {
+        firma: "siguiente_correlativo(text)",
+        retorno: "bigint",
+        prosecdef: false,
+        proconfig: ["search_path=public"],
+        app: true,
+        anonimo: false,
+      },
+      {
+        firma: "siguiente_correlativo_de_cotizacion()",
+        retorno: "bigint",
+        prosecdef: true,
+        proconfig: ["search_path=public"],
+        app: true,
+        anonimo: false,
+      },
+    ])
   })
 })
