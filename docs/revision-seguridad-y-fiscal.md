@@ -96,7 +96,34 @@ documento.
 | | Qué pasaba | Quién podía | Corrección | Estado |
 |---|---|---|---|---|
 | **A-1** | `siguiente_correlativo('factura')` o `('interno')` por RPC subía el contador | Cualquier usuario con sesión | 0031: la función pasa a SECURITY INVOKER y la aplicación solo puede pedir `'cotizacion'` | Aplicada en producción (versión `20261023210617`) |
-| **A-1b** | Un `UPDATE` directo de `empresas.proximo_correlativo_*` por la API | El administrador (`empresas_update`) | 0032: un disparador impide a `authenticated` y `anon` cambiar cualquiera de los tres contadores | Preparada, sin aplicar |
+| **A-1b** | Un `UPDATE` directo de `empresas.proximo_correlativo_*` por la API | El administrador (`empresas_update`) | 0032: un disparador impide a `authenticated` y `anon` cambiar cualquiera de los tres contadores | Aplicada en producción (versión `20261023230000`, a mano en el SQL Editor) |
+
+**Estado: corregido técnicamente.** Las dos migraciones están en producción
+desde el 2026-10-23.
+
+- **0031:** aplicada con `apply_migration`, versión `20261023210617`.
+- **0032:** `apply_migration` respondió «declined» dos veces, así que el dueño
+  la aplicó a mano en el SQL Editor, con `BEGIN`/`COMMIT` y el registro en
+  `supabase_migrations.schema_migrations`. Versión `20261023230000`. El script
+  se probó antes con `rollback` en un PostgreSQL aislado. Como pasó con la
+  0030, el texto quedó con saltos de línea de Windows (CRLF): el contenido es
+  idéntico al del repositorio y no cambia el funcionamiento.
+
+**Verificación posterior** (solo lectura, 2026-10-23):
+
+- cada migración registrada una sola vez, con su nombre y versión;
+- `siguiente_correlativo(text)` en SECURITY INVOKER y
+  `siguiente_correlativo_de_cotizacion()` en SECURITY DEFINER, las dos con
+  `search_path=public`; ninguna ejecutable por `anon` ni `PUBLIC`;
+- el disparador `empresas_contadores_solo_por_registro` habilitado, su función
+  con `search_path=""` y sin permiso de ejecución para `anon` ni
+  `authenticated`;
+- los cuerpos instalados, idénticos a los del repositorio;
+- las funciones que registran documentos (ventas, conciliación, ventas sin
+  conexión, rescate, cobros y traslados) con los mismos permisos;
+- **los contadores conservaron sus valores**: factura 9, interno 11,
+  cotización 9, antes y después de las dos migraciones;
+- ubicaciones, inventario, usuarios y permisos sin cambios.
 
 **Quién mueve los contadores después de las dos:**
 
@@ -120,3 +147,8 @@ returning proximo_correlativo_factura;
 
 Solo si no se emitió ninguna factura fiscal con ese CAI. Si ya hay, el
 contador no se baja nunca.
+
+**Sigue pendiente, dentro del hallazgo A-4:** configurar el CAI, el RTN, el
+rango y la fecha límite (hoy no hay ninguno en producción), y poner el
+contador fiscal en el inicio del rango autorizado. A-1 y A-1b no cambian
+nada de eso.
