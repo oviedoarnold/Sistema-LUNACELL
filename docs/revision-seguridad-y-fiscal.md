@@ -86,3 +86,37 @@ es la autorización explícita, escrita en el código.
 - no modifica 0027–0029.
 
 **Estado:** preparada en `supabase/migrations/0030_tienda_sin_conexion_bloqueada.sql`, con 8 pruebas SQL en `pruebas-sql/tienda-sin-conexion.test.mjs`. **No aplicada a producción:** se aplica con el procedimiento de migraciones, solo con autorización.
+
+## 3. Correlativos: solo los mueve el registro de un documento (A-1 y A-1b)
+
+Hallazgos de la auditoría final (2026-10-23). Los dos permitían dejar huecos
+en el rango autorizado del CAI desde la aplicación, sin crear ningún
+documento.
+
+| | Qué pasaba | Quién podía | Corrección | Estado |
+|---|---|---|---|---|
+| **A-1** | `siguiente_correlativo('factura')` o `('interno')` por RPC subía el contador | Cualquier usuario con sesión | 0031: la función pasa a SECURITY INVOKER y la aplicación solo puede pedir `'cotizacion'` | Aplicada en producción (versión `20261023210617`) |
+| **A-1b** | Un `UPDATE` directo de `empresas.proximo_correlativo_*` por la API | El administrador (`empresas_update`) | 0032: un disparador impide a `authenticated` y `anon` cambiar cualquiera de los tres contadores | Preparada, sin aplicar |
+
+**Quién mueve los contadores después de las dos:**
+
+- `registrar_venta_ubicacion()` (factura o interno), `conciliar_venta()`
+  (interno) y `siguiente_correlativo_de_cotizacion()` (cotización), que corren
+  como el dueño de la base;
+- el dueño de la base, desde el SQL Editor o una migración.
+
+**Ajustar el contador al inicio de un rango autorizado.** Con la 0032 ya no se
+hace desde la aplicación. Cuando el cliente reciba su CAI, el contador fiscal
+debe quedar en el `rango_desde` autorizado: hoy está en 9 por las facturas de
+prueba anteriores a la 0017, y ningún proceso lo alinea solo. Se hace una vez,
+como dueño de la base y con autorización:
+
+```sql
+update public.empresas
+   set proximo_correlativo_factura = <rango_desde>
+ where id = '<empresa>'
+returning proximo_correlativo_factura;
+```
+
+Solo si no se emitió ninguna factura fiscal con ese CAI. Si ya hay, el
+contador no se baja nunca.

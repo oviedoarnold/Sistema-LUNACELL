@@ -36,6 +36,7 @@ duda de si ya se aplicó, correrla de nuevo es seguro.
 | 0029 | Historial y cobros por ubicación (OFF-1.1): un vendedor lee solo las ventas, el detalle, los abonos y los pagos de su ubicación y `registrar_pago_cliente` reparte su cobro solo entre las facturas de su ubicación (LC005 sin ubicación); cobrar exige `sales-history`, el permiso de Cuentas por cobrar; el administrador ve y cobra todo, como antes. Los pagos guardan la ubicación de quien cobró |
 | 0030 | La tienda no vende sin conexión (OFF-1.4): solo camiones y bodegas pueden tener `vende_sin_conexion`, y la aplicación —ni un administrador— no puede sacar a una ubicación del tipo `tienda`. Habilitar la tienda exige una migración nueva y autorizada |
 | 0031 | Correlativos (A-1): la aplicación solo puede pedirle a `siguiente_correlativo()` el número de cotización; los de factura y documento interno los gastan únicamente `registrar_venta_ubicacion()` y `conciliar_venta()`. La función pasa a SECURITY INVOKER para saber quién la llama, y la cotización se entrega con `siguiente_correlativo_de_cotizacion()`. Misma firma y retorno, sin tocar contadores ni datos |
+| 0032 | Contadores (A-1b): la aplicación —ni un administrador— no puede escribir `proximo_correlativo_factura`, `_interno` ni `_cotizacion` en `empresas`; los mueven solo las funciones que registran documentos y el dueño de la base. Guardar los demás datos de la empresa sigue igual. Sin tocar contadores ni datos |
 
 ## Instalación en una base vacía
 
