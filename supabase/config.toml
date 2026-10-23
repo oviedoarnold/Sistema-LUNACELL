@@ -117,6 +117,7 @@ sql_paths = [
   "./migrations/0028_conciliacion_de_ventas.sql",
   "./migrations/0029_historial_y_cobros_por_ubicacion.sql",
   "./migrations/0030_tienda_sin_conexion_bloqueada.sql",
+  "./migrations/0031_correlativos_solo_desde_el_registro.sql",
   "./seed.sql",
 ]
 
