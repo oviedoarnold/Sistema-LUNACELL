@@ -9,6 +9,7 @@ import Swal from "sweetalert2"
 import { FaTimes } from "react-icons/fa"
 
 import { useVentanaModal } from "../../hooks/useVentanaModal"
+import { useEscalaDeLaHoja } from "../../hooks/useEscalaDeLaHoja"
 
 import {
   downloadDocumentPDF,
@@ -29,6 +30,9 @@ function DocumentPreviewModal({
   const documentRef =
     useRef(null)
 
+  const contenedorRef =
+    useRef(null)
+
   const [
     generatingPdf,
     setGeneratingPdf,
@@ -39,7 +43,34 @@ function DocumentPreviewModal({
     setPrinting,
   ] = useState(false)
 
+  const [
+    ampliada,
+    setAmpliada,
+  ] = useState(false)
+
   const tituloId = useId()
+
+  /*
+    En el teléfono la hoja carta no cabe a lo ancho: se muestra reducida,
+    entera y con sus proporciones (R-3). Si la letra queda muy pequeña,
+    Ampliar la muestra a tamaño real dentro de la vista previa. Solo cambia
+    la pantalla: el PDF y la impresión se capturan siempre a tamaño real
+    (prepararCopiaParaCaptura en documentUtils).
+  */
+  const medida = useEscalaDeLaHoja(
+    contenedorRef,
+    documentRef,
+    Boolean(open)
+  )
+
+  const puedeReducirse = medida.escala < 1
+
+  const reducida = puedeReducirse && !ampliada
+
+  // Cada vez que se abre, la hoja vuelve a verse entera.
+  if (!open && ampliada) {
+    setAmpliada(false)
+  }
 
   // Fondo quieto y alto visible real mientras está abierta (R-2).
   useVentanaModal(Boolean(open))
@@ -174,6 +205,22 @@ function DocumentPreviewModal({
 
           <h3 id={tituloId}>{title}</h3>
 
+          {puedeReducirse && (
+            <button
+              type="button"
+              className="btn btn-ghost btn-sm vista-hoja-ampliar"
+              onClick={() =>
+                setAmpliada(
+                  (actual) => !actual
+                )
+              }
+            >
+              {ampliada
+                ? "Ajustar a la pantalla"
+                : "🔍 Ampliar"}
+            </button>
+          )}
+
           <button
             type="button"
             className="icon-btn"
@@ -188,10 +235,45 @@ function DocumentPreviewModal({
 
         <div className="modal-body document-preview-body">
 
-          <div className="receipt-wrap">
+          <div
+            className="receipt-wrap"
+            ref={contenedorRef}
+          >
 
-            <div ref={documentRef}>
-              {children}
+            <div
+              className="vista-hoja"
+              data-reduccion-de-vista
+              style={
+                reducida
+                  ? {
+                      width:
+                        medida.ancho *
+                        medida.escala,
+                      height:
+                        medida.alto *
+                        medida.escala,
+                    }
+                  : undefined
+              }
+            >
+              <div
+                className="vista-hoja-escala"
+                data-reduccion-de-vista
+                style={
+                  reducida
+                    ? {
+                        transform: `scale(${medida.escala})`,
+                      }
+                    : undefined
+                }
+              >
+                <div
+                  ref={documentRef}
+                  className="vista-hoja-documento"
+                >
+                  {children}
+                </div>
+              </div>
             </div>
 
           </div>

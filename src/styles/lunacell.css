@@ -371,10 +371,45 @@ td.num,th.num{text-align:right;font-family:var(--font-mono);}
 }
 
 /*
+  La hoja dentro de la vista previa (R-3). Se ve siempre a su tamaño real
+  —816 px la carta—, sin encogerse a lo ancho como hacía max-width: 100%,
+  que reacomodaba el documento en el teléfono y lo capturaba así para el PDF.
+  Si no cabe, DocumentPreviewModal la reduce entera: la caja .vista-hoja
+  toma el tamaño reducido y .vista-hoja-escala aplica la reducción desde la
+  esquina superior izquierda. Los márgenes automáticos la centran cuando cabe
+  y, ampliada, la dejan pegada a la izquierda para recorrerla de lado a lado:
+  con justify-content: center se salía por los dos lados y el borde
+  izquierdo no se podía alcanzar.
+*/
+.document-preview-body .receipt-wrap {
+  justify-content: flex-start;
+}
+
+.document-preview-body .vista-hoja {
+  flex: none;
+  margin-inline: auto;
+}
+
+.document-preview-body .vista-hoja-escala {
+  width: max-content;
+  transform-origin: top left;
+}
+
+.document-preview-body .vista-hoja .receipt.document-letter {
+  max-width: none;
+}
+
+.modal-head .vista-hoja-ampliar {
+  flex: none;
+  white-space: nowrap;
+  margin-left: auto;
+  margin-right: var(--space-2);
+}
+
+/*
   En el teléfono el cuerpo de la vista previa no tiene tope propio: usa lo
   que dejan la cabecera y los cuatro botones apilados (modals.css), que con
-  calc(100vh - 145px) quedaban debajo del borde. La hoja no cambia: escalarla
-  es R-3.
+  calc(100vh - 145px) quedaban debajo del borde.
 */
 @media (max-width: 560px) {
   .document-preview-body {
