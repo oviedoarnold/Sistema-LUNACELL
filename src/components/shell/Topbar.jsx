@@ -18,7 +18,11 @@ import { tituloDeLaRuta } from "./menuDelPanel"
   que no hace nada es peor que no tenerlo. El hueco de la ubicación activa
   se abrirá aquí cuando el inventario pase a contarse por ubicación.
 */
-function Topbar({ onAbrirMenu = () => {}, menuAbierto = false }) {
+/*
+  `children` va a la derecha: el armazón pone ahí la cuenta, que solo se
+  ve en tableta y teléfono.
+*/
+function Topbar({ onAbrirMenu = () => {}, menuAbierto = false, children }) {
   const { pathname } = useLocation()
   const titulo = tituloDeLaRuta(pathname)
 
@@ -36,6 +40,8 @@ function Topbar({ onAbrirMenu = () => {}, menuAbierto = false }) {
       </button>
 
       <h1 className="topbar-titulo">{titulo}</h1>
+
+      {children}
     </header>
   )
 }
