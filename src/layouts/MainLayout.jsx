@@ -2,6 +2,7 @@ import { useEffect, useState } from "react"
 import { useLocation } from "react-router-dom"
 
 import MenuDeCuenta from "../components/shell/MenuDeCuenta"
+import { bloquearDesplazamiento } from "../lib/bloqueoDeDesplazamiento"
 import Sidebar from "../components/shell/Sidebar"
 import Topbar from "../components/shell/Topbar"
 
@@ -42,9 +43,8 @@ function MainLayout({ children }) {
   useEffect(() => {
     if (!menuAbierto) return
 
-    document.body.classList.add("sin-desplazamiento")
-
-    return () => document.body.classList.remove("sin-desplazamiento")
+    // El mismo contador que las ventanas: cerrar el cajón no suelta una ventana abierta.
+    return bloquearDesplazamiento()
   }, [menuAbierto])
 
   /*

@@ -8,6 +8,8 @@ import {
 import Swal from "sweetalert2"
 import { FaTimes } from "react-icons/fa"
 
+import { useVentanaModal } from "../../hooks/useVentanaModal"
+
 import {
   downloadDocumentPDF,
   printDocumentOnePage,
@@ -38,6 +40,9 @@ function DocumentPreviewModal({
   ] = useState(false)
 
   const tituloId = useId()
+
+  // Fondo quieto y alto visible real mientras está abierta (R-2).
+  useVentanaModal(Boolean(open))
 
   /*
     Escape cierra, como en el resto de las ventanas del sistema. Esta era

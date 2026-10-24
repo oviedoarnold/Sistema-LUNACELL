@@ -1,3 +1,5 @@
+import { useVentanaModal } from "../../hooks/useVentanaModal"
+
 /*
   Formulario de cliente nuevo, compartido por el punto de venta y las
   cotizaciones.
@@ -27,6 +29,9 @@ function ModalDeCliente({
   onCerrar,
   guardando = false,
 }) {
+  // Antes del return temprano: un hook no puede quedar detrás de una salida condicional.
+  useVentanaModal(Boolean(abierto))
+
   if (!abierto) {
     return null
   }
