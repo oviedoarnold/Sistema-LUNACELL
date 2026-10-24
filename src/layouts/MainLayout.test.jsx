@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
 import { render, screen, fireEvent } from "@testing-library/react"
-import { MemoryRouter } from "react-router-dom"
+import { MemoryRouter, useNavigate } from "react-router-dom"
 
 import {
   montarSupabaseFalso,
@@ -44,12 +44,27 @@ async function montarLayout() {
       <MemoryRouter initialEntries={["/dashboard"]}>
         <MainLayout>
           <p>Contenido de la página</p>
+          <IrA />
         </MainLayout>
       </MemoryRouter>
     </AuthProvider>
   )
 
   await screen.findByText("Arnold Oviedo")
+}
+
+/*
+  Un cambio de ruta que no pasa por el menú (un botón de la página, el
+  botón Atrás del teléfono).
+*/
+function IrA() {
+  const navigate = useNavigate()
+
+  return (
+    <button type="button" onClick={() => navigate("/clients")}>
+      Ir a otra página
+    </button>
+  )
 }
 
 const armazon = () => document.querySelector(".app-shell")
@@ -125,5 +140,49 @@ describe("MainLayout", () => {
     fireEvent.keyDown(document, { key: "Escape" })
 
     expect(armazon()).not.toHaveClass("menu-abierto")
+  })
+
+  /*
+    Con el cajón abierto, la página de atrás no se desplaza: en el teléfono
+    el dedo movía el contenido tapado en vez de la lista del menú.
+  */
+  it("mientras el cajón está abierto, el fondo no se desplaza", async () => {
+    await montarLayout()
+
+    expect(document.body).not.toHaveClass("sin-desplazamiento")
+    abrir()
+    expect(document.body).toHaveClass("sin-desplazamiento")
+    fireEvent.keyDown(document, { key: "Escape" })
+    expect(document.body).not.toHaveClass("sin-desplazamiento")
+  })
+
+  it("si la ruta cambia por otro camino, el cajón se cierra", async () => {
+    await montarLayout()
+
+    abrir()
+    fireEvent.click(screen.getByRole("button", { name: /ir a otra página/i }))
+
+    expect(armazon()).not.toHaveClass("menu-abierto")
+    expect(document.body).not.toHaveClass("sin-desplazamiento")
+  })
+
+  it("la barra superior ofrece la cuenta y Cerrar sesión", async () => {
+    await montarLayout()
+
+    fireEvent.click(screen.getByRole("button", { name: /cuenta de arnold oviedo/i }))
+
+    expect(screen.getAllByRole("button", { name: /^cerrar sesión$/i })).toHaveLength(2)
+  })
+
+  /*
+    En escritorio el cajón no se abre nunca (la barra lateral está fija) y
+    nada de lo de arriba interviene: ni el bloqueo ni la capa.
+  */
+  it("en escritorio, sin abrir el cajón, no bloquea el desplazamiento", async () => {
+    await montarLayout()
+
+    expect(armazon()).not.toHaveClass("menu-abierto")
+    expect(document.body).not.toHaveClass("sin-desplazamiento")
+    expect(screen.getByLabelText("Navegación principal")).toBeInTheDocument()
   })
 })
