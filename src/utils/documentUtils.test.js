@@ -17,10 +17,18 @@ const jsPDF = vi.fn(function () {
 vi.mock("html2canvas", () => ({ default: (...args) => html2canvas(...args) }))
 vi.mock("jspdf", () => ({ default: function (...args) { return jsPDF(...args) } }))
 
-const { downloadDocumentPDF, printDocumentOnePage } = await import("./documentUtils")
+const { downloadDocumentPDF, printDocumentOnePage, prepararCopiaParaCaptura } = await import("./documentUtils")
 
 const CARTA = { ancho: 215.9, alto: 279.4 }
-const OPCIONES_DE_CAPTURA = { scale: 2, useCORS: true, backgroundColor: "#ffffff", scrollX: 0, scrollY: 0, logging: false }
+const OPCIONES_DE_CAPTURA = {
+  scale: 2,
+  useCORS: true,
+  backgroundColor: "#ffffff",
+  scrollX: 0,
+  scrollY: 0,
+  logging: false,
+  onclone: prepararCopiaParaCaptura,
+}
 
 beforeEach(() => {
   vi.clearAllMocks()
@@ -88,6 +96,49 @@ describe("downloadDocumentPDF", () => {
     await expect(downloadDocumentPDF(document.createElement("div"))).rejects.toThrow("captura fallida")
 
     expect(pdf.save).not.toHaveBeenCalled()
+  })
+})
+
+describe("prepararCopiaParaCaptura", () => {
+  /*
+    html2canvas copia la página para capturarla. En esa copia se deshace la
+    reducción de la vista previa del teléfono (R-3) y se detienen las
+    animaciones, para que el PDF y la impresión salgan a tamaño real.
+  */
+  it("deja a tamaño real lo que la vista previa redujo", () => {
+    const copia = document.implementation.createHTMLDocument("")
+    copia.body.innerHTML = `
+      <div data-reduccion-de-vista style="width: 327.216px; height: 423.456px">
+        <div data-reduccion-de-vista style="transform: scale(0.401)">
+          <div class="receipt document-letter" style="color: red">Factura</div>
+        </div>
+      </div>`
+
+    prepararCopiaParaCaptura(copia)
+
+    for (const elemento of copia.querySelectorAll("[data-reduccion-de-vista]")) {
+      expect(elemento.getAttribute("style")).toBe("")
+    }
+    expect(copia.querySelector(".receipt").style.color).toBe("red")
+  })
+
+  it("detiene las animaciones: la de entrada de la ventana dibujaba la hoja a medio aparecer", () => {
+    const copia = document.implementation.createHTMLDocument("")
+
+    prepararCopiaParaCaptura(copia)
+
+    const estilo = copia.head.querySelector("style").textContent
+    expect(estilo).toContain("animation: none !important")
+    expect(estilo).toContain("transition: none !important")
+  })
+
+  it("sin reducción no cambia nada", () => {
+    const copia = document.implementation.createHTMLDocument("")
+    copia.body.innerHTML = `<div class="receipt" style="width: 816px">Factura</div>`
+
+    prepararCopiaParaCaptura(copia)
+
+    expect(copia.querySelector(".receipt").style.width).toBe("816px")
   })
 })
 
