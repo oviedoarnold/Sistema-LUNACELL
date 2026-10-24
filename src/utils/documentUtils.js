@@ -4,6 +4,31 @@ import jsPDF from "jspdf"
 const LETTER_WIDTH_MM = 215.9
 const LETTER_HEIGHT_MM = 279.4
 
+/*
+  html2canvas no captura la pantalla: copia la página en un marco aparte y
+  dibuja esa copia. Antes de dibujarla se deja el documento a tamaño real.
+
+  1. En el teléfono la vista previa muestra la hoja reducida para que quepa
+     a lo ancho (R-3); la reducción va en estilos en línea de los elementos
+     marcados con data-reduccion-de-vista, y en la copia se quitan.
+  2. En la copia la animación de entrada de la ventana vuelve a empezar, y
+     la hoja se dibujaba a medio aparecer: algo más pequeña y transparente.
+     En la copia no hay animaciones.
+
+  La pantalla no se toca: el PDF y la impresión salen siempre a tamaño real.
+*/
+export function prepararCopiaParaCaptura(documento) {
+  for (const elemento of documento.querySelectorAll("[data-reduccion-de-vista]")) {
+    elemento.style.removeProperty("transform")
+    elemento.style.removeProperty("width")
+    elemento.style.removeProperty("height")
+  }
+
+  const sinAnimaciones = documento.createElement("style")
+  sinAnimaciones.textContent = "*, *::before, *::after { animation: none !important; transition: none !important; }"
+  documento.head.appendChild(sinAnimaciones)
+}
+
 
 export async function downloadDocumentPDF(
   element,
@@ -22,6 +47,7 @@ export async function downloadDocumentPDF(
     scrollX: 0,
     scrollY: 0,
     logging: false,
+    onclone: prepararCopiaParaCaptura,
   })
 
   const imageData = canvas.toDataURL(
@@ -146,6 +172,7 @@ export async function printDocumentOnePage(
         scrollX: 0,
         scrollY: 0,
         logging: false,
+        onclone: prepararCopiaParaCaptura,
       }
     )
 
