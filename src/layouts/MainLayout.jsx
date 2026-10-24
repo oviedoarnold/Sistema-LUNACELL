@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react"
+import { useLocation } from "react-router-dom"
 
+import MenuDeCuenta from "../components/shell/MenuDeCuenta"
 import Sidebar from "../components/shell/Sidebar"
 import Topbar from "../components/shell/Topbar"
 
@@ -18,8 +20,32 @@ import Topbar from "../components/shell/Topbar"
 */
 function MainLayout({ children }) {
   const [menuAbierto, setMenuAbierto] = useState(false)
+  const { pathname } = useLocation()
+  const [rutaDelMenu, setRutaDelMenu] = useState(pathname)
 
   const cerrarMenu = () => setMenuAbierto(false)
+
+  /*
+    Si la ruta cambia por cualquier camino (un botón de la página, el botón
+    Atrás del teléfono), el cajón se cierra: quedarse abierto tapando la
+    página nueva confunde. Elegir un módulo del menú ya lo cerraba.
+  */
+  if (rutaDelMenu !== pathname) {
+    setRutaDelMenu(pathname)
+    setMenuAbierto(false)
+  }
+
+  /*
+    Con el cajón abierto la página de atrás no se desplaza: en el teléfono
+    el dedo movía el contenido tapado en vez de la lista del menú.
+  */
+  useEffect(() => {
+    if (!menuAbierto) return
+
+    document.body.classList.add("sin-desplazamiento")
+
+    return () => document.body.classList.remove("sin-desplazamiento")
+  }, [menuAbierto])
 
   /*
     Escape cierra el cajón. Se escucha solo mientras está abierto para no
@@ -56,7 +82,9 @@ function MainLayout({ children }) {
         <Topbar
           onAbrirMenu={() => setMenuAbierto(true)}
           menuAbierto={menuAbierto}
-        />
+        >
+          <MenuDeCuenta />
+        </Topbar>
 
         <main className="app-content">{children}</main>
       </div>

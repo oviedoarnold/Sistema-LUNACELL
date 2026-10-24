@@ -11,10 +11,17 @@
 
 /* ── ARMAZÓN ─────────────────────────────────────────────── */
 
+/*
+  100dvh es el alto visible de verdad: en Android y iPhone, 100vh incluye la
+  barra del navegador, y lo que quedaba al fondo (el pie de la barra
+  lateral, con «Cerrar sesión») se escondía detrás. 100vh queda de
+  respaldo para los navegadores que no conocen dvh.
+*/
 .app-shell {
   display: flex;
   align-items: stretch;
   min-height: 100vh;
+  min-height: 100dvh;
   background: var(--background);
 }
 
@@ -25,9 +32,14 @@
   flex-direction: column;
 }
 
+/*
+  env(safe-area-inset-*) vale 0 salvo en un teléfono con muesca o barra de
+  inicio y con la app instalada (viewport-fit=cover en index.html): ahí
+  aparta el contenido de esas zonas.
+*/
 .app-content {
   flex: 1 1 auto;
-  padding: var(--space-5) var(--space-6) var(--space-8);
+  padding: var(--space-5) var(--space-6) calc(var(--space-8) + env(safe-area-inset-bottom));
 }
 
 /* ── BARRA LATERAL ───────────────────────────────────────── */
@@ -42,6 +54,7 @@
   position: sticky;
   top: 0;
   height: 100vh;
+  height: 100dvh;
 }
 
 .sidebar-marca {
@@ -91,9 +104,16 @@
   color: #FFFFFF;
 }
 
+/*
+  La lista se desplaza sola cuando no cabe, y el pie queda siempre debajo.
+  min-height: 0 deja que se encoja dentro de la columna; overscroll-behavior
+  evita que, al llegar al final, el gesto siga desplazando la página.
+*/
 .sidebar-nav {
   flex: 1 1 auto;
+  min-height: 0;
   overflow-y: auto;
+  overscroll-behavior: contain;
   padding: var(--space-4) var(--space-3);
 }
 
@@ -166,7 +186,7 @@
 
 .sidebar-pie {
   flex: none;
-  padding: var(--space-3) var(--space-3) var(--space-4);
+  padding: var(--space-3) var(--space-3) calc(var(--space-4) + env(safe-area-inset-bottom));
   border-top: 1px solid rgba(255, 255, 255, 0.07);
 }
 
@@ -242,6 +262,11 @@
   color: #FFFFFF;
 }
 
+/* Con el cajón abierto, la página de atrás no se desplaza (MainLayout). */
+body.sin-desplazamiento {
+  overflow: hidden;
+}
+
 /* ── BARRA SUPERIOR ──────────────────────────────────────── */
 
 .topbar-panel {
@@ -251,9 +276,9 @@
   display: flex;
   align-items: center;
   gap: var(--space-3);
-  height: 60px;
+  height: calc(60px + env(safe-area-inset-top));
   flex: none;
-  padding: 0 var(--space-6);
+  padding: env(safe-area-inset-top) var(--space-6) 0;
   background: var(--surface);
   border-bottom: 1px solid var(--border);
 }
@@ -301,6 +326,98 @@
 
 /* ── TABLETA Y MÓVIL ─────────────────────────────────────── */
 
+/*
+  La cuenta de la barra superior. En escritorio no se muestra: el pie de la
+  barra lateral ya está siempre a la vista.
+*/
+.topbar-cuenta {
+  display: none;
+  position: relative;
+  margin-left: auto;
+}
+
+/* 44 px: el mínimo cómodo para el dedo. */
+.topbar-cuenta-boton {
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.topbar-cuenta-boton:focus-visible,
+.topbar-cuenta-salir:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+.topbar-cuenta-menu {
+  position: absolute;
+  top: calc(100% + var(--space-2));
+  right: 0;
+  z-index: 30;
+  min-width: 220px;
+  max-width: calc(100vw - 2 * var(--space-4));
+  padding: var(--space-3);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg);
+}
+
+.topbar-cuenta-datos {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.25;
+  padding: 0 var(--space-1) var(--space-3);
+  min-width: 0;
+}
+
+.topbar-cuenta-datos b {
+  font-size: 14px;
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.topbar-cuenta-datos span {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+
+.topbar-cuenta-salir {
+  width: 100%;
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: 0 var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--text-primary);
+  font-size: 14px;
+}
+
+.topbar-cuenta-salir svg {
+  width: 14px;
+  height: 14px;
+  flex: none;
+}
+
+.topbar-cuenta-salir:hover {
+  background: var(--danger-soft);
+  border-color: var(--danger);
+}
+
 @media (max-width: 1023px) {
   .sidebar {
     position: fixed;
@@ -316,6 +433,15 @@
     transform: translateX(0);
   }
 
+  /* En el cajón, la marca no queda debajo de la muesca. */
+  .sidebar-marca {
+    padding-top: calc(var(--space-5) + env(safe-area-inset-top));
+  }
+
+  .topbar-cuenta {
+    display: block;
+  }
+
   .sidebar-cerrar {
     display: flex;
   }
@@ -329,11 +455,11 @@
   }
 
   .app-content {
-    padding: var(--space-4) var(--space-4) var(--space-7);
+    padding: var(--space-4) var(--space-4) calc(var(--space-7) + env(safe-area-inset-bottom));
   }
 
   .topbar-panel {
-    padding: 0 var(--space-4);
+    padding: env(safe-area-inset-top) var(--space-4) 0;
   }
 }
 
