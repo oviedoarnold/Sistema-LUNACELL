@@ -142,7 +142,9 @@ create index if not exists anulaciones_venta_empresa_fecha
 
 /*
   Nadie lo cambia ni lo borra: ni quien anuló, ni un administrador, ni una
-  función SECURITY DEFINER. Mismo trato que auditoria_rescates (0027).
+  función SECURITY DEFINER. Mismo trato que auditoria_rescates (0027), más
+  TRUNCATE: un disparador de fila no lo detiene, y vaciar la tabla borraría
+  todos los registros de una vez.
 */
 create or replace function public.anulaciones_venta_inmutable()
 returns trigger
@@ -159,6 +161,11 @@ create trigger anulaciones_venta_inmutable
   before update or delete on public.anulaciones_venta
   for each row execute function public.anulaciones_venta_inmutable();
 
+drop trigger if exists anulaciones_venta_sin_vaciar on public.anulaciones_venta;
+create trigger anulaciones_venta_sin_vaciar
+  before truncate on public.anulaciones_venta
+  for each statement execute function public.anulaciones_venta_inmutable();
+
 revoke execute on function public.anulaciones_venta_inmutable() from public, anon, authenticated;
 
 /*
@@ -166,11 +173,16 @@ revoke execute on function public.anulaciones_venta_inmutable() from public, ano
   el vendedor, las de las ventas de su ubicación actual. La política de
   ventas ya decide eso, así que aquí solo se pregunta si la venta se ve.
   Escribir solo lo hace anular_venta().
+
+  Supabase concede por omisión todo sobre una tabla nueva también a
+  service_role, la clave del servidor, que pasa por encima de RLS: con ella
+  se podría insertar un registro falso o vaciar la tabla. Se le deja solo
+  leer, igual que a la aplicación.
 */
 alter table public.anulaciones_venta enable row level security;
 
-revoke all on public.anulaciones_venta from anon, authenticated;
-grant select on public.anulaciones_venta to authenticated;
+revoke all on public.anulaciones_venta from anon, authenticated, service_role;
+grant select on public.anulaciones_venta to authenticated, service_role;
 
 drop policy if exists anulaciones_venta_lectura on public.anulaciones_venta;
 create policy anulaciones_venta_lectura on public.anulaciones_venta

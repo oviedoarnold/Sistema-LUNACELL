@@ -583,6 +583,30 @@ describe("el registro y el estado no se tocan después", () => {
     expect((await anulacionDe(id)).motivo).toBe(MOTIVO)
   })
 
+  it("29b. nadie lo vacía con TRUNCATE, y la clave del servidor solo puede leerlo", async () => {
+    const e = await escenario()
+    const id = await vender(e.anulador.authId, e.cargador)
+    await anular(e.anulador.authId, id)
+
+    expect((await fallo(db.query("truncate anulaciones_venta"))).code).toBe("42501")
+    expect(await anulacionDe(id)).toBeDefined()
+
+    const r = await db.query(
+      `select rol,
+              has_table_privilege(rol, 'public.anulaciones_venta', 'SELECT') as leer,
+              has_table_privilege(rol, 'public.anulaciones_venta', 'INSERT') as insertar,
+              has_table_privilege(rol, 'public.anulaciones_venta', 'UPDATE') as cambiar,
+              has_table_privilege(rol, 'public.anulaciones_venta', 'DELETE') as borrar,
+              has_table_privilege(rol, 'public.anulaciones_venta', 'TRUNCATE') as vaciar
+         from unnest(array['anon', 'authenticated', 'service_role']) as rol order by rol`
+    )
+    expect(r.rows).toEqual([
+      { rol: "anon", leer: false, insertar: false, cambiar: false, borrar: false, vaciar: false },
+      { rol: "authenticated", leer: true, insertar: false, cambiar: false, borrar: false, vaciar: false },
+      { rol: "service_role", leer: true, insertar: false, cambiar: false, borrar: false, vaciar: false },
+    ])
+  })
+
   it("30. una venta anulada no vuelve a estar vigente, y no se anula sin registro", async () => {
     const e = await escenario()
     const anulada = await vender(e.anulador.authId, e.cargador)

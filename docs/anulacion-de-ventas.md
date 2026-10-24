@@ -69,10 +69,20 @@ El orden importa. El frontend nuevo lee `anulaciones_venta`: si se publicara ant
 
 **Después la base:**
 
-- **Si no hay ninguna anulación** (`select count(*) from anulaciones_venta` da 0) ni nadie tiene el permiso:
+- **Si no hay ninguna anulación** (`select count(*) from anulaciones_venta` da 0) ni nadie tiene el permiso. El bloque lo comprueba por sí mismo al empezar: si encuentra una anulación, una devolución o el permiso asignado, se detiene sin borrar nada.
 
   ```sql
   begin;
+  do $$
+  begin
+    if exists (select 1 from public.anulaciones_venta)
+       or exists (select 1 from public.movimientos_inventario where tipo = 'anulacion_venta') then
+      raise exception 'Ya hay anulaciones registradas: no se revierte. Solo se retira el permiso de ejecutar anular_venta.';
+    end if;
+    if exists (select 1 from public.permisos_usuario where seccion = 'sales-void') then
+      raise exception 'Hay usuarios con «Anular ventas»: quítaselo desde Configuración antes de revertir.';
+    end if;
+  end $$;
   drop function if exists public.anular_venta(uuid, text, text, text);
   drop trigger if exists ventas_anulacion_definitiva on public.ventas;
   drop function if exists public.ventas_anulacion_definitiva();
@@ -101,8 +111,8 @@ El orden importa. El frontend nuevo lee `anulaciones_venta`: si se publicara ant
 
 ## Pruebas
 
-- [pruebas-sql/anulacion-de-ventas.test.mjs](../pruebas-sql/anulacion-de-ventas.test.mjs): 38 pruebas contra PostgreSQL real. Cubren autorización, plazo en hora de Honduras, ubicación, bloqueos, concurrencia, inventario, correlativos, resincronización e inmutabilidad.
-- [pruebas-sql/anulacion-migracion.test.mjs](../pruebas-sql/anulacion-migracion.test.mjs): la 0033 sobre una base con datos no cambia nada ni da el permiso a nadie.
+- [pruebas-sql/anulacion-de-ventas.test.mjs](../pruebas-sql/anulacion-de-ventas.test.mjs): 39 pruebas contra PostgreSQL real. Cubren autorización, plazo en hora de Honduras, ubicación, bloqueos, concurrencia, inventario, correlativos, resincronización e inmutabilidad, incluido TRUNCATE y lo que puede la clave del servidor.
+- [pruebas-sql/anulacion-migracion.test.mjs](../pruebas-sql/anulacion-migracion.test.mjs): la 0033 sobre una base con datos no cambia nada ni da el permiso a nadie, y la reversión se detiene sola si ya hay anulaciones o alguien tiene el permiso.
 - Frontend:
   - [utils/anulacion.test.js](../src/utils/anulacion.test.js);
   - [AnularVentaModal.test.jsx](../src/components/ventas/AnularVentaModal.test.jsx);

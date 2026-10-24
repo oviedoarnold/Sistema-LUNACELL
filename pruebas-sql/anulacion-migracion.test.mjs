@@ -17,6 +17,25 @@ import { levantarBase, aplicarMigracion } from "./arnes.mjs"
 import { crearVendedor } from "./fixtures.mjs"
 import { escenarioSinConexion } from "./escenario-sin-conexion.mjs"
 
+/* El bloque de reversión de docs/anulacion-de-ventas.md, leído del propio documento. */
+const bloqueDeReversion = async () => {
+  const doc = await readFile(path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "docs", "anulacion-de-ventas.md"), "utf8")
+
+  return doc.match(/```sql\r?\n(\s*begin;[\s\S]*?commit;)\s*```/)[1]
+}
+
+/* La reversión tiene que detenerse sola, sin borrar nada. */
+async function reversionSeDetiene(mensaje) {
+  const error = await db.query(await bloqueDeReversion()).then(
+    () => null,
+    (e) => e
+  )
+  await db.query("rollback")
+
+  expect(error?.message).toMatch(mensaje)
+  expect((await db.query("select to_regclass('public.anulaciones_venta') as t")).rows[0].t).toBe("anulaciones_venta")
+}
+
 let base
 let db
 let antes
@@ -89,5 +108,25 @@ describe("0033 sobre datos existentes", () => {
 
     await aplicarMigracion(db, "0033_anulacion_de_ventas.sql")
     expect((await db.query("select count(*)::int as n from anulaciones_venta")).rows[0].n).toBe(0)
+  })
+
+  it("6. con alguien que tiene «Anular ventas», la reversión se detiene y no borra nada", async () => {
+    await db.query("insert into permisos_usuario (usuario_id, empresa_id, seccion) values ($1, $2, 'sales-void')", [esc.vendedor.usuario, esc.empresa])
+
+    await reversionSeDetiene(/quítaselo desde Configuración/)
+
+    await db.query("delete from permisos_usuario where seccion = 'sales-void'")
+  })
+
+  it("7. con una anulación registrada, la reversión se detiene y el registro sigue ahí", async () => {
+    await db.query("select set_config('request.jwt.claims', $1, false)", [JSON.stringify({ sub: esc.admin.authId, role: "authenticated" })])
+    const venta = (await db.query("select id from ventas where empresa_id = $1 and ubicacion_id is not null limit 1", [esc.empresa])).rows[0].id
+    await db.query("select anular_venta($1, 'Prueba de la reversión protegida')", [venta])
+    await db.query("select set_config('request.jwt.claims', '', false)")
+
+    await reversionSeDetiene(/Ya hay anulaciones registradas/)
+
+    expect((await db.query("select count(*)::int as n from anulaciones_venta")).rows[0].n).toBe(1)
+    expect((await db.query("select estado from ventas where id = $1", [venta])).rows[0].estado).toBe("anulada")
   })
 })
