@@ -49,8 +49,16 @@ export function getSalePaid(sale) {
   Una venta de contado nace saldada,
   así que nunca arrastra saldo.
 */
+/*
+  Una venta anulada conserva su número, sus productos y su total, pero ya
+  no cuenta: no se debe ni suma a lo vendido.
+*/
+export function esVentaAnulada(sale) {
+  return sale?.status === "anulada"
+}
+
 export function getSaleBalance(sale) {
-  if (!isCreditSale(sale)) {
+  if (!isCreditSale(sale) || esVentaAnulada(sale)) {
     return 0
   }
 

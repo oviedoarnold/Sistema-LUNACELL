@@ -1,4 +1,5 @@
 import {
+  esVentaAnulada,
   esVentaDelDia,
   esVentaDelMes,
   fechaDeVenta,
@@ -22,14 +23,21 @@ const totalDe = (venta) => Number(venta?.total || 0)
 const sumarTotales = (ventas) =>
   ventas.reduce((suma, venta) => suma + totalDe(venta), 0)
 
+/*
+  Una venta anulada no es ingreso ni producto vendido: se queda en el
+  historial, pero fuera de las cifras. Las recientes sí la enseñan, con su
+  estado, porque ahí lo que importa es qué pasó.
+*/
+const vigentes = (sales) => sales.filter((venta) => !esVentaAnulada(venta))
+
 export function ventasDelDia(sales = [], dia = new Date()) {
-  const delDia = sales.filter((venta) => esVentaDelDia(venta, dia))
+  const delDia = vigentes(sales).filter((venta) => esVentaDelDia(venta, dia))
 
   return { total: sumarTotales(delDia), cantidad: delDia.length }
 }
 
 export function ventasDelMes(sales = [], mes = new Date()) {
-  const delMes = sales.filter((venta) => esVentaDelMes(venta, mes))
+  const delMes = vigentes(sales).filter((venta) => esVentaDelMes(venta, mes))
 
   return { total: sumarTotales(delMes), cantidad: delMes.length }
 }
@@ -127,7 +135,7 @@ export function hayVentasEn(dias = []) {
 export function productosMasVendidos(sales = [], cuantos = 5) {
   const acumulado = new Map()
 
-  sales.forEach((venta) => {
+  vigentes(sales).forEach((venta) => {
     const renglones = venta?.items || venta?.products || []
 
     renglones.forEach((renglon) => {

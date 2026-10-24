@@ -12,7 +12,8 @@ import { clasificarError } from "../sinConexion/clasificar"
 const COLUMNAS_VENTA = `
   *,
   detalle_venta (*),
-  abonos (*)
+  abonos (*),
+  anulaciones_venta (*)
 `
 
 function fallo(error, queHacia) {
@@ -49,6 +50,27 @@ const aAbonoDeApp = (fila) => ({
   note: fila.nota || "",
 })
 
+/*
+  El registro de la anulación, si la venta se anuló. Es uno por venta: el
+  embebido llega como objeto, pero se acepta también como lista de uno.
+*/
+const aAnulacionDeApp = (dato) => {
+  const fila = Array.isArray(dato) ? dato[0] : dato
+
+  if (!fila) return null
+
+  return {
+    id: fila.id,
+    fecha: aFechaLocal(fila.anulada_en),
+    isoDate: fila.anulada_en,
+    motivo: fila.motivo,
+    usuarioNombre: fila.usuario_nombre,
+    usuarioRol: fila.usuario_rol,
+    tratamientoDinero: fila.tratamiento_dinero,
+    estadoAnterior: fila.estado_anterior,
+  }
+}
+
 export function aVentaDeApp(fila, empresa) {
   const nombreCliente = fila.nombre_cliente || "Consumidor Final"
 
@@ -82,6 +104,10 @@ export function aVentaDeApp(fila, empresa) {
     dueDate: fila.fecha_vencimiento,
     status: fila.estado,
     note: fila.nota || "",
+
+    locationId: fila.ubicacion_id || null,
+    origin: fila.origen || "en_linea",
+    anulacion: aAnulacionDeApp(fila.anulaciones_venta),
 
     /*
       Si la venta no es fiscal, NO lleva bloque fiscal.
@@ -282,3 +308,65 @@ export async function crearVenta(venta, { clave = null } = {}) {
   Leer abonos sigue igual: aAbonoDeApp los traduce dentro de cada venta,
   porque son parte de su historia y se siguen mostrando.
 */
+
+/*
+  Anular una venta.
+
+  Todo lo decide anular_venta(): quién puede, de qué ubicación, el plazo,
+  qué ventas no se anulan, la devolución de la mercadería y el registro.
+  Desde aquí viajan la venta, el motivo y qué pasa con el dinero; nada más.
+  Un botón oculto no protege nada: la base vuelve a comprobarlo todo.
+
+  La clave identifica el intento: si se repite (doble clic, red caída), la
+  base responde «ya_anulada» en vez de devolver la mercadería dos veces.
+*/
+const MOTIVOS_DE_ANULACION = {
+  AV001: "motivo-invalido",
+  AV002: "no-encontrada",
+  AV003: "fuera-de-plazo",
+  AV004: "fiscal",
+  AV005: "con-abonos",
+  AV006: "sin-ubicacion",
+  AV007: "inventario-no-cuadra",
+  AV008: "conciliacion",
+  AV009: "clave-reusada",
+  42501: "sin-permiso",
+}
+
+export class ErrorDeAnulacion extends Error {
+  constructor(mensaje, motivo, codigo) {
+    super(mensaje)
+    this.name = "ErrorDeAnulacion"
+    this.motivo = motivo
+    this.codigo = codigo
+  }
+}
+
+export async function anularVenta(ventaId, { motivo, tratamientoDinero = null, clave = null }) {
+  const { data, error, status } = await supabase.rpc("anular_venta", {
+    p_venta_id: ventaId,
+    p_motivo: motivo,
+    p_tratamiento_dinero: tratamientoDinero,
+    p_clave_idempotencia: clave,
+  })
+
+  if (error) {
+    const razon = MOTIVOS_DE_ANULACION[error.code]
+
+    if (razon) {
+      throw new ErrorDeAnulacion(error.message, razon, error.code)
+    }
+
+    if (clasificarError(error, status) === "red") {
+      throw new ErrorDeAnulacion(
+        "No hubo respuesta del servidor: revisa el historial antes de intentarlo de nuevo.",
+        "sin-respuesta",
+        error.code || ""
+      )
+    }
+
+    fallo(error, "anular la venta")
+  }
+
+  return data
+}

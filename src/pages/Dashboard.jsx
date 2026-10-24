@@ -337,7 +337,10 @@ function Dashboard() {
                     {venta.customer ||
                       venta.clientName ||
                       "Consumidor Final"}
-                    <small>{venta.invoiceNumber || venta.date}</small>
+                    <small>
+                      {venta.invoiceNumber || venta.date}
+                      {venta.status === "anulada" && " · Anulada"}
+                    </small>
                   </span>
 
                   <span className="panel-lista-valor">

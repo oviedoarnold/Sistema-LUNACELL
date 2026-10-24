@@ -114,6 +114,23 @@ function InvoiceTemplate({
 
       <div className="inv-stripe" />
 
+      {/*
+        Una venta anulada conserva su número y todo su contenido, pero no
+        puede pasar por vigente: el sello va arriba, en la vista previa, la
+        impresión y el PDF, con la fecha y el motivo de la anulación.
+      */}
+      {status === "anulada" && (
+        <div className="inv-anulado" role="note">
+          <strong>DOCUMENTO ANULADO</strong>
+
+          {sale.anulacion && (
+            <span>
+              Anulado el {sale.anulacion.fecha} · Motivo: {sale.anulacion.motivo}
+            </span>
+          )}
+        </div>
+      )}
+
       <div className="inv-meta">
         <div className="inv-meta-block">
           <div className="inv-meta-label">
@@ -170,10 +187,7 @@ function InvoiceTemplate({
                     : "var(--red)",
               }}
             >
-              {status ===
-              "pagada"
-                ? "Pagada"
-                : "Pendiente"}
+              {{ pagada: "Pagada", anulada: "Anulada" }[status] || "Pendiente"}
             </b>
           </div>
 

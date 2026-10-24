@@ -237,6 +237,7 @@ td.num,th.num{text-align:right;font-family:var(--font-mono);}
 .inv-grand span{font-family:var(--font-display);font-size:15px;font-weight:600;} 
 .inv-grand b{font-family:var(--font-mono);font-size:19px;font-weight:700;color:var(--orange-dark);min-width:90px;text-align:right;} 
 .inv-pending{margin:0 22px 14px;border:2.5px solid var(--red);border-radius:8px;padding:7px;text-align:center;color:var(--red);font-family:var(--font-display);font-size:17px;letter-spacing:3px;} 
+.inv-anulado{margin:14px 22px 0;border:2.5px solid var(--red);border-radius:8px;padding:8px 12px;text-align:center;color:var(--red);} .inv-anulado strong{display:block;font-family:var(--font-display);font-size:20px;letter-spacing:4px;} .inv-anulado span{display:block;margin-top:3px;font-size:12px;color:var(--charcoal);} 
 .inv-footer{background:var(--cream);border-top:1px solid var(--line);padding:12px 22px;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;} 
 .inv-footer-msg{font-size:12.5px;color:var(--steel);} 
 .inv-footer-msg b{display:block;color:var(--charcoal);font-size:13.5px;margin-bottom:1px;} 
@@ -262,6 +263,21 @@ td.num,th.num{text-align:right;font-family:var(--font-mono);}
 .sale-info b{display:block;font-size:15px;} .sale-info span{font-size:12.5px;color:var(--steel);font-family:var(--font-mono);} 
 .sale-info .badges{display:flex;gap:5px;margin-top:4px;flex-wrap:wrap;} 
 .sale-right{display:flex;align-items:center;gap:10px;flex-wrap:wrap;} 
+
+/* Anulación de ventas: quién, cuándo y por qué, debajo de la venta; y la ventana de confirmación. */
+.sale-info .sale-anulacion{display:block;margin-top:6px;font-family:var(--font-body);font-size:12px;color:var(--steel);white-space:normal;overflow-wrap:anywhere;}
+.anular-resumen{display:grid;grid-template-columns:max-content 1fr;gap:6px 14px;margin:0 0 14px;}
+.anular-resumen dt{color:var(--steel);font-size:13px;}
+.anular-resumen dd{margin:0;font-weight:600;overflow-wrap:anywhere;}
+.anular-productos{list-style:none;margin:0 0 14px;padding:10px 12px;border:1px solid var(--line);border-radius:var(--radius-sm);display:flex;flex-direction:column;gap:6px;}
+.anular-productos li{display:flex;justify-content:space-between;gap:12px;font-size:14px;}
+.anular-aviso{margin:0 0 14px;font-size:13.5px;color:var(--charcoal);}
+.anular-dinero{border:none;margin:12px 0 0;padding:0;display:flex;flex-direction:column;gap:8px;}
+.anular-dinero legend{font-weight:600;margin-bottom:6px;}
+.anular-dinero label{display:flex;align-items:flex-start;gap:10px;cursor:pointer;}
+.anular-dinero label span{display:flex;flex-direction:column;}
+.anular-dinero small{color:var(--steel);font-size:12.5px;}
+.anular-dinero .hint{margin:2px 0 0;font-size:12.5px;color:var(--steel);}
 .sale-total{font-family:var(--font-mono);font-weight:700;font-size:15px;color:var(--orange-dark);} 
 /* ── ABONO ── */
 .abono-section{background:var(--blue-light);border:1.5px solid #C5D5F0;border-radius:var(--radius);padding:16px 18px;margin-top:14px;} 
