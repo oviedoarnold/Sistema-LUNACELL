@@ -8,16 +8,30 @@
   Los colores salen de los tokens. Aquí no se define ninguno.
 */
 
+/*
+  La capa ocupa lo que de verdad se ve. --vista-alto y --vista-arriba los
+  publica useVentanaModal desde visualViewport: con el teclado del teléfono
+  abierto, son el hueco que queda encima de él. Sin esas variables, 100dvh
+  (la pantalla sin las barras del navegador), y 100vh de respaldo.
+
+  El relleno suma las áreas seguras del iPhone (muesca, barra de inicio).
+*/
 .modal-overlay {
   position: fixed;
   inset: 0;
+  top: var(--vista-arriba, 0px);
+  bottom: auto;
+  height: 100vh;
+  height: var(--vista-alto, 100dvh);
   display: none;
   align-items: flex-start;
   justify-content: center;
   overflow-y: auto;
+  overscroll-behavior: contain;
   z-index: 100;
   background: rgba(23, 26, 29, 0.55);
-  padding: var(--space-6) var(--space-4);
+  padding: calc(var(--space-6) + env(safe-area-inset-top)) calc(var(--space-4) + env(safe-area-inset-right))
+    calc(var(--space-6) + env(safe-area-inset-bottom)) calc(var(--space-4) + env(safe-area-inset-left));
 }
 
 .modal-overlay.open {
@@ -25,7 +39,17 @@
   animation: overlayIn 0.18s ease;
 }
 
+/*
+  La caja es una columna que no pasa del alto de la capa: cabecera y pie
+  quedan fijos y es el cuerpo el que se encoge y se desplaza. Antes solo se
+  limitaba el cuerpo, y en el teléfono la cabecera, el cuerpo y los botones
+  apilados sumaban más que la pantalla: los botones quedaban fuera.
+*/
 .modal {
+  display: flex;
+  flex-direction: column;
+  max-height: 100%;
+  min-height: 0;
   width: 100%;
   max-width: 540px;
   animation: modalIn 0.22s cubic-bezier(0.2, 0.8, 0.3, 1);
@@ -44,6 +68,7 @@
 }
 
 .modal-head {
+  flex: none;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -70,13 +95,22 @@
   height: 13px;
 }
 
+/*
+  En escritorio conserva su tope de siempre (68vh); en el teléfono lo pone
+  la caja. overscroll-behavior evita que, al llegar al final, el gesto siga
+  desplazando lo de atrás.
+*/
 .modal-body {
+  flex: 1 1 auto;
+  min-height: 0;
   padding: var(--space-5);
   max-height: 68vh;
   overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 .modal-foot {
+  flex: none;
   display: flex;
   justify-content: flex-end;
   flex-wrap: wrap;
@@ -140,13 +174,15 @@
 
 @media (max-width: 560px) {
   .modal-overlay {
-    padding: var(--space-3);
+    padding: calc(var(--space-3) + env(safe-area-inset-top)) calc(var(--space-3) + env(safe-area-inset-right))
+      calc(var(--space-3) + env(safe-area-inset-bottom)) calc(var(--space-3) + env(safe-area-inset-left));
     align-items: flex-start;
   }
 
+  /* Sin tope propio: el cuerpo usa lo que dejan la cabecera y los botones. */
   .modal-body {
     padding: var(--space-4);
-    max-height: 72vh;
+    max-height: none;
   }
 
   .modal-head,

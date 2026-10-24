@@ -1,6 +1,8 @@
 import { useEffect, useId, useRef } from "react"
 import { FaTimes } from "react-icons/fa"
 
+import { useVentanaModal } from "../../hooks/useVentanaModal"
+
 /*
   Armazón de una ventana modal.
 
@@ -27,6 +29,9 @@ function ModalShell({
 }) {
   const tituloId = useId()
   const caja = useRef(null)
+
+  // Fondo quieto y alto visible real mientras está abierta (R-2).
+  useVentanaModal()
 
   /*
     El foco vuelve a donde estaba. Se guarda en la primera pasada, antes

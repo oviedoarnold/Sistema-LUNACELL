@@ -370,6 +370,18 @@ td.num,th.num{text-align:right;font-family:var(--font-mono);}
   padding: 10px 0;
 }
 
+/*
+  En el teléfono el cuerpo de la vista previa no tiene tope propio: usa lo
+  que dejan la cabecera y los cuatro botones apilados (modals.css), que con
+  calc(100vh - 145px) quedaban debajo del borde. La hoja no cambia: escalarla
+  es R-3.
+*/
+@media (max-width: 560px) {
+  .document-preview-body {
+    max-height: none;
+  }
+}
+
 /* ─────────────────────────────
    FACTURA TAMAÑO CARTA
 ───────────────────────────── */
