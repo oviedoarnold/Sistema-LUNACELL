@@ -613,3 +613,39 @@ describe("Settings: cambiar la ubicación de un vendedor que vende sin conexión
     await waitFor(() => expect(falso.datos.usuarios.find((u) => u.id === "u-2").ubicacion_id).toBe("u-bodega"))
   })
 })
+
+/*
+  A-5: «Anular ventas» es un permiso propio, aparte del historial. Ningún
+  vendedor nuevo lo trae marcado, y el administrador lo da o lo quita a
+  cada uno sin tocar sus otros permisos.
+*/
+describe("Settings: el permiso «Anular ventas»", () => {
+  const VENDEDOR = usuarioDePrueba({ id: "u-2", authId: "auth-2", nombre: "Chofer Camión 01", email: "chofer@ferreteria.test" })
+
+  it("se ofrece aparte del historial y un vendedor nuevo no lo trae marcado", async () => {
+    await renderSettings()
+
+    fireEvent.click(screen.getByRole("button", { name: /nuevo usuario/i }))
+
+    const modal = document.querySelector(".modal")
+    expect(within(modal).getByRole("checkbox", { name: /^anular ventas/i })).not.toBeChecked()
+    expect(within(modal).getByRole("checkbox", { name: /^historial de facturas/i })).toBeChecked()
+    expect(within(modal).getByText(/necesita también «historial de facturas»/i)).toBeInTheDocument()
+  })
+
+  it("se asigna a un usuario concreto y se guarda junto a los que ya tenía", async () => {
+    const falso = await renderSettings({ usuariosExtra: [VENDEDOR] })
+    const fila = (await screen.findByText("Chofer Camión 01")).closest("tr")
+
+    fireEvent.click(within(fila).getByRole("button", { name: /editar/i }))
+    fireEvent.click(screen.getByRole("checkbox", { name: /^historial de facturas/i }))
+    fireEvent.click(screen.getByRole("checkbox", { name: /^anular ventas/i }))
+    fireEvent.submit(document.querySelector("#form-usuario"))
+
+    await waitFor(() =>
+      expect(falso.rpc).toHaveBeenCalledWith("guardar_permisos_usuario", expect.objectContaining({ p_usuario: "u-2" }))
+    )
+    const [, { p_secciones }] = falso.rpc.mock.calls.findLast(([nombre]) => nombre === "guardar_permisos_usuario")
+    expect([...p_secciones].sort()).toEqual(["sales-history", "sales-void"])
+  })
+})
