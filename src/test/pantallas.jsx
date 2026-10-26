@@ -188,6 +188,9 @@ const aFilaDeVenta = (venta) => ({
   fecha_limite_emision_emision: venta.fiscal?.fechaLimiteEmision || null,
 
   nota: venta.note || "",
+
+  ubicacion_id: venta.locationId || null,
+  origen: venta.origin || "en_linea",
 })
 
 const renglonesDe = (venta) =>

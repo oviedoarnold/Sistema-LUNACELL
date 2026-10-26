@@ -5,13 +5,20 @@
 } from "react"
 
 
-import { SalesContext } from "../context/contexts"
+import Swal from "sweetalert2"
+
+import { LocationsContext, SalesContext } from "../context/contexts"
+import { useAuth } from "../hooks/useAuth"
 
 import {
+  esVentaAnulada,
   getSaleBalance,
   getSalePaid,
   isCreditSale,
 } from "../utils/salesUtils"
+
+import { puedeVerAnular, razonParaNoAnular, textoDelTratamiento } from "../utils/anulacion"
+import AnularVentaModal from "../components/ventas/AnularVentaModal"
 
 import { ProductContext } from "../context/contexts"
 
@@ -86,7 +93,36 @@ function SalesHistory() {
     abonos se siguen viendo dentro de cada factura, porque son parte de su
     historia; lo que ya no existe es la forma de crear uno desde aquí.
   */
-  const { sales = [] } = useContext(SalesContext)
+  const { sales = [], refrescarVentas } = useContext(SalesContext)
+
+  /*
+    Anular: el administrador en cualquier ubicación; el vendedor con
+    «Historial» y «Anular ventas», en la suya. Es solo lo que se muestra:
+    anular_venta() vuelve a decidirlo en la base.
+  */
+  const { user, isAdmin, hasPermission, permissions } = useAuth()
+  const { obtenerUbicacionPorId } = useContext(LocationsContext) || {}
+
+  const quienAnula = {
+    esAdmin: Boolean(isAdmin),
+    puedeAnular: hasPermission(permissions.SALES_HISTORY) && hasPermission(permissions.SALES_VOID),
+    ubicacionId: user?.locationId || null,
+  }
+
+  const [porAnular, setPorAnular] = useState(null)
+
+  const nombreDeUbicacion = (id) => obtenerUbicacionPorId?.(id)?.name || ""
+
+  const alAnular = async (respuesta) => {
+    setPorAnular(null)
+    await refrescarVentas?.().catch(() => {})
+
+    Swal.fire({
+      icon: "success",
+      title: respuesta?.estado === "ya_anulada" ? "La venta ya estaba anulada" : "Venta anulada",
+      text: `${respuesta?.numero_factura || ""} conserva su número. Las existencias regresaron a su ubicación.`,
+    })
+  }
 
   const {
     company = {},
@@ -146,6 +182,10 @@ function SalesHistory() {
               sale
             )
 
+          if (filter === "anuladas") {
+            return esVentaAnulada(sale)
+          }
+
           if (
             filter ===
             "contado"
@@ -175,8 +215,14 @@ function SalesHistory() {
       filter,
     ])
 
+  /*
+    Las anuladas se siguen viendo en la lista, pero no suman: ni a lo
+    vendido, ni a los conteos de contado, crédito o pendientes.
+  */
+  const vigentes = sales.filter((sale) => !esVentaAnulada(sale))
+
   const totalSales =
-    sales.reduce(
+    vigentes.reduce(
       (sum, sale) =>
         sum +
         Number(
@@ -186,7 +232,7 @@ function SalesHistory() {
     )
 
   const cashSales =
-    sales.filter(
+    vigentes.filter(
       (sale) =>
         getPaymentType(
           sale
@@ -194,7 +240,7 @@ function SalesHistory() {
     ).length
 
   const creditSales =
-    sales.filter(
+    vigentes.filter(
       (sale) =>
         getPaymentType(
           sale
@@ -202,14 +248,14 @@ function SalesHistory() {
     ).length
 
   const pendingSales =
-    sales.filter(
+    vigentes.filter(
       (sale) =>
         sale.status ===
         "pendiente"
     ).length
 
   const totalReceivable =
-    sales.reduce(
+    vigentes.reduce(
       (sum, sale) =>
         sum +
         getSaleBalance(sale),
@@ -217,6 +263,10 @@ function SalesHistory() {
     )
 
   const getStatusBadge = (sale) => {
+    if (esVentaAnulada(sale)) {
+      return <StatusBadge variante="neutral">Anulada</StatusBadge>
+    }
+
     if (sale.status === "pagada") {
       return (
         <StatusBadge variante="paid">
@@ -359,6 +409,10 @@ function SalesHistory() {
           <option value="credito">
             Crédito
           </option>
+
+          <option value="anuladas">
+            Anuladas
+          </option>
         </select>
 
       </div>
@@ -436,6 +490,16 @@ function SalesHistory() {
                         {getStatusBadge(sale)}
 
                       </div>
+
+                      {sale.anulacion && (
+                        <span className="sale-anulacion">
+                          Anulada el {sale.anulacion.fecha} por {sale.anulacion.usuarioNombre}
+                          {sale.anulacion.usuarioRol === "admin" ? " (administrador)" : " (vendedor)"}
+                          {" · "}
+                          {sale.anulacion.motivo}
+                          {!isCreditSale(sale) && ` · ${textoDelTratamiento(sale.anulacion.tratamientoDinero)}`}
+                        </span>
+                      )}
 
                     </div>
 
@@ -524,6 +588,17 @@ function SalesHistory() {
                       Ver factura
                     </button>
 
+                    {puedeVerAnular(sale, quienAnula) && (
+                      <button
+                        type="button"
+                        className="btn btn-danger btn-sm"
+                        aria-label={`Anular ${sale.invoiceNumber}`}
+                        onClick={() => setPorAnular(sale)}
+                      >
+                        Anular
+                      </button>
+                    )}
+
                   </div>
 
                 </div>
@@ -583,6 +658,17 @@ function SalesHistory() {
           }
         />
       </DocumentPreviewModal>
+
+      {porAnular && (
+        <AnularVentaModal
+          venta={porAnular}
+          ubicacion={nombreDeUbicacion(porAnular.locationId)}
+          moneda={currency}
+          razon={razonParaNoAnular(porAnular, quienAnula)}
+          onCerrar={() => setPorAnular(null)}
+          onAnulada={alAnular}
+        />
+      )}
 
     </div>
   )

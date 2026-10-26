@@ -371,6 +371,13 @@ function Settings() {
     },
     {
       id:
+        permissions.SALES_VOID,
+      label: "Anular ventas",
+      description:
+        "Anular ventas del mismo día de su ubicación. Necesita también «Historial de facturas».",
+    },
+    {
+      id:
         permissions.LOCATIONS,
       label: "Ubicaciones",
       description:

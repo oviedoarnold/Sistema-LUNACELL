@@ -6,6 +6,13 @@ export const PERMISSIONS = {
   CLIENTS: "clients",
   SUPPLIERS: "suppliers",
   SALES_HISTORY: "sales-history",
+
+  /*
+    Anular ventas. Aparte del historial a propósito: ver y cobrar no es lo
+    mismo que anular una venta ya cobrada. Al vendedor se le exigen las dos
+    marcas, y la base lo comprueba en anular_venta(), no solo esta pantalla.
+  */
+  SALES_VOID: "sales-void",
   LOCATIONS: "locations",
   SETTINGS: "settings",
 
