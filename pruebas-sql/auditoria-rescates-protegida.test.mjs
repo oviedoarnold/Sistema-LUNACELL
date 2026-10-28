@@ -1,11 +1,12 @@
 /*
-  SEC-5: la auditoría de rescates no se escribe, cambia ni vacía desde
-  fuera (0034).
+  SEC-5: la auditoría de rescates y las ventas por conciliar no se
+  escriben, cambian ni vacían desde fuera (0034).
 
   Se levanta la base hasta la 0033, con rescates, conciliaciones y ventas
   de verdad, se comprueba que el defecto existe, y se aplica la 0034
-  encima, que es como llega a producción. No puede cambiar ningún dato y
-  el rescate y la conciliación tienen que seguir funcionando.
+  encima, que es como llega a producción. No puede cambiar ningún dato, y
+  la sincronización sin conexión, el rescate y la conciliación tienen que
+  seguir funcionando.
 */
 
 import { describe, it, expect, beforeAll, afterAll } from "vitest"
@@ -16,7 +17,7 @@ import { fileURLToPath } from "node:url"
 
 import { levantarBase, aplicarMigracion, consultarComo } from "./arnes.mjs"
 import { crearVendedor } from "./fixtures.mjs"
-import { escenarioSinConexion, ventaSinConexion, rescatar, conciliar, fallo } from "./escenario-sin-conexion.mjs"
+import { escenarioSinConexion, ventaSinConexion, sincronizar, rescatar, conciliar, fallo } from "./escenario-sin-conexion.mjs"
 
 let base
 let db
@@ -54,25 +55,50 @@ const insertarFalso = () =>
     [esc.empresa, esc.admin.usuario],
   ]
 
-const privilegios = async () =>
+/*
+  Una venta por conciliar inventada: copia de una existente con otra clave,
+  como la crearía quien tuviera INSERT. Lo que hace falta es el privilegio,
+  no conocer cada columna.
+*/
+const insertarPorConciliarFalsa = () => [
+  `insert into ventas_por_conciliar
+   select * from jsonb_populate_record(null::ventas_por_conciliar,
+     (select to_jsonb(v) || jsonb_build_object(
+        'id', gen_random_uuid(), 'clave_idempotencia', 'falsa-' || gen_random_uuid(), 'estado', 'pendiente',
+        'venta_id', null, 'resuelta_en', null, 'resuelta_por', null, 'resolucion_accion', null, 'resolucion_motivo', null)
+        from ventas_por_conciliar v limit 1))`,
+  [],
+]
+
+/* Resolver una venta pendiente por debajo, sin conciliar_venta(): el disparador de la 0027 lo deja pasar una vez. */
+const resolverPorDebajo = () => [
+  `update ventas_por_conciliar
+      set estado = 'anulada', resuelta_por = $1, resolucion_accion = 'anular', resolucion_motivo = 'Resuelta por debajo'
+    where estado = 'pendiente'`,
+  [esc.admin.usuario],
+]
+
+const privilegios = async (tabla = "auditoria_rescates") =>
   (
     await db.query(
       `select rol,
-              has_table_privilege(rol, 'public.auditoria_rescates', 'SELECT') as leer,
-              has_table_privilege(rol, 'public.auditoria_rescates', 'INSERT') as insertar,
-              has_table_privilege(rol, 'public.auditoria_rescates', 'UPDATE') as cambiar,
-              has_table_privilege(rol, 'public.auditoria_rescates', 'DELETE') as borrar,
-              has_table_privilege(rol, 'public.auditoria_rescates', 'TRUNCATE') as vaciar,
-              has_sequence_privilege(rol, 'public.auditoria_rescates_id_seq', 'USAGE,SELECT,UPDATE') as secuencia
-         from unnest(array['anon', 'authenticated', 'service_role']) as rol order by rol`
+              has_table_privilege(rol, $1, 'SELECT') as leer,
+              has_table_privilege(rol, $1, 'INSERT') as insertar,
+              has_table_privilege(rol, $1, 'UPDATE') as cambiar,
+              has_table_privilege(rol, $1, 'DELETE') as borrar,
+              has_table_privilege(rol, $1, 'TRUNCATE') as vaciar,
+              $1 = 'public.auditoria_rescates' and has_sequence_privilege(rol, 'public.auditoria_rescates_id_seq', 'USAGE,SELECT,UPDATE') as secuencia
+         from unnest(array['anon', 'authenticated', 'service_role']) as rol order by rol`,
+      [`public.${tabla}`]
     )
   ).rows
 
 const auditoria = async () => (await db.query("select * from auditoria_rescates order by id")).rows
+const porConciliar = async () => (await db.query("select * from ventas_por_conciliar order by id")).rows
 
 const foto = async () => ({
   auditoria: await auditoria(),
-  porConciliar: (await db.query("select id, estado, venta_id, resuelta_por from ventas_por_conciliar order by id")).rows,
+  porConciliar: await porConciliar(),
   ventas: (await db.query("select id, estado, numero_factura, correlativo, total from ventas order by id")).rows,
   abonos: (await db.query("select id, venta_id, monto from abonos order by id")).rows,
   movimientos: (await db.query("select id, tipo, cantidad, ubicacion_id from movimientos_inventario order by id")).rows,
@@ -98,6 +124,9 @@ const PRIVILEGIOS_DE_LA_0034 = [
   { rol: "authenticated", leer: true, insertar: false, cambiar: false, borrar: false, vaciar: false, secuencia: false },
   { rol: "service_role", leer: true, insertar: false, cambiar: false, borrar: false, vaciar: false, secuencia: false },
 ]
+
+/* Lo mismo para ventas_por_conciliar, que no tiene secuencia (su id es uuid). */
+const PRIVILEGIOS_POR_CONCILIAR = PRIVILEGIOS_DE_LA_0034
 
 beforeAll(async () => {
   base = await levantarBase({ hasta: "0033_anulacion_de_ventas.sql" })
@@ -129,6 +158,20 @@ describe("antes de la 0034: el defecto", () => {
     await comoRolSinDejarRastro("service_role", "truncate auditoria_rescates")
     expect((await auditoria()).length).toBe(3)
   })
+
+  it("1b. service_role puede inventar una venta por conciliar, resolver una pendiente sin el administrador y vaciar la tabla", async () => {
+    expect((await privilegios("ventas_por_conciliar")).find((p) => p.rol === "service_role")).toMatchObject({
+      insertar: true,
+      cambiar: true,
+      borrar: true,
+      vaciar: true,
+    })
+
+    expect((await comoRolSinDejarRastro("service_role", ...insertarPorConciliarFalsa())).rowCount).toBe(1)
+    expect((await comoRolSinDejarRastro("service_role", ...resolverPorDebajo())).rowCount).toBe(1)
+    await comoRolSinDejarRastro("service_role", "truncate ventas_por_conciliar, auditoria_rescates")
+    expect((await porConciliar()).map((f) => f.estado).sort()).toEqual(["aplicada", "pendiente"])
+  })
 })
 
 describe("la 0034 sobre datos existentes", () => {
@@ -147,6 +190,7 @@ describe("la 0034 sobre datos existentes", () => {
 
     expect(await foto()).toEqual(antes)
     expect(await privilegios()).toEqual(PRIVILEGIOS_DE_LA_0034)
+    expect(await privilegios("ventas_por_conciliar")).toEqual(PRIVILEGIOS_POR_CONCILIAR)
   })
 })
 
@@ -246,18 +290,91 @@ describe("después de la 0034", () => {
   })
 })
 
+describe("ventas por conciliar después de la 0034", () => {
+  it("14. privilegios: anon nada; authenticated y service_role solo leer", async () => {
+    expect(await privilegios("ventas_por_conciliar")).toEqual(PRIVILEGIOS_POR_CONCILIAR)
+  })
+
+  it("15. ni el administrador, ni anon, ni service_role las inventan, resuelven por debajo, borran ni vacían", async () => {
+    const filas = await porConciliar()
+    const intentos = [
+      insertarPorConciliarFalsa(),
+      resolverPorDebajo(),
+      ["delete from ventas_por_conciliar", []],
+      ["truncate ventas_por_conciliar, auditoria_rescates", []],
+    ]
+
+    for (const [consulta, v] of intentos) {
+      expect((await fallo(consultarComo(db, esc.admin.authId, consulta, v))).code).toBe("42501")
+      expect((await fallo(consultarComo(db, null, consulta, v))).code).toBe("42501")
+      expect((await fallo(comoRol("service_role", consulta, v))).code).toBe("42501")
+    }
+    expect(await porConciliar()).toEqual(filas)
+  })
+
+  it("16. ni el dueño de la base las vacía, ni siquiera en cascada", async () => {
+    for (const consulta of ["truncate ventas_por_conciliar cascade", "truncate ventas_por_conciliar, auditoria_rescates"]) {
+      expect((await fallo(db.query(consulta))).code).toBe("42501")
+    }
+
+    /* Lo detiene su propio disparador, no solo el de la auditoría que arrastra la cascada. */
+    const error = await fallo(db.query("truncate ventas_por_conciliar cascade"))
+    expect(error.message).toMatch(/Las ventas por conciliar no se vacían/)
+    expect((await porConciliar()).length).toBeGreaterThan(0)
+  })
+
+  it("17. el modo sin conexión sigue igual: una venta normal se registra y una con el reloj desfasado va a conciliación", async () => {
+    const otro = await escenarioSinConexion(db)
+    const normal = await sincronizar(db, otro.vendedor.authId, ventaSinConexion(otro))
+    const desfase = 2 * 3600000
+    const desfasada = await sincronizar(
+      db,
+      otro.vendedor.authId,
+      ventaSinConexion(otro, {
+        registrada_en: new Date(Date.now() - desfase - 10 * 60000).toISOString(),
+        reloj_dispositivo: new Date(Date.now() - desfase).toISOString(),
+      })
+    )
+
+    expect(normal.estado).toBe("registrada")
+    expect(desfasada).toMatchObject({ estado: "en_conciliacion", motivo: "reloj-desfasado" })
+    expect((await db.query("select estado from ventas_por_conciliar where id = $1", [desfasada.conciliacion_id])).rows[0].estado).toBe("pendiente")
+
+    /* Y el vendedor sigue viendo la suya desde el teléfono. */
+    const ve = await consultarComo(db, otro.vendedor.authId, "select id from ventas_por_conciliar where id = $1", [desfasada.conciliacion_id])
+    expect(ve.rows).toHaveLength(1)
+  })
+
+  it("18. conciliar_venta sigue anulando una pendiente con su motivo", async () => {
+    const r = await rescatar(db, esc.admin.authId, ventaSinConexion(esc), "lote-e")
+    const anulada = await conciliar(db, esc.admin.authId, r.conciliacion_id, "anular", "Venta duplicada en el cuaderno")
+    const fila = (await db.query("select * from ventas_por_conciliar where id = $1", [r.conciliacion_id])).rows[0]
+
+    expect(anulada.estado).toBe("anulada")
+    expect(fila).toMatchObject({ estado: "anulada", resuelta_por: esc.admin.usuario, resolucion_accion: "anular" })
+  })
+})
+
 describe("reversión", () => {
-  it("13. el bloque del documento devuelve los privilegios de antes sin tocar filas, y la 0034 se vuelve a aplicar", async () => {
-    const filas = await auditoria()
+  it("19. el bloque del documento devuelve los privilegios de antes sin tocar filas, y la 0034 se vuelve a aplicar", async () => {
+    const filas = { auditoria: await auditoria(), porConciliar: await porConciliar() }
+    const disparadores = () =>
+      db.query(
+        "select count(*)::int as n from pg_trigger where tgname in ('auditoria_rescates_sin_vaciar', 'ventas_por_conciliar_sin_vaciar')"
+      )
 
     await db.query(await bloqueDeReversion())
 
     expect((await privilegios()).find((p) => p.rol === "service_role")).toMatchObject({ insertar: true, vaciar: true, secuencia: true })
-    expect((await db.query("select count(*)::int as n from pg_trigger where tgname = 'auditoria_rescates_sin_vaciar'")).rows[0].n).toBe(0)
-    expect(await auditoria()).toEqual(filas)
+    expect((await privilegios("ventas_por_conciliar")).find((p) => p.rol === "service_role")).toMatchObject({ insertar: true, cambiar: true, vaciar: true })
+    expect((await disparadores()).rows[0].n).toBe(0)
+    expect((await db.query("select to_regprocedure('public.ventas_por_conciliar_sin_vaciar()') as f")).rows[0].f).toBeNull()
+    expect({ auditoria: await auditoria(), porConciliar: await porConciliar() }).toEqual(filas)
 
     await aplicarMigracion(db, "0034_auditoria_de_rescates_protegida.sql")
     expect(await privilegios()).toEqual(PRIVILEGIOS_DE_LA_0034)
-    expect(await auditoria()).toEqual(filas)
+    expect(await privilegios("ventas_por_conciliar")).toEqual(PRIVILEGIOS_POR_CONCILIAR)
+    expect((await disparadores()).rows[0].n).toBe(2)
+    expect({ auditoria: await auditoria(), porConciliar: await porConciliar() }).toEqual(filas)
   })
 })
