@@ -40,3 +40,6 @@ coverage/
 
 # Reporte que genera el paso de pruebas en CI para explicar los fallos.
 test-report.json
+
+# Estado local de wrangler al probar Cloudflare Pages (docs/cloudflare-pages.md).
+.wrangler/
