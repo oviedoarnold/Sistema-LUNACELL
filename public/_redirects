@@ -1,0 +1,29 @@
+# Reescrituras de Cloudflare Pages: lo que en Vercel hacen las "rewrites" de
+# vercel.json. Las pantallas privadas exactas no van aquí: las sirve
+# functions/[[ruta]].js, que antes comprueba la marca de sesión.
+#
+# Un 200 sirve el destino sin cambiar la dirección. Se reescribe a "/" y no
+# a "/index.html", porque Pages redirige /index.html a /.
+#
+# Las dos primeras evitan esa redirección de Pages sobre los archivos que el
+# service worker precarga por su nombre. Una respuesta redirigida guardada
+# en caché no se puede entregar a una navegación: sin red, la aplicación no
+# abriría.
+
+/index.html  /  200
+/login.html  /login  200
+
+/demo  /  200
+/demo/*  /  200
+/dashboard/*  /  200
+/pos/*  /  200
+/products/*  /  200
+/inventory/*  /  200
+/clients/*  /  200
+/suppliers/*  /  200
+/sales-history/*  /  200
+/receivables/*  /  200
+/quotes/*  /  200
+/locations/*  /  200
+/settings/*  /  200
+/reconciliation/*  /  200
