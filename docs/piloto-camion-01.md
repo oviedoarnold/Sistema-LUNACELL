@@ -37,12 +37,14 @@ y abre la aplicación siempre desde ahí.
   menú ⋮ → **Instalar aplicación**.
 - **iPhone (Safari):** abre la misma dirección y elige **Compartir** →
   **Agregar a inicio**.
-- **No uses `lunacell.vercel.app`.** Es la dirección técnica de Vercel: la
-  aplicación abre, pero no deja iniciar sesión («Revisa tu conexión»), porque
-  la función de acceso solo acepta el dominio oficial. Además, cada dirección
-  es una aplicación aparte en el teléfono, con su propia sesión y sus propias
-  ventas pendientes. Si el teléfono ya tiene instalada la de `vercel.app`,
-  desinstálala **con conexión y sin ventas pendientes** e instala la oficial.
+- **No uses `lunacell.vercel.app` ni direcciones que terminen en
+  `pages.dev`.** Son direcciones técnicas del respaldo en Vercel y de
+  Cloudflare. En `vercel.app` la aplicación abre, pero no deja iniciar sesión
+  («Revisa tu conexión»), porque la función de acceso solo acepta el dominio
+  oficial. Además, cada dirección es una aplicación aparte en el teléfono, con
+  su propia sesión y sus propias ventas pendientes, aunque deje entrar. Si el
+  teléfono ya tiene instalada otra que no sea la oficial, desinstálala **con
+  conexión y sin ventas pendientes** e instala la oficial.
   - Safari puede borrar los datos de un sitio que no se usa en 7 días si **no**
     está instalado: instálalo siempre.
 - Abre LUNACELL **desde el ícono instalado**, no desde el navegador.

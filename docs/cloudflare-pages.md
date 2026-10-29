@@ -1,11 +1,75 @@
-# Cloudflare Pages
+# Alojamiento en Cloudflare Pages
 
-LUNACELL puede servirse desde Cloudflare Pages con la misma compilación que hoy
-publica Vercel. Las dos configuraciones conviven: Vercel sigue siendo producción
-hasta que se apruebe el cambio, y Pages se prueba antes en una dirección
-`*.pages.dev`.
+Desde el 2026-10-29, LUNACELL se sirve desde Cloudflare Pages. El proyecto de
+Pages se llama `sistema-lunacell`. Vercel se conserva temporalmente como
+respaldo.
+
+| Pieza | Dónde vive |
+|---|---|
+| Dominio oficial | `https://lunacell.oviedoarnold.lat` |
+| Frontend (archivos y funciones del borde) | Cloudflare Pages, proyecto `sistema-lunacell` |
+| Base de datos, autenticación, archivos y Edge Functions | Supabase, proyecto `qlzkriyibpbnesidtiiy` |
+| Zona DNS de `oviedoarnold.lat` | Vercel DNS (`ns1.vercel-dns.com` y `ns2.vercel-dns.com`) |
+| Respaldo del frontend | Vercel, `lunacell.vercel.app`, sin el dominio oficial |
+| Código | GitHub, `oviedoarnold/Sistema-LUNACELL` |
+
+El cambio de alojamiento no tocó Supabase. La base de datos, las claves, Auth y
+las Edge Functions son las mismas.
+
+## Despliegue desde GitHub
+
+Pages está conectado al repositorio mediante la aplicación de Cloudflare en
+GitHub, autorizada solo para `Sistema-LUNACELL`.
+
+- **Cada push a `main` despliega producción.** El commit aparece en GitHub con
+  el check **Cloudflare Pages**.
+- **Un push a otra rama genera una vista previa** en
+  `<rama>.sistema-lunacell.pages.dev`, contra la misma base de producción.
+  Ver [Vistas previas y orígenes](#vistas-previas-y-orígenes).
+- **Para comprobar qué commit está en producción:**
+
+  ```
+  curl https://lunacell.oviedoarnold.lat/api/health
+  ```
+
+  `version` son los primeros 7 caracteres del commit desplegado y debe
+  coincidir con `main`. La respuesta trae `Server: cloudflare` y un
+  encabezado `CF-RAY`.
+
+Mientras se conserve el respaldo, Vercel también despliega `main` por su cuenta.
+Esos despliegues no atienden el dominio oficial.
+
+### Configuración del proyecto en Pages
+
+- Rama de producción: `main`.
+- Framework preset: `None`.
+- Build command: `npm ci --ignore-scripts && npm run build`. Es la misma
+  instalación que el CI.
+- Build output directory: `dist`.
+- Root directory: la raíz del repositorio.
+
+### Variables del build
+
+Se definen en **Settings → Variables and Secrets**, en Production y en Preview:
+
+| Variable | Valor | Para qué |
+|---|---|---|
+| `NODE_VERSION` | `22` | Pages no lee `engines` de `package.json` |
+| `SKIP_DEPENDENCY_INSTALL` | `1` | Evita instalar dos veces: ya lo hace el build command |
+| `VITE_SUPABASE_URL` | La URL del proyecto de Supabase | El build y `/api/health` |
+| `VITE_SUPABASE_PUBLISHABLE_KEY` | La clave **publicable** | El build y `/api/health` |
+
+- Las dos `VITE_` son públicas por diseño: viajan en el JavaScript.
+- **Nunca** se pone la clave secreta ni la `service_role`.
+- Vite las incorpora al compilar, así que cambiarlas exige volver a desplegar.
+- El proyecto de Vercel tiene que tener los mismos valores mientras sea el
+  respaldo.
+- Detalle de las claves: [Configuración](configuracion.md).
 
 ## Qué hace cada archivo
+
+El repositorio mantiene las dos configuraciones, la de Pages y la de Vercel, para
+que el respaldo sirva lo mismo:
 
 | En Vercel | En Cloudflare Pages | Qué hace |
 |---|---|---|
@@ -17,7 +81,9 @@ hasta que se apruebe el cambio, y Pages se prueba antes en una dirección
 | — | `public/_routes.json` | Limita las funciones a las pantallas privadas y al healthcheck |
 
 `src/routes/despliegueCloudflare.test.js` comprueba que las dos configuraciones
-digan lo mismo. Si se agrega una pantalla privada y se olvida en Pages, falla.
+digan lo mismo. Si se agrega una pantalla privada o se cambia un encabezado en
+una sola, la prueba falla. Mientras Vercel sea el respaldo, **todo cambio de
+rutas o encabezados se hace en los dos lados**.
 
 ### Dos diferencias de Pages que ya están resueltas
 
@@ -28,133 +94,200 @@ digan lo mismo. Si se agrega una pantalla privada y se olvida en Pages, falla.
   `_redirects` sirve esos dos archivos con un 200, sin redirección. Está comprobado
   con `wrangler pages dev`: sin esas dos reglas responden 308; con ellas, 200.
 - **Con un `404.html` en la raíz, Pages no hace el respaldo de aplicación de una
-  sola página.** Es lo mismo que hoy hace Vercel: una dirección que no existe
-  responde 404 con `404.html`, y cada pantalla de la aplicación se declara
-  explícitamente.
+  sola página.** Vercel se comporta igual: una dirección que no existe responde
+  404 con `404.html`, y cada pantalla de la aplicación se declara explícitamente.
 
-## Plan gratuito
+## Vistas previas y orígenes
 
-Datos de la documentación oficial, consultada el 2026-10-28:
+El inicio de sesión pasa por la Edge Function `acceso`, que solo acepta los
+orígenes del secreto `ORIGENES_PERMITIDOS` de Supabase. Si el secreto no
+existe, acepta solo el dominio oficial.
 
-- Las peticiones a archivos estáticos son **gratuitas e ilimitadas**, y también el
-  ancho de banda.
-- Las funciones cuentan contra el plan gratuito de Workers: **100 000 peticiones al
-  día**, que se reinician a medianoche UTC. Aquí solo pasan por una función las
-  navegaciones a las pantallas privadas y `/api/health`. Los archivos, el login y
-  los datos, que van directo a Supabase, no gastan.
-- **10 ms de CPU por petición.** La función solo lee una cookie, así que no se
-  acerca a ese límite.
+- **En producción basta con el dominio oficial.** Pages, el respaldo de Vercel
+  y la vuelta atrás usan todos el mismo dominio.
+- **Los orígenes de `pages.dev` se agregaron solo para las pruebas de la
+  migración y se retiran al cerrarla.** Una dirección de rama autorizada
+  publica, con cualquier push a esa rama, código que puede iniciar sesión
+  contra producción.
+- **Nunca un comodín** como `*.pages.dev`: cualquier proyecto ajeno en
+  pages.dev podría llamar a la función.
+- Cambiar el secreto es un cambio en producción y necesita autorización.
+
+Para cambiarlo:
+
+1. En Supabase, abrir **Edge Functions → Secrets**.
+2. Editar `ORIGENES_PERMITIDOS`: orígenes completos, separados por comas, con
+   el dominio oficial primero.
+3. Guardar. No hace falta volver a desplegar la función, aunque el cambio
+   puede tardar unos minutos en llegar a todas las instancias.
+4. Comprobar con una consulta previa, que no ejecuta ninguna acción:
+
+   ```
+   curl -i -X OPTIONS -H "Origin: https://<origen>" \
+     https://qlzkriyibpbnesidtiiy.supabase.co/functions/v1/acceso
+   ```
+
+   Un origen aceptado vuelve en `Access-Control-Allow-Origin`. Uno rechazado
+   recibe el dominio oficial.
+
+Las vistas previas usan la base de producción: en ellas **no se venden ni se
+sincronizan ventas**.
+
+## Recuperación
+
+### Un despliegue malo en Pages
+
+1. En Pages, ir a **Deployments**, elegir el último despliegue de producción
+   que funcionaba y usar **Rollback to this deployment**. El cambio es
+   inmediato y no toca el DNS.
+2. Corregir en una rama y volver a integrar en `main` por PR, como siempre.
+   Revertir el commit en `main` también despliega la versión anterior.
+
+### Pages no responde y hay que volver a Vercel
+
+Esta vuelta atrás solo existe mientras Vercel se conserve como se describe en la
+sección siguiente.
+
+1. **Antes de cambiar el DNS, comprobar que el último despliegue de producción
+   de Vercel corresponde al `main` actual.** Si se desactivaron sus despliegues
+   automáticos, primero hay que desplegar `main` en Vercel a mano. Un build
+   viejo podría no corresponder al esquema actual de la base.
+2. En el DNS de Vercel (**Domains → `oviedoarnold.lat`**), reemplazar el CNAME
+   de `lunacell` por el registro que pide Vercel para su proyecto. El valor
+   exacto se ve en **Settings → Domains** del proyecto de Vercel; conviene
+   anotarlo antes de necesitarlo. El TTL actual del registro es de 60
+   segundos.
+3. Esperar a que Vercel marque el dominio como válido y sirva el certificado.
+4. Comprobar `/api/health`: tiene que responder con `Server: Vercel` y el
+   commit correcto. Después, `/login` y el inicio de sesión.
+
+No hace falta tocar Supabase: el dominio es el mismo, así que
+`ORIGENES_PERMITIDOS` sigue valiendo.
+
+Para regresar a Pages, se restaura el CNAME hacia `sistema-lunacell.pages.dev`.
+
+**Vercel Hobby es solo para uso personal y no comercial.** Usarlo como
+producción es una medida de emergencia y tiene que durar lo mínimo.
+
+### Supabase no responde
+
+Cambiar de alojamiento no lo arregla: el frontend abre, pero no hay datos.
+`/api/health` responde 503 e indica qué dependencia falla. Hay que revisar el
+estado del proyecto en Supabase.
+
+## PWA y datos sin conexión al cambiar de alojamiento
+
+Las ventas sin conexión viven en IndexedDB del navegador. Su clave es el
+**origen** (`https://lunacell.oviedoarnold.lat`), no el servidor. Lo mismo
+ocurre con la cookie `lunacell-sesion`, la sesión de Supabase y la caché del
+service worker.
+
+**Mientras se conserve el dominio, cambiar de servidor no borra nada.**
+**Cambiar de dominio sí deja todo atrás:** cada equipo empezaría vacío y las
+ventas pendientes se quedarían en el origen viejo. Por eso el dominio no se
+cambia, ni para volver a Vercel ni para ningún otro proveedor.
+
+Precauciones en cada cambio de servidor:
+
+1. **Antes del cambio, sincronizar todo lo pendiente** en cada equipo, con red
+   y desde el dominio oficial. Comprobar en Conciliación que no queden ventas
+   por resolver.
+2. **Hacerlo en un momento sin ventas.** Lo pendiente no se perdería de todos
+   modos, pero así no queda nada a medias.
+3. **Los dos servidores tienen que servir el mismo commit.** Durante la
+   propagación del DNS, un equipo puede ver cualquiera de los dos.
+4. **Comprobar que el servidor nuevo cumple lo que necesita el service
+   worker:**
+   - `sw.js`, `/` e `/index.html` con `Cache-Control: max-age=0, must-revalidate`;
+   - `/index.html` y `/login.html` con un 200, sin redirección;
+   - las pantallas privadas sin sesión responden 307 a `/login`.
+
+   Si `sw.js` se cacheara, un despliegue nuevo no llegaría a nadie. Si
+   `/index.html` llegara redirigido, la aplicación instalada no abriría sin
+   red.
+5. **Después del cambio, abrir la aplicación con red en cada equipo.** El
+   service worker se actualiza solo, porque usa `skipWaiting` y
+   `clients.claim`. Las ventas pendientes siguen en IndexedDB y se sincronizan
+   como siempre.
+
+Más detalle sobre la PWA: [PWA](pwa.md).
+
+## Costes y límites
+
+Datos de la documentación oficial de Cloudflare, consultada el 2026-10-28.
+Conviene revisarlos de nuevo antes de cualquier decisión comercial, porque los
+planes cambian.
+
+### Plan gratuito de Cloudflare Pages
+
+- Las peticiones a archivos estáticos y el ancho de banda son **gratuitos e
+  ilimitados**.
+- **Funciones: 100 000 peticiones al día**, que se reinician a medianoche UTC.
+  Aquí solo pasan por una función las navegaciones a las pantallas privadas y
+  `/api/health`. Los archivos, el login y los datos, que van directo a
+  Supabase, no gastan.
+- Si se pasa del límite diario, Workers responde con el error 1027 en esas
+  rutas. Para salir de ahí habría que pasar al plan de pago de Workers.
+- **10 ms de CPU por petición.** La función solo lee una cookie.
 - **500 compilaciones al mes**, una a la vez, de 20 minutos como máximo.
-- **20 000 archivos** por sitio y **25 MiB** por archivo. El build actual tiene
+- **20 000 archivos** por sitio y **25 MiB** por archivo. Hoy el build tiene
   menos de 30 archivos y el más grande pesa 1,4 MB.
 - **100 dominios propios** por proyecto.
-- Las condiciones del plan gratuito no prohíben el uso comercial. Vercel Hobby, en
-  cambio, es solo para uso personal y no comercial.
+- Las condiciones del plan gratuito no prohíben el uso comercial.
 
-Si se pasa del límite diario, Workers responde con el error 1027 en las rutas que
-pasan por una función. Esas rutas son las pantallas privadas, y para salir de ahí
-habría que pasar al plan de pago.
+### Lo que el plan gratuito no garantiza
 
-## Primera publicación en pages.dev
+- **No ofrece un acuerdo de nivel de servicio (SLA)** de disponibilidad. Las
+  garantías de disponibilidad y el soporte con tiempos de respuesta son de los
+  planes empresariales.
+- **El soporte del plan gratuito es la documentación y la comunidad.**
+- Los límites y las condiciones los puede cambiar Cloudflare.
 
-Estos pasos los hace la persona dueña de la cuenta de Cloudflare. No tocan el
-dominio oficial ni Vercel.
+Para un negocio que depende de vender, eso significa que una caída de Pages se
+resuelve con la vuelta atrás de arriba y no con un reclamo al proveedor. Si
+LUNACELL pasa a uso comercial con varios clientes, conviene evaluar un plan de
+pago.
 
-1. **Crear el proyecto.** Entrar en Cloudflare y abrir **Workers & Pages →
-   Create → Pages → Connect to Git**. Autorizar la aplicación de Cloudflare en
-   GitHub **solo para el repositorio `Sistema-LUNACELL`**.
-2. **Nombre del proyecto.** El nombre da la dirección: con `lunacell` sería
-   `lunacell.pages.dev`, si está libre.
-3. **Rama de producción.** Usar `main`.
-4. **Configuración de compilación:**
-   - Framework preset: `None`.
-   - Build command: `npm ci --ignore-scripts && npm run build`. Es la misma
-     instalación que el CI.
-   - Build output directory: `dist`.
-   - Root directory: el directorio raíz del repositorio.
-5. **Variables de entorno.** Ponerlas en Production y en Preview:
-   - `NODE_VERSION` = `22`. Pages no lee `engines` de `package.json`.
-   - `SKIP_DEPENDENCY_INSTALL` = `1`, para que no instale dos veces.
-   - `VITE_SUPABASE_URL` = la misma que en Vercel.
-   - `VITE_SUPABASE_PUBLISHABLE_KEY` = la misma clave publicable que en Vercel.
-     Nunca la `service_role`.
+### Fuera de Cloudflare
 
-   La compilación y las funciones leen las mismas variables.
-6. **Preparar la primera prueba.** Mientras esta rama no esté en `main`, la
-   primera prueba se hace con la vista previa de la rama `feat/cloudflare-pages`.
-   Su dirección es `<hash>.<proyecto>.pages.dev` o
-   `feat-cloudflare-pages.<proyecto>.pages.dev`.
+- **Supabase** tiene sus propios límites y su propio plan, que se revisan en
+  su panel. Si el proyecto estuviera en el plan gratuito, Supabase pausa los
+  proyectos sin actividad y las copias de seguridad son limitadas.
+- **El dominio** `oviedoarnold.lat` se renueva con el registrador. Si caduca,
+  la aplicación deja de responder, esté donde esté.
+- **Vercel Hobby** no cobra: al llegar a un límite, se detiene. Conviene
+  confirmar que la cuenta no tenga un plan de pago ni un método de pago
+  activo.
 
-### Para poder iniciar sesión desde pages.dev
+## Retiro de Vercel
 
-El inicio de sesión pasa por la Edge Function `acceso`. Esa función solo acepta los
-orígenes de `ORIGENES_PERMITIDOS`, y si no se configura, solo el dominio oficial.
-Desde pages.dev se puede abrir la aplicación, pero entrar falla hasta que se
-agregue ese origen.
+**La zona DNS de `oviedoarnold.lat` está en Vercel.** Si se borra el dominio
+de la cuenta de Vercel, o la cuenta entera, se pierde el DNS y la aplicación
+deja de responder, aunque Pages siga funcionando.
 
-La variable es un secreto de la Edge Function en Supabase de producción, y
-cambiarla requiere autorización. El valor sería:
+Mientras sea el respaldo:
 
-```
-https://lunacell.oviedoarnold.lat,https://<proyecto>.pages.dev
-```
+- No quitar el dominio de la cuenta ni del proyecto de Vercel.
+- No borrar el proyecto ni sus variables de entorno.
+- Para dejar de compilar en cada push sin perder el respaldo, se puede usar
+  **Settings → Git → Ignored Build Step** con `exit 0`. El último despliegue
+  sigue disponible, pero hay que actualizarlo antes de usarlo; ver
+  [Recuperación](#recuperación).
 
-El dominio oficial va primero y se conserva. Hay que agregar una sola dirección
-fija, no las de cada vista previa: con un comodín, cualquier proyecto ajeno en
-pages.dev podría llamar a la función. Al terminar las pruebas se quita.
+Orden previsto para retirarlo, con autorización en cada paso:
 
-### Qué comprobar en pages.dev
+1. Un periodo estable en Pages.
+2. Desactivar los despliegues automáticos de Vercel.
+3. Mover la zona DNS fuera de Vercel, a Cloudflare o al registrador, con los
+   mismos registros.
+4. Solo después, quitar el dominio y el proyecto de Vercel. Con eso se pueden
+   retirar `vercel.json`, `api/health.js` y la parte de la prueba de paridad
+   que los compara. `middleware.js` se queda, porque lo importa
+   `functions/[[ruta]].js`.
 
-- `/login` llega con el formulario ya dibujado.
-- `/pos` sin sesión manda a `/login` con un 307.
-- Entrar, recorrer las pantallas y recargar en cada una.
-- `/api/health` responde `"estado": "ok"`.
-- Los encabezados de seguridad: `curl -I https://<proyecto>.pages.dev/`.
-- Instalar la PWA, cortar la red y comprobar que abre. Sin red solo se abre la
-  aplicación. **No se registran ventas.**
+## Historia de la migración
 
-pages.dev es otro origen para el navegador. Su sesión, su caché y su base local
-son independientes de las del dominio oficial. Lo que se haga ahí no toca las
-ventas pendientes de ningún equipo real. Por eso mismo, en pages.dev **no se
-venden ni se sincronizan ventas**: irían a la base de producción.
-
-## Cambio del dominio oficial
-
-Este paso necesita autorización aparte. El dominio no cambia, solo el servidor
-que lo atiende.
-
-**Por qué no se pierden las ventas pendientes.** Las ventas sin conexión viven en
-IndexedDB del navegador, y su clave es el origen
-`https://lunacell.oviedoarnold.lat`, no el servidor. Si se conserva el mismo
-dominio, cada equipo sigue viendo su base local, su sesión, su cookie y su caché.
-Si se cambiara de dominio, cada equipo empezaría vacío y lo pendiente se quedaría
-en el origen viejo. Por eso el dominio no se cambia.
-
-**El DNS hoy.** `oviedoarnold.lat` usa los nameservers de Vercel
-(`ns1.vercel-dns.com` y `ns2.vercel-dns.com`). Al ser un subdominio, Pages no
-exige mover el dominio a Cloudflare: basta con un CNAME. Ese registro se edita en
-el DNS de Vercel, aunque la aplicación ya no se sirva desde ahí.
-
-**Procedimiento previsto:**
-
-1. Antes del día del cambio, **sincronizar todo lo pendiente** en cada equipo, con
-   red y desde el dominio oficial. Comprobar en Conciliación que no queden ventas
-   por resolver.
-2. Elegir un momento sin ventas. Las ventas pendientes que hubiera de todos modos
-   no se pierden, pero así no queda nada a medias.
-3. En Pages, abrir **Custom domains → Set up a domain** y escribir
-   `lunacell.oviedoarnold.lat`. Este paso va primero: un CNAME sin el dominio
-   asociado en Pages da el error 522.
-4. En el DNS de Vercel, reemplazar el registro de `lunacell` por un CNAME hacia
-   `<proyecto>.pages.dev`. El TTL del dominio es de 10 minutos.
-5. Esperar a que Pages marque el dominio como activo y emita el certificado. Luego
-   comprobar `/login`, `/api/health`, los encabezados, el inicio de sesión y la
-   PWA.
-6. En cada equipo, abrir la aplicación con red. El service worker se actualiza
-   solo: hay `skipWaiting` y `clients.claim`, y `sw.js` se revalida en cada
-   visita. Las ventas pendientes siguen en IndexedDB y se sincronizan como
-   siempre.
-7. Dejar Vercel conectado unos días, sin el dominio, como vuelta atrás.
-
-**Vuelta atrás:** devolver el registro de `lunacell` a lo que tenía en Vercel. El
-origen sigue siendo el mismo, así que tampoco se pierde nada.
+| Fecha | Paso |
+|---|---|
+| 2026-10-28 | PR #69 integrado en `main` (`7818043`): configuración de Pages junto a la de Vercel, probada antes en `pages.dev` |
+| 2026-10-29 | El CNAME de `lunacell` pasa a `sistema-lunacell.pages.dev`. Certificado de Google Trust Services emitido por Pages. `/api/health` responde desde Cloudflare con `7818043` |

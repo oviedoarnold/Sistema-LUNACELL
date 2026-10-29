@@ -47,7 +47,9 @@ URL directamente redirige a la primera sección que el usuario sí tenga habilit
 - Sistema de estilos propio (`src/styles/`) con tokens CSS, sin framework
 - **jsPDF** y **html2canvas** para exportar facturas y cotizaciones
 - **SweetAlert2** para confirmaciones
-- Desplegado en **Vercel** con HTTPS
+- **Supabase** como base de datos (PostgreSQL con RLS), autenticación y Edge Functions
+- Publicado en **Cloudflare Pages** con HTTPS. Cada push a `main` despliega solo.
+  Vercel se conserva temporalmente como respaldo; ver [Alojamiento](docs/cloudflare-pages.md).
 
 ## Cómo correrlo
 
@@ -77,7 +79,9 @@ src/
 
 ## Seguridad
 
-Los headers se configuran en [`vercel.json`](vercel.json):
+Los headers se configuran en [`public/_headers`](public/_headers), para Cloudflare
+Pages. [`vercel.json`](vercel.json) repite los mismos valores para el respaldo, y
+una prueba falla si dejan de coincidir:
 
 | Header | Protege contra |
 |---|---|
@@ -111,6 +115,7 @@ página pública y **no publica credenciales**: el acceso es por
 | Documento | Contenido |
 |---|---|
 | [Configuración](docs/configuracion.md) | Variables de entorno y cuál clave va dónde |
+| [Alojamiento](docs/cloudflare-pages.md) | Cloudflare Pages, respaldo en Vercel, DNS, recuperación y límites |
 | [Arquitectura](docs/arquitectura.md) | Diagramas C4 y decisiones |
 | [ADR-1](docs/adr/adr-001-postgresql-multiempresa.md) | PostgreSQL multi-empresa |
 | [ADR-2](docs/adr/adr-002-permisos-por-ruta.md) | Permisos por ruta |
