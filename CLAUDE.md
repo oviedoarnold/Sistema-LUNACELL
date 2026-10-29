@@ -6,7 +6,8 @@ no guardar aquí historial, estado de fases, PR, resultados de CI ni informes.
 ## Proyecto
 
 LUNACELL es un sistema empresarial real en producción.
-Stack: React + Vite + Supabase (PostgreSQL/Auth/RLS) + Vercel + GitHub Actions + SonarCloud.
+Stack: React + Vite + Supabase (PostgreSQL/Auth/RLS) + Cloudflare Pages + GitHub Actions + SonarCloud.
+Vercel es respaldo temporal y aloja la zona DNS: no tocarlo sin orden expresa. Ver `docs/cloudflare-pages.md`.
 
 Prioridad: integridad de datos > seguridad > estabilidad > mantenibilidad > trazabilidad > calidad > UX.
 El repositorio es la fuente de verdad: comprobar antes de asumir.

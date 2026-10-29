@@ -35,13 +35,13 @@ C4Context
   System(sistema, "Sistema Ferretería", "Inventario, facturación, cotizaciones y abonos")
 
   System_Ext(sar, "SAR", "Autoriza el CAI y el rango de numeración")
-  System_Ext(vercel, "Vercel", "Publica la aplicación con HTTPS")
+  System_Ext(cloudflare, "Cloudflare Pages", "Publica la aplicación con HTTPS")
 
   Rel(cajero, sistema, "Factura, cotiza y consulta existencias")
   Rel(duenio, sistema, "Revisa ventas y asigna permisos")
   Rel(sistema, cliente, "Entrega factura o cotización en PDF")
   Rel(duenio, sar, "Tramita el CAI y el rango autorizado")
-  Rel(sistema, vercel, "Se despliega en")
+  Rel(sistema, cloudflare, "Se despliega en")
 ```
 
 ## 3. Diagrama C4 — Nivel 2: Contenedores
@@ -50,6 +50,9 @@ Una aplicación de una sola página contra PostgreSQL en Supabase. El aislamient
 entre ferreterías no lo hace el frontend: lo aplican las políticas de acceso de
 la base, como decidió el ADR-1.
 
+El frontend se publica en Cloudflare Pages, con Vercel como respaldo temporal.
+Ver [Alojamiento](cloudflare-pages.md).
+
 ```mermaid
 flowchart TB
   subgraph navegador["Navegador del cajero"]
@@ -57,8 +60,8 @@ flowchart TB
     sw["Service Worker<br/>Caché de la aplicación"]
   end
 
-  subgraph vercel["Vercel"]
-    cdn["CDN estático<br/>HTTPS + headers de seguridad"]
+  subgraph cloudflare["Cloudflare Pages"]
+    cdn["CDN estático<br/>HTTPS + headers de seguridad<br/>redirección al login sin sesión"]
   end
 
   subgraph supabase["Supabase"]
@@ -153,7 +156,9 @@ cobertura con esa justificación en [`vite.config.js`](../vite.config.js).
 
 ## 7. Seguridad
 
-Los headers se declaran en [`vercel.json`](../vercel.json):
+Los headers se declaran en [`public/_headers`](../public/_headers), para
+Cloudflare Pages, y se repiten en [`vercel.json`](../vercel.json) para el
+respaldo:
 
 | Header | Protege contra |
 |---|---|

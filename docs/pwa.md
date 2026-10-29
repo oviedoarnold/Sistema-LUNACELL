@@ -32,16 +32,30 @@ con esa redirección en vez de abrir.
 
 ## Dominio oficial
 
-La aplicación se usa e instala solo desde `https://lunacell.oviedoarnold.lat`.
-El mismo despliegue también responde en `lunacell.vercel.app`, la dirección
-técnica que asigna Vercel, pero **no es una dirección de acceso**: la función
-`acceso` solo acepta los orígenes de `ORIGENES_PERMITIDOS`, y sin ese valor
-solo el dominio oficial, así que desde ahí no se puede iniciar sesión.
+La aplicación se usa e instala solo desde `https://lunacell.oviedoarnold.lat`,
+que hoy sirve Cloudflare Pages (ver [Alojamiento](cloudflare-pages.md)).
+
+La aplicación también responde en direcciones técnicas, que **no son
+direcciones de acceso**:
+
+- `sistema-lunacell.pages.dev` y las vistas previas `*.sistema-lunacell.pages.dev`,
+  de Cloudflare;
+- `lunacell.vercel.app`, del respaldo en Vercel.
+
+La función `acceso` solo acepta los orígenes de `ORIGENES_PERMITIDOS`, y sin ese
+valor solo el dominio oficial. Desde una dirección que no esté en la lista no se
+puede iniciar sesión.
 
 Cada dominio es un origen distinto para el navegador: la cookie
 `lunacell-sesion`, la sesión de Supabase, la caché del service worker y la base
 local (perfil sin conexión y ventas pendientes) no se comparten. Una PWA
-instalada desde `vercel.app` es otra aplicación, con sus propios datos.
+instalada desde otra dirección es otra aplicación, con sus propios datos, aunque
+deje iniciar sesión.
+
+Por la misma razón, **cambiar de servidor no borra nada si se conserva el
+dominio**, y cambiar de dominio deja atrás las ventas pendientes. Las
+precauciones para cambiar de servidor están en
+[Alojamiento](cloudflare-pages.md#pwa-y-datos-sin-conexión-al-cambiar-de-alojamiento).
 
 ## Qué funciona sin Internet
 
