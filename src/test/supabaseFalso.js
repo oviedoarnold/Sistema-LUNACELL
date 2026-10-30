@@ -160,8 +160,14 @@ function proyectar(fila, columnas, tablas, tablaPadre) {
   sin tener que actualizar dos lugares a mano.
 */
 const VISTAS = {
+  // Sin el costo, como la vista desde la 0035.
   productos_con_stock: (datos) =>
-    (datos.productos || []).map((producto) => ({
+    (datos.productos || []).map((fila) => {
+      const producto = { ...fila }
+      delete producto.costo
+
+      return producto
+    }).map((producto) => ({
       ...producto,
       stock: (datos.movimientos_inventario || [])
         .filter((m) => m.producto_id === producto.id)
@@ -1150,6 +1156,24 @@ export function crearSupabaseFalso({
         if (falla) return Promise.resolve({ data: null, error: falla })
 
         return Promise.resolve(rpcsExtra[nombre](argumentos, { datos, sesion }))
+      }
+
+      /* Como en la base (0035): el costo solo para un administrador; a cualquier otro, un rechazo. */
+      if (nombre === "costos_de_productos") {
+        const falla = fallaDe(nombre, "rpc")
+        if (falla) return Promise.resolve({ data: null, error: falla })
+
+        if (usuarioDeLaSesion()?.rol !== "admin") {
+          return Promise.resolve({
+            data: null,
+            error: { code: "42501", message: "Solo un administrador puede consultar los costos" },
+          })
+        }
+
+        return Promise.resolve({
+          data: (datos.productos || []).map((p) => ({ producto_id: p.id, costo: p.costo ?? 0 })),
+          error: null,
+        })
       }
 
       if (nombre === "guardar_permisos_usuario") {

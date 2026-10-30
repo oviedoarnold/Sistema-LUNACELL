@@ -622,8 +622,8 @@ describe("ver no concede escribir", () => {
 describe("la vista no revela lo que no le toca", () => {
   /*
     Saber cuántas unidades lleva un camión no es saber cuánto costaron.
-    El costo sigue sin protección propia en el resto del esquema —es un
-    problema aparte, de otra fase—, pero esta vista no lo empeora.
+    Desde la 0035 el costo solo lo lee un administrador, y esta vista
+    tampoco lo trae.
   */
   it("26. no expone costo, margen ni utilidad", async () => {
     const r = await db.query(
@@ -661,16 +661,23 @@ describe("la vista no revela lo que no le toca", () => {
     expect(r.rows[0].n).toBe(0)
   })
 
+  /*
+    Desde la 0035 anon ni siquiera lee productos, así que la vista, que lo
+    junta, lo rechaza en vez de devolver cero filas.
+  */
   it("28. sin autenticar no se ve nada", async () => {
     await escenario()
 
     await comoUsuario(db, null)
-    const r = await db.query(
+    const consulta = db.query(
       "select count(*)::int as n from existencias_por_ubicacion"
     )
-    await comoDueno(db)
 
-    expect(r.rows[0].n).toBe(0)
+    try {
+      await expect(consulta).rejects.toMatchObject({ code: "42501" })
+    } finally {
+      await comoDueno(db)
+    }
   })
 })
 

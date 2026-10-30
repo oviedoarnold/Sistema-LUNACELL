@@ -3,6 +3,7 @@ import { FaCheckCircle, FaHandHoldingUsd, FaList, FaSearch } from "react-icons/f
 import Swal from "sweetalert2"
 
 import { ClientsContext, ProductContext, SalesContext } from "../context/contexts"
+import { useAuth } from "../hooks/useAuth"
 import EmptyState from "../components/crud/EmptyState"
 import PageHeader from "../components/crud/PageHeader"
 import SearchInput from "../components/crud/SearchInput"
@@ -30,6 +31,9 @@ function Receivables() {
   const { sales = [], cargando, refrescarVentas } = useContext(SalesContext)
   const { clients = [] } = useContext(ClientsContext)
   const { company } = useContext(ProductContext)
+
+  // El contador consulta las cuentas; no registra cobros (0036).
+  const { soloLectura } = useAuth()
 
   /*
     company llega nula —no ausente— mientras la empresa no ha cargado, así
@@ -228,13 +232,15 @@ function Receivables() {
                       Ver detalle
                     </button>
 
-                    <button
-                      className="btn btn-primary btn-sm"
-                      onClick={() => abrirCobro(cuenta)}
-                    >
-                      <FaHandHoldingUsd aria-hidden="true" />
-                      Abonar
-                    </button>
+                    {!soloLectura && (
+                      <button
+                        className="btn btn-primary btn-sm"
+                        onClick={() => abrirCobro(cuenta)}
+                      >
+                        <FaHandHoldingUsd aria-hidden="true" />
+                        Abonar
+                      </button>
+                    )}
                   </div>
                 </td>
               </tr>

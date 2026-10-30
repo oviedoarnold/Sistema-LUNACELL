@@ -177,6 +177,10 @@ problema de fondo —el costo sigue sin protección propia en
 `productos_con_stock`, que es `security_invoker` sobre una política sin
 filtro de administrador— y conviene no leerlo como resuelto.
 
+> **Actualización (0035):** el problema de fondo se resolvió aparte. El
+> costo solo lo lee un administrador; ver
+> [modelo de datos](../modelo-de-datos.md).
+
 ## Qué queda pendiente, y de quién
 
 **`SELLER_PERMISSIONS` se cambiará en INV-2.3**, no aquí. Que un vendedor

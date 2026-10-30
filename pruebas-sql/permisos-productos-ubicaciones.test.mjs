@@ -224,9 +224,13 @@ describe("SEC-3a productos: no se borran, para no llevarse la historia", () => {
     expect(await historia()).toEqual(antes)
   })
 
+  /*
+    La lectura es por columnas desde la 0035: todas menos el costo. Por eso
+    se pregunta por una columna y no por la tabla entera.
+  */
   it("los privilegios dicen lo mismo: alta y cambio sí, borrado no", async () => {
     const r = await db.query(`
-      select has_table_privilege('authenticated', 'public.productos', 'SELECT') as lee,
+      select has_column_privilege('authenticated', 'public.productos', 'precio', 'SELECT') as lee,
              has_table_privilege('authenticated', 'public.productos', 'INSERT') as inserta,
              has_table_privilege('authenticated', 'public.productos', 'UPDATE') as actualiza,
              has_table_privilege('authenticated', 'public.productos', 'DELETE') as borra,

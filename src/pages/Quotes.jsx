@@ -15,6 +15,7 @@ import SearchInput from "../components/crud/SearchInput"
 import { ProductContext } from "../context/contexts"
 import { ClientsContext } from "../context/contexts"
 import { QuotesContext } from "../context/contexts"
+import { useAuth } from "../hooks/useAuth"
 import { claveDeIdempotencia } from "../utils/ids"
 
 import QuoteTemplate from "../components/QuoteTemplate"
@@ -84,6 +85,12 @@ function Quotes() {
     addQuote,
     deleteQuote: quitarCotizacion,
   } = useContext(QuotesContext)
+
+  /*
+    El contador consulta las cotizaciones guardadas: sin armar una nueva,
+    facturarla ni eliminarla (0036).
+  */
+  const { soloLectura } = useAuth()
 
   const [guardandoCotizacion, setGuardandoCotizacion] = useState(false)
 
@@ -536,9 +543,15 @@ function Quotes() {
         repetia justo debajo. PageHeader deja solo la frase que explica la
         pantalla, igual que en el resto del sistema.
       */}
-      <PageHeader descripcion="Genera cotizaciones de productos sin afectar el inventario." />
+      <PageHeader
+        descripcion={
+          soloLectura
+            ? "Consulta las cotizaciones guardadas."
+            : "Genera cotizaciones de productos sin afectar el inventario."
+        }
+      />
 
-      <div className="bill-grid">
+      {!soloLectura && <div className="bill-grid">
         {/* PRODUCTOS */}
         <section className="quotes-catalogo" aria-labelledby="quotes-titulo-catalogo">
           <h2 id="quotes-titulo-catalogo" className="quotes-titulo">
@@ -933,7 +946,7 @@ function Quotes() {
             </div>
           </div>
         </aside>
-      </div>
+      </div>}
 
       {/* HISTORIAL */}
       <section className="quotes-historial" aria-labelledby="quotes-titulo-historial">
@@ -1025,18 +1038,20 @@ function Quotes() {
                     )}
                   </div>
 
-                  <button
-                    type="button"
-                    className="btn btn-primary btn-sm"
-                    title="Pasar esta cotización al punto de venta"
-                    onClick={() =>
-                      convertQuoteToSale(
-                        quote
-                      )
-                    }
-                  >
-                    Facturar
-                  </button>
+                  {!soloLectura && (
+                    <button
+                      type="button"
+                      className="btn btn-primary btn-sm"
+                      title="Pasar esta cotización al punto de venta"
+                      onClick={() =>
+                        convertQuoteToSale(
+                          quote
+                        )
+                      }
+                    >
+                      Facturar
+                    </button>
+                  )}
 
                   <button
                     type="button"
@@ -1050,19 +1065,21 @@ function Quotes() {
                     Ver
                   </button>
 
-                  <button
-                    type="button"
-                    className="icon-btn danger"
-                    title="Eliminar cotización"
-                    aria-label={`Eliminar la cotización ${quote.quoteNumber}`}
-                    onClick={() =>
-                      deleteQuote(
-                        quote.id
-                      )
-                    }
-                  >
-                    <FaTrash aria-hidden="true" />
-                  </button>
+                  {!soloLectura && (
+                    <button
+                      type="button"
+                      className="icon-btn danger"
+                      title="Eliminar cotización"
+                      aria-label={`Eliminar la cotización ${quote.quoteNumber}`}
+                      onClick={() =>
+                        deleteQuote(
+                          quote.id
+                        )
+                      }
+                    >
+                      <FaTrash aria-hidden="true" />
+                    </button>
+                  )}
                 </div>
               </div>
             )

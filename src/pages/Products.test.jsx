@@ -333,3 +333,79 @@ describe("Products: existencia por ubicación", () => {
     ).toHaveLength(1)
   })
 })
+
+/*
+  0035: el costo es confidencial. Lo ve y lo cambia solo el administrador,
+  que lo pide aparte con costos_de_productos(). Quien lleva el inventario
+  tiene la misma pantalla con el precio de venta y sin rastro del costo.
+*/
+describe("Products: el costo solo para el administrador", () => {
+  const editar = async (nombre) => {
+    const fila = screen.getByText(nombre).closest("tr")
+
+    await act(async () => {
+      fireEvent.click(within(fila).getByRole("button", { name: /editar/i }))
+    })
+  }
+
+  const guardar = () =>
+    act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /guardar producto/i }))
+    })
+
+  const comoInventario = { rolDelUsuario: "vendedor", permisosDelUsuario: ["products", "inventory-own"] }
+
+  it("el administrador ve la columna de costo con el valor que da la base", async () => {
+    await renderProducts()
+
+    expect(screen.getByRole("columnheader", { name: "Costo" })).toBeInTheDocument()
+
+    const fila = screen.getByText("Martillo de uña").closest("tr")
+    expect(await within(fila).findByText("L 120.00")).toBeInTheDocument()
+  })
+
+  it("el administrador corrige el costo desde el formulario", async () => {
+    const { falso } = await renderProducts()
+    await within(screen.getByText("Martillo de uña").closest("tr")).findByText("L 120.00")
+
+    await editar("Martillo de uña")
+    fireEvent.change(screen.getByLabelText(/^costo$/i), { target: { value: "130" } })
+    await guardar()
+
+    expect(falso.datos.productos.find((p) => p.id === "p1").costo).toBe(130)
+  })
+
+  it("quien lleva el inventario ve el precio de venta y ningún costo", async () => {
+    const { falso } = await renderProducts(PRODUCTOS, comoInventario)
+
+    expect(screen.queryByRole("columnheader", { name: "Costo" })).not.toBeInTheDocument()
+    expect(screen.getByText("L 180.00")).toBeInTheDocument()
+    expect(screen.queryByText("L 120.00")).not.toBeInTheDocument()
+    expect(falso.rpc).not.toHaveBeenCalledWith("costos_de_productos")
+  })
+
+  it("su formulario no tiene costo, y guardar no lo toca", async () => {
+    const { falso } = await renderProducts(PRODUCTOS, comoInventario)
+
+    await editar("Martillo de uña")
+    expect(screen.queryByLabelText(/^costo$/i)).not.toBeInTheDocument()
+
+    fireEvent.change(screen.getByLabelText(/^precio de venta$/i), { target: { value: "190" } })
+    await guardar()
+
+    expect(falso.datos.productos.find((p) => p.id === "p1")).toMatchObject({ precio: 190, costo: 120 })
+  })
+
+  it("si la base niega los costos, el administrador no ve ni guarda uno inventado", async () => {
+    const { falso } = await renderProducts(PRODUCTOS, { fallarEn: { costos_de_productos: { code: "42501" } } })
+
+    const fila = screen.getByText("Martillo de uña").closest("tr")
+    expect(within(fila).getByText("—")).toBeInTheDocument()
+
+    await editar("Martillo de uña")
+    expect(screen.queryByLabelText(/^costo$/i)).not.toBeInTheDocument()
+    await guardar()
+
+    expect(falso.datos.productos.find((p) => p.id === "p1").costo).toBe(120)
+  })
+})

@@ -26,7 +26,8 @@ function Suppliers() {
   } = useContext(ProductContext)
 
   // Borrar un proveedor lo decide solo el administrador (0025).
-  const { isAdmin } = useContext(AuthContext)
+  // El contador consulta: sin alta ni edición (0036).
+  const { isAdmin, soloLectura } = useContext(AuthContext)
 
   const [search, setSearch] = useState("")
   const [form, setForm] = useState(emptyForm)
@@ -71,7 +72,7 @@ function Suppliers() {
   return (
     <div className="view active crud">
       <PageHeader descripcion="Contactos de quienes te abastecen.">
-        <button className="btn btn-primary" onClick={openNew}><FaPlus aria-hidden="true" />Nuevo proveedor</button>
+        {!soloLectura && <button className="btn btn-primary" onClick={openNew}><FaPlus aria-hidden="true" />Nuevo proveedor</button>}
       </PageHeader>
 
       {cargando && <p className="crud-cargando" role="status">Cargando proveedores…</p>}
@@ -105,7 +106,7 @@ function Suppliers() {
                 <td><span className="celda-codigo">{s.phone || "—"}</span></td>
                 <td className="celda-secundaria">{s.notes || "—"}</td>
                 <td><div className="row-actions">
-                  <button className="btn btn-secondary btn-sm" onClick={() => openEdit(s)}><FaPen aria-hidden="true" />Editar</button>
+                  {!soloLectura && <button className="btn btn-secondary btn-sm" onClick={() => openEdit(s)}><FaPen aria-hidden="true" />Editar</button>}
                   {isAdmin && (
                     <button className="btn btn-danger btn-sm" onClick={() => remove(s.id)}><FaTrash aria-hidden="true" />Eliminar</button>
                   )}

@@ -69,6 +69,41 @@ export function concedePermiso(permisos, permiso) {
 export const ADMIN_PERMISSIONS = Object.values(PERMISSIONS)
 
 /*
+  Los roles que acepta la base (0036). El contador consulta y no escribe:
+  la base lo detiene en cada tabla, y estas pantallas solo le ahorran los
+  botones que de todos modos fallarían.
+*/
+export const ROLES = {
+  ADMIN: "admin",
+  VENDEDOR: "vendedor",
+  CONTADOR: "contador",
+}
+
+/*
+  Las secciones que se le pueden habilitar a un contador: las que tienen
+  algo que consultar. Las demás son operación pura —facturar, administrar
+  el catálogo, anular, ubicaciones, configuración— y no se le ofrecen. Si
+  alguien se las marcara por SQL, la pantalla tampoco las abre.
+*/
+export const CONTADOR_PERMISSIONS = [
+  PERMISSIONS.DASHBOARD,
+  PERMISSIONS.QUOTES,
+  PERMISSIONS.CLIENTS,
+  PERMISSIONS.SUPPLIERS,
+  PERMISSIONS.SALES_HISTORY,
+  PERMISSIONS.INVENTORY_OWN,
+  PERMISSIONS.INVENTORY_ALL,
+]
+
+/* Lo que se guarda para un rol: todo para el administrador, y lo consultable para el contador. */
+export function permisosDelRol(rol, permisos = []) {
+  if (rol === ROLES.ADMIN) return ADMIN_PERMISSIONS
+  if (rol === ROLES.CONTADOR) return permisos.filter((p) => CONTADOR_PERMISSIONS.includes(p))
+
+  return permisos
+}
+
+/*
   Punto de partida para un vendedor nuevo.
   El administrador los ajusta uno por uno
   desde Configuración.
