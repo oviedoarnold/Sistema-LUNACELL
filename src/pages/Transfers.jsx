@@ -42,7 +42,8 @@ const aFecha = (iso) =>
 const ESTADOS = { aplicado: "Aplicado" }
 
 function Transfers() {
-  const { user, hasPermission } = useAuth()
+  // El contador consulta el historial; no registra traslados (0036).
+  const { user, hasPermission, soloLectura } = useAuth()
   const { products = [] } = useContext(ProductContext)
   const { locations = [], ubicacionesActivas = [] } = useContext(LocationsContext)
   const { existencias, recargar: recargarExistencias } = useExistencias()
@@ -235,7 +236,7 @@ function Transfers() {
     <div className="view active crud transfers">
       <PageHeader descripcion="Mueve mercadería de una ubicación a otra. El traslado se aplica en el acto; uno equivocado se corrige con otro en sentido contrario." />
 
-      <section className="card card-pad transfers-formulario" aria-labelledby="transfers-nuevo">
+      {!soloLectura && <section className="card card-pad transfers-formulario" aria-labelledby="transfers-nuevo">
         <h2 id="transfers-nuevo">Nuevo traslado</h2>
 
         {sinOrigen && (
@@ -344,7 +345,7 @@ function Transfers() {
             <FaExchangeAlt aria-hidden="true" />{guardando ? "Trasladando…" : "Trasladar"}
           </button>
         </div>
-      </section>
+      </section>}
 
       <section className="transfers-historial" aria-labelledby="transfers-historial">
         <h2 id="transfers-historial">Historial</h2>

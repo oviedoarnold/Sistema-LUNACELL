@@ -116,6 +116,7 @@ página pública y **no publica credenciales**: el acceso es por
 |---|---|
 | [Configuración](docs/configuracion.md) | Variables de entorno y cuál clave va dónde |
 | [Alojamiento](docs/cloudflare-pages.md) | Cloudflare Pages, respaldo en Vercel, DNS, recuperación y límites |
+| [Costos y contador](docs/costos-y-contador.md) | Quién ve el costo y el perfil de contador de solo consulta |
 | [Arquitectura](docs/arquitectura.md) | Diagramas C4 y decisiones |
 | [ADR-1](docs/adr/adr-001-postgresql-multiempresa.md) | PostgreSQL multi-empresa |
 | [ADR-2](docs/adr/adr-002-permisos-por-ruta.md) | Permisos por ruta |

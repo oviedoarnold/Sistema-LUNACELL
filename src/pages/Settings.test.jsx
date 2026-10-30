@@ -306,6 +306,28 @@ describe("Settings: usuarios", () => {
     expect(within(modal).getByText("Facturar")).toBeInTheDocument()
     expect(within(modal).getByText("Inventario")).toBeInTheDocument()
   })
+
+  /*
+    0036: el contador solo consulta. Al elegirlo, el formulario deja solo
+    las secciones de consulta: sin Facturar, Inventario (el catálogo),
+    Anular ventas ni Ubicaciones.
+  */
+  it("el rol contador ofrece solo las secciones de consulta", async () => {
+    await renderSettings()
+
+    fireEvent.click(screen.getByRole("button", { name: /nuevo usuario/i }))
+    const modal = document.querySelector(".modal")
+
+    fireEvent.change(within(modal).getByLabelText(/^rol$/i), { target: { value: "contador" } })
+
+    expect(within(modal).getByText(/el contador solo consulta/i)).toBeInTheDocument()
+    expect(within(modal).getByText("Historial de facturas")).toBeInTheDocument()
+    expect(within(modal).getByText("Clientes")).toBeInTheDocument()
+
+    for (const operativa of ["Facturar", "Inventario", "Anular ventas", "Ubicaciones"]) {
+      expect(within(modal).queryByText(operativa)).not.toBeInTheDocument()
+    }
+  })
 })
 
 /*

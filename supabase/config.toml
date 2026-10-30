@@ -121,6 +121,8 @@ sql_paths = [
   "./migrations/0032_contadores_solo_por_registro.sql",
   "./migrations/0033_anulacion_de_ventas.sql",
   "./migrations/0034_auditoria_de_rescates_protegida.sql",
+  "./migrations/0035_costos_solo_administradores.sql",
+  "./migrations/0036_perfil_contador.sql",
   "./seed.sql",
 ]
 

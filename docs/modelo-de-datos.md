@@ -307,13 +307,18 @@ ubicaciones existen.
 No expone costo, ni margen, ni utilidad, ni precio. Saber cuántas unidades
 lleva un camión no es saber cuánto costaron.
 
-Conviene ser exacto sobre el alcance de eso: **el costo sigue sin
-protección propia en el resto del esquema.** `productos_con_stock` incluye
-`p.costo`, la vista es `security_invoker` y la política de `productos` es
-`ALL` para toda la empresa sin filtro de administrador, así que hoy
-cualquier usuario autenticado puede leerlo. Esta vista no empeora ese
-problema, pero tampoco lo resuelve: es un asunto aparte, con su propia
-fase.
+**Desde la 0035 el costo solo lo lee un administrador.** Antes,
+`productos_con_stock` incluía `p.costo` y la política de `productos` dejaba
+leer todas las columnas a cualquier usuario de la empresa. Ahora:
+
+- `authenticated` no tiene el privilegio de la columna `costo`: no la lee,
+  ni filtra ni ordena por ella;
+- `productos_con_stock` ya no la trae;
+- el administrador la pide con `costos_de_productos()`, que rechaza a
+  cualquier otro rol;
+- un disparador descarta el costo que mande quien no es administrador.
+
+Ninguna vista ni función calcula margen o utilidad.
 
 ## La otra cara: lo que sí se duplica
 

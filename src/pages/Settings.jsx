@@ -18,7 +18,10 @@ import ModalShell from "../components/forms/ModalShell"
 
 import {
   ADMIN_PERMISSIONS,
+  CONTADOR_PERMISSIONS,
   PERMISSIONS,
+  ROLES,
+  permisosDelRol,
 } from "../context/permissions"
 
 import {
@@ -498,15 +501,16 @@ function Settings() {
          * Vendedor comienza con los
          * permisos sugeridos.
          */
-        permissions:
-          role === "admin"
-            ? ADMIN_PERMISSIONS
-            : current.role ===
-                "admin"
-              ? [
-                  ...sellerPermissions,
-                ]
-              : current.permissions,
+        /*
+         * Contador: solo conserva las
+         * secciones de consulta.
+         */
+        permissions: permisosDelRol(
+          role,
+          current.role === "admin"
+            ? [...sellerPermissions]
+            : current.permissions
+        ),
       })
     )
   }
@@ -720,6 +724,8 @@ function Settings() {
   const getRoleLabel = (
     role
   ) => {
+    if (role === ROLES.CONTADOR) return "Contador"
+
     return role === "admin"
       ? "Administrador"
       : "Vendedor"
@@ -1457,6 +1463,10 @@ function Settings() {
                         Vendedor
                       </option>
 
+                      <option value={ROLES.CONTADOR}>
+                        Contador (solo consulta)
+                      </option>
+
                       <option value="admin">
                         Administrador
                       </option>
@@ -1518,9 +1528,19 @@ function Settings() {
                         Selecciona los módulos que este usuario podrá utilizar.
                       </p>
 
+                      {userForm.role === ROLES.CONTADOR && (
+                        <p className="config-descripcion">
+                          El contador solo consulta: no registra, edita, anula
+                          ni elimina nada, y no ve costos ni márgenes.
+                        </p>
+                      )}
+
                       <div className="permisos-rejilla">
 
-                        {permissionOptions.map((permission) => {
+                        {permissionOptions.filter((permission) =>
+                          userForm.role !== ROLES.CONTADOR ||
+                          CONTADOR_PERMISSIONS.includes(permission.id)
+                        ).map((permission) => {
                           const checked = userForm.permissions.includes(
                             permission.id
                           )

@@ -65,7 +65,11 @@ afterEach(() => {
 })
 
 describe("traducción de filas a lo que esperan las pantallas", () => {
-  it("un producto completo conserva todos sus datos", () => {
+  /*
+    Aunque una fila trajera el costo, el producto de la pantalla no lo
+    lleva: el costo solo lo pide el administrador, aparte (0035).
+  */
+  it("un producto completo conserva todos sus datos, y nunca el costo", () => {
     const producto = aProductoDeApp({
       id: "p1",
       codigo: "M-001",
@@ -85,7 +89,6 @@ describe("traducción de filas a lo que esperan las pantallas", () => {
       name: "Martillo",
       category: "Herramientas",
       price: 180.5,
-      costPrice: 120.25,
       stock: 7,
       minStock: 3,
       supplierId: "prov-1",
@@ -111,7 +114,6 @@ describe("traducción de filas a lo que esperan las pantallas", () => {
       supplierId: "",
       imageUrl: "",
       price: 0,
-      costPrice: 0,
       stock: 0,
       minStock: 0,
     }
@@ -184,6 +186,61 @@ describe("productos", () => {
     const productos = await traerProductos()
 
     expect(productos.map((p) => p.name)).toEqual(["Martillo"])
+  })
+
+  it("el catálogo no trae el costo, aunque la tabla lo tenga", async () => {
+    montar({ tablas: { productos: [{ id: "p1", nombre: "Martillo", precio: 180, costo: 120, activo: true }] } })
+
+    const [producto] = await traerProductos()
+
+    expect(producto.price).toBe(180)
+    expect(JSON.stringify(producto)).not.toMatch(/120|cost/i)
+  })
+
+  /*
+    Mandar siempre `costo`, con un 0 por omisión, borraría el costo guardado
+    cada vez que alguien sin acceso a él corrige un precio.
+  */
+  it("guardar sin costo no manda la columna", async () => {
+    const falso = montar({ tablas: { productos: [{ id: "p1", nombre: "Martillo", precio: 100, costo: 60 }] } })
+
+    await actualizarProducto("p1", { name: "Martillo", price: 110, stock: 0 }, { empresaId: EMPRESA, stockAnterior: 0 })
+
+    expect(falso.datos.productos[0]).toMatchObject({ precio: 110, costo: 60 })
+  })
+
+  it("el administrador que trae el costo sí lo guarda", async () => {
+    const falso = montar({ tablas: { productos: [{ id: "p1", nombre: "Martillo", precio: 100, costo: 60 }] } })
+
+    await actualizarProducto("p1", { name: "Martillo", price: 100, costPrice: 65.5, stock: 0 }, { empresaId: EMPRESA, stockAnterior: 0 })
+
+    expect(falso.datos.productos[0].costo).toBe(65.5)
+  })
+
+  it("los costos se piden aparte y por id", async () => {
+    const falso = crearSupabaseFalso({
+      tablas: {
+        usuarios: [{ id: "u1", auth_id: "auth-admin", rol: "admin", activo: true }],
+        productos: [{ id: "p1", costo: "37.50" }, { id: "p2", costo: 0 }],
+      },
+      sesionInicial: { user: { id: "auth-admin" } },
+    })
+    globalThis.__supabaseFalso = falso
+
+    await expect(catalogos.traerCostosDeProductos()).resolves.toEqual({ p1: 37.5, p2: 0 })
+    expect(falso.rpc).toHaveBeenCalledWith("costos_de_productos")
+  })
+
+  it("a quien no es administrador la base le niega los costos, y se dice así", async () => {
+    globalThis.__supabaseFalso = crearSupabaseFalso({
+      tablas: {
+        usuarios: [{ id: "u2", auth_id: "auth-vendedor", rol: "vendedor", activo: true }],
+        productos: [{ id: "p1", costo: 10 }],
+      },
+      sesionInicial: { user: { id: "auth-vendedor" } },
+    })
+
+    await expect(catalogos.traerCostosDeProductos()).rejects.toThrow("No tienes permiso para cargar los costos.")
   })
 
   it("recorta los espacios al guardar", async () => {

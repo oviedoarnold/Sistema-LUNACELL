@@ -6,26 +6,35 @@ import { supabase } from "../supabase"
   página en la misma tanda que la migración.
 */
 
+/*
+  El producto no trae el costo: la vista dejó de darlo (0035) y solo el
+  administrador lo pide aparte, con traerCostosDeProductos().
+*/
 export const aProductoDeApp = (fila) => ({
   id: fila.id,
   code: fila.codigo || "",
   name: fila.nombre,
   category: fila.categoria || "",
   price: Number(fila.precio) || 0,
-  costPrice: Number(fila.costo) || 0,
   stock: Number(fila.stock) || 0,
   minStock: Number(fila.stock_minimo) || 0,
   supplierId: fila.proveedor_id || "",
   imageUrl: fila.imagen_url || "",
 })
 
+/*
+  El costo va solo si quien guarda lo trae: el administrador que lo vio.
+  Mandarlo siempre, con un 0 por omisión, borraría el costo guardado cada
+  vez que alguien sin acceso a él corrige un precio, o cada vez que el
+  administrador guarda sin haberlo podido cargar.
+*/
 const aProductoDeBase = (producto, empresaId) => ({
   empresa_id: empresaId,
   codigo: String(producto.code || "").trim(),
   nombre: String(producto.name || "").trim(),
   categoria: String(producto.category || "").trim(),
   precio: Number(producto.price) || 0,
-  costo: Number(producto.costPrice) || 0,
+  ...(producto.costPrice === undefined ? {} : { costo: Number(producto.costPrice) || 0 }),
   stock_minimo: Number(producto.minStock) || 0,
   proveedor_id: producto.supplierId || null,
   imagen_url: producto.imageUrl || null,
@@ -103,6 +112,19 @@ export async function traerProductos() {
   if (error) fallo(error, "cargar el inventario")
 
   return (data || []).map(aProductoDeApp)
+}
+
+/*
+  El costo de cada producto, por id. Solo responde a un administrador: la
+  base lo comprueba en costos_de_productos() y a cualquier otro le
+  contesta con un rechazo, no con una lista vacía.
+*/
+export async function traerCostosDeProductos() {
+  const { data, error } = await supabase.rpc("costos_de_productos")
+
+  if (error) fallo(error, "cargar los costos")
+
+  return Object.fromEntries((data || []).map((fila) => [fila.producto_id, Number(fila.costo) || 0]))
 }
 
 /*

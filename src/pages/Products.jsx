@@ -1,4 +1,4 @@
-import { useContext, useMemo, useRef, useState } from "react"
+import { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react"
 import {
   FaBoxOpen,
   FaExclamationTriangle,
@@ -20,10 +20,41 @@ import PageHeader from "../components/crud/PageHeader"
 import SearchInput from "../components/crud/SearchInput"
 import StatusBadge from "../components/crud/StatusBadge"
 import { coincideBusqueda } from "../utils/texto"
+import { traerCostosDeProductos } from "../lib/api/catalogos"
 import FormField from "../components/forms/FormField"
 import ModalShell from "../components/forms/ModalShell"
 
-const emptyForm = { id: null, code: "", name: "", category: "", price: "", costPrice: "", stock: "", minStock: 5, supplierId: "", imageUrl: "" }
+/*
+  Sin costPrice a propósito: el formulario solo lo lleva cuando quien
+  edita es administrador y los costos se cargaron. Sin él, guardar no toca
+  el costo (ver aProductoDeBase).
+*/
+const emptyForm = { id: null, code: "", name: "", category: "", price: "", stock: "", minStock: 5, supplierId: "", imageUrl: "" }
+
+/*
+  Los costos son confidenciales: solo los pide el administrador, y la base
+  se los niega a cualquier otro (0035). null mientras no se tienen, sea
+  porque cargan, porque fallaron o porque quien mira no es administrador:
+  en los tres casos no se muestra ni se guarda ningún costo.
+*/
+function useCostos(esAdmin) {
+  const [costos, setCostos] = useState(null)
+
+  const recargar = useCallback(() => {
+    if (!esAdmin) return
+
+    traerCostosDeProductos().then(setCostos, (error) => {
+      console.error("No se pudieron cargar los costos:", error)
+      setCostos(null)
+    })
+  }, [esAdmin])
+
+  useEffect(recargar, [recargar])
+
+  return { costos: esAdmin ? costos : null, recargar }
+}
+
+const dinero = (valor) => `L ${Number(valor || 0).toFixed(2)}`
 
 function Products() {
   const {
@@ -48,8 +79,11 @@ function Products() {
   */
   const enviando = useRef(false)
 
-  const { user } = useAuth()
+  const { user, isAdmin } = useAuth()
   const { ubicacionesActivas = [] } = useContext(LocationsContext)
+
+  const { costos, recargar: recargarCostos } = useCostos(Boolean(isAdmin))
+  const conCostos = costos !== null
 
   /*
     La existencia se carga y se corrige en UNA ubicación, no en el total.
@@ -102,7 +136,7 @@ function Products() {
     return fila ? fila.quantity : null
   }, [existencias, form.id, ubicacionId])
 
-  const openNew = () => { setForm(emptyForm); setUbicacionId(ubicacionPorOmision()); setImagenElegida(null); setModalOpen(true) }
+  const openNew = () => { setForm(conCostos ? { ...emptyForm, costPrice: "" } : emptyForm); setUbicacionId(ubicacionPorOmision()); setImagenElegida(null); setModalOpen(true) }
 
   /*
     Al editar, el campo de existencia arranca vacío: vacío es «no cambiar».
@@ -111,7 +145,7 @@ function Products() {
     haber ventas.
   */
   const openEdit = (p) => {
-    setForm({ ...emptyForm, ...p, stock: "" })
+    setForm({ ...emptyForm, ...p, stock: "", ...(conCostos ? { costPrice: costos[p.id] ?? 0 } : {}) })
     setUbicacionId(ubicacionPorOmision())
     setImagenElegida(null)
     setModalOpen(true)
@@ -139,7 +173,8 @@ function Products() {
     if (cambiaExistencia && !ubicacionId) { Swal.fire({ icon: "warning", title: "Falta la ubicación", text: "Elige en qué ubicación se registra la existencia." }); return }
     if (form.id && cambiaExistencia && referencia === null) { Swal.fire({ icon: "warning", title: "Sin existencia de referencia", text: "No se pudo leer la existencia de esa ubicación, así que no se puede ajustar desde aquí." }); return }
 
-    const data = { ...form, code, name: form.name.trim(), category: form.category.trim(), price: Math.max(0, Number(form.price) || 0), costPrice: Math.max(0, Number(form.costPrice) || 0), stock: existencia, minStock: Math.max(0, Number.parseInt(form.minStock || 0)) }
+    const data = { ...form, code, name: form.name.trim(), category: form.category.trim(), price: Math.max(0, Number(form.price) || 0), stock: existencia, minStock: Math.max(0, Number.parseInt(form.minStock || 0)) }
+    if ("costPrice" in form) data.costPrice = Math.max(0, Number(form.costPrice) || 0)
 
     enviando.current = true
     setGuardando(true)
@@ -151,6 +186,7 @@ function Products() {
       }
       setModalOpen(false); setForm(emptyForm); setImagenElegida(null)
       recargarExistencias()
+      recargarCostos()
       Swal.fire({ icon: "success", title: form.id ? "Producto actualizado" : "Producto agregado" })
     } catch (e) {
       Swal.fire({ icon: "error", title: "No se pudo guardar", text: e.message })
@@ -221,7 +257,7 @@ function Products() {
             <th scope="col">Producto</th>
             <th scope="col">Código</th>
             <th scope="col" className="num">Precio</th>
-            <th scope="col" className="num">Costo</th>
+            {isAdmin && <th scope="col" className="num">Costo</th>}
             <th scope="col" className="num">Stock</th>
             <th scope="col">Estado</th>
             <th></th>
@@ -236,8 +272,8 @@ function Products() {
               <td className="celda-miniatura"><MiniaturaDeProducto url={p.imageUrl} nombre={p.name} /></td>
               <td><span className="product-name">{p.name}</span><span className="product-cat">{p.category}</span></td>
               <td><span className="celda-codigo">{p.code || "—"}</span></td>
-              <td className="num">L {Number(p.price || 0).toFixed(2)}</td>
-              <td className="num celda-secundaria">L {Number(p.costPrice || 0).toFixed(2)}</td>
+              <td className="num">{dinero(p.price)}</td>
+              {isAdmin && <td className="num celda-secundaria">{conCostos ? dinero(costos[p.id]) : "—"}</td>}
               <td className="num">{p.stock} u.</td>
               <td><StatusBadge variante={variante}>{label}</StatusBadge></td>
               <td><div className="row-actions">
@@ -295,9 +331,11 @@ function Products() {
             <input id="products-precio-de-venta" type="number" min="0" step="0.01" value={form.price} onChange={(e) => setForm({ ...form, price: e.target.value })} />
           </FormField>
 
-          <FormField etiqueta="Costo">
-            <input id="products-costo" type="number" min="0" step="0.01" value={form.costPrice} onChange={(e) => setForm({ ...form, costPrice: e.target.value })} />
-          </FormField>
+          {"costPrice" in form && (
+            <FormField etiqueta="Costo" ayuda="Confidencial: solo lo ven los administradores.">
+              <input id="products-costo" type="number" min="0" step="0.01" value={form.costPrice} onChange={(e) => setForm({ ...form, costPrice: e.target.value })} />
+            </FormField>
+          )}
 
           <FormField etiqueta={form.id ? "Ubicación del ajuste" : "Ubicación de la existencia"}>
             <select id="products-ubicacion" value={ubicacionId} onChange={cambiarUbicacion}>

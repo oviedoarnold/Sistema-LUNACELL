@@ -30,7 +30,10 @@ import {
   PERMISSIONS,
   ADMIN_PERMISSIONS,
   SELLER_PERMISSIONS,
+  CONTADOR_PERMISSIONS,
+  ROLES,
   concedePermiso,
+  permisosDelRol,
 } from "./permissions"
 
 /*
@@ -480,7 +483,7 @@ export function AuthProvider({ children }) {
         usuario,
         email: correo,
         rol: role,
-        secciones: role === "admin" ? ADMIN_PERMISSIONS : permissions,
+        secciones: permisosDelRol(role, permissions),
         ubicacion: locationId || null,
         activo: active,
       })
@@ -543,10 +546,7 @@ export function AuthProvider({ children }) {
       }
 
       if (permissions !== undefined || role !== undefined) {
-        await guardarPermisosDeUsuario(
-          id,
-          role === "admin" ? ADMIN_PERMISSIONS : permissions || []
-        )
+        await guardarPermisosDeUsuario(id, permisosDelRol(role, permissions || []))
       }
 
       await recargarUsuarios()
@@ -577,13 +577,19 @@ export function AuthProvider({ children }) {
       if (user.sinConexion) {
         return (
           permission === PERMISSIONS.POS &&
+          user.role !== ROLES.CONTADOR &&
           perfilSigueVigente(user) &&
           (user.role === "admin" || concedePermiso(user.permissions, permission))
         )
       }
 
-      if (user.role === "admin") {
+      if (user.role === ROLES.ADMIN) {
         return true
+      }
+
+      // El contador solo abre las pantallas de consulta, aunque tenga marcada otra.
+      if (user.role === ROLES.CONTADOR && !CONTADOR_PERMISSIONS.includes(permission)) {
+        return false
       }
 
       /*
@@ -624,7 +630,13 @@ export function AuthProvider({ children }) {
       adminPermissions: ADMIN_PERMISSIONS,
       sellerPermissions: SELLER_PERMISSIONS,
 
-      isAdmin: user?.role === "admin" && !user?.sinConexion,
+      isAdmin: user?.role === ROLES.ADMIN && !user?.sinConexion,
+
+      /*
+        Solo consulta: las pantallas esconden lo que escribe. La base lo
+        rechaza igual (0036); esto evita ofrecer botones que fallarían.
+      */
+      soloLectura: user?.role === ROLES.CONTADOR,
     }),
     [
       user,

@@ -2,6 +2,7 @@ import { useContext, useMemo, useState } from "react"
 import { FaPen, FaPlus, FaSearch, FaUsers } from "react-icons/fa"
 import Swal from "sweetalert2"
 import { ClientsContext } from "../context/contexts"
+import { useAuth } from "../hooks/useAuth"
 import EmptyState from "../components/crud/EmptyState"
 import PageHeader from "../components/crud/PageHeader"
 import SearchInput from "../components/crud/SearchInput"
@@ -13,6 +14,9 @@ const emptyForm = { id: null, name: "", rtn: "", phone: "", address: "", email: 
 
 function Clients() {
   const { clients = [], cargando, addClient, updateClient } = useContext(ClientsContext)
+
+  // El contador consulta: sin alta ni edición (0036).
+  const { soloLectura } = useAuth()
   const [search, setSearch] = useState("")
   const [modalOpen, setModalOpen] = useState(false)
   const [form, setForm] = useState(emptyForm)
@@ -49,7 +53,7 @@ function Clients() {
   return (
     <div className="view active crud">
       <PageHeader descripcion="Gestiona tus clientes y su información de contacto.">
-        <button className="btn btn-primary" onClick={openNew}><FaPlus aria-hidden="true" />Nuevo cliente</button>
+        {!soloLectura && <button className="btn btn-primary" onClick={openNew}><FaPlus aria-hidden="true" />Nuevo cliente</button>}
       </PageHeader>
 
       {cargando && <p className="crud-cargando" role="status">Cargando clientes…</p>}
@@ -83,7 +87,7 @@ function Clients() {
                 <td><span className="celda-codigo">{c.phone || "—"}</span></td>
                 <td className="celda-secundaria">{c.email || "—"}</td>
                 <td><div className="row-actions">
-                  <button className="btn btn-secondary btn-sm" onClick={() => openEdit(c)}><FaPen aria-hidden="true" />Editar</button>
+                  {!soloLectura && <button className="btn btn-secondary btn-sm" onClick={() => openEdit(c)}><FaPen aria-hidden="true" />Editar</button>}
                 </div></td>
               </tr>
             ))}
