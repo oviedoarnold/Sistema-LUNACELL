@@ -1,0 +1,25 @@
+/*
+  Reporte diario. Reutiliza el panel (.panel-kpis, .panel-seccion) y las
+  tablas de las pantallas administrativas; aquí solo va lo que le es propio.
+*/
+
+.reportes-filtros {
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--space-4);
+}
+
+.reportes-seccion {
+  margin-bottom: var(--space-5);
+}
+
+.reportes-vacio,
+.reportes-aviso {
+  margin: 0;
+  color: var(--text-secondary);
+}
+
+.reportes-aviso {
+  margin-bottom: var(--space-5);
+  font-weight: 600;
+}

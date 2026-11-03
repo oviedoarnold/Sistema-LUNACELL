@@ -62,4 +62,8 @@ export const NAV_ROUTES = [
     path: "/reconciliation",
     permission: PERMISSIONS.SETTINGS,
   },
+  {
+    path: "/reports",
+    permission: PERMISSIONS.SETTINGS,
+  },
 ]

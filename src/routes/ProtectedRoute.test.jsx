@@ -310,6 +310,14 @@ describe("ProtectedRoute · Existencias", () => {
     expect(await screen.findByText("Catálogo")).toBeInTheDocument()
   })
 
+  it("/reports no es el destino de quien solo tiene Configuración: va a una pantalla que puede usar", async () => {
+    const { NAV_ROUTES } = await import("./navigation")
+    const conConfiguracion = NAV_ROUTES.filter((r) => r.permission === PERMISSIONS.SETTINGS).map((r) => r.path)
+
+    expect(conConfiguracion[0]).toBe("/settings")
+    expect(conConfiguracion).toContain("/reports")
+  })
+
   it("a quien no tiene ninguna sección le muestra el aviso de sin acceso", async () => {
     entrarComo({ secciones: [] })
 
