@@ -598,7 +598,7 @@ export function AuthProvider({ children }) {
         tenga debe poder abrir la pantalla sin que nadie le haya marcado
         además la casilla de su ubicación.
       */
-      return concedePermiso(user.permissions, permission)
+      return concedePermiso(permisosDelRol(user.role, user.permissions ?? []), permission)
     },
     [user]
   )

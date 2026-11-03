@@ -63,7 +63,7 @@ function AppRouter() {
         <Route
           path="/products"
           element={
-            <ProtectedRoute permission={PERMISSIONS.PRODUCTS}>
+            <ProtectedRoute permission={PERMISSIONS.PRODUCTS_READ}>
               <MainLayout>
                 <Products />
               </MainLayout>

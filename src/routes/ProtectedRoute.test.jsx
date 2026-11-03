@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
-import { render, screen, waitFor, fireEvent } from "@testing-library/react"
+import { cleanup, render, screen, waitFor, fireEvent } from "@testing-library/react"
 import { MemoryRouter, Routes, Route } from "react-router-dom"
 
 import {
@@ -59,6 +59,14 @@ async function renderEnRuta(rutaInicial) {
             element={
               <ProtectedRoute permission={PERMISSIONS.INVENTORY_OWN}>
                 <Pantalla nombre="Existencias" />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/products"
+            element={
+              <ProtectedRoute permission={PERMISSIONS.PRODUCTS_READ}>
+                <Pantalla nombre="Catálogo" />
               </ProtectedRoute>
             }
           />
@@ -269,6 +277,37 @@ describe("ProtectedRoute · Existencias", () => {
 
     expect(screen.queryByText("Existencias")).not.toBeInTheDocument()
     expect(await screen.findByText("Dashboard")).toBeInTheDocument()
+  })
+
+  it("el contador con la consulta del catálogo abre Productos y no Existencias", async () => {
+    entrarComo({ rol: "contador", secciones: [PERMISSIONS.PRODUCTS_READ] })
+
+    await renderEnRuta("/products")
+    expect(await screen.findByText("Catálogo")).toBeInTheDocument()
+
+    cleanup()
+    entrarComo({ rol: "contador", secciones: [PERMISSIONS.PRODUCTS_READ] })
+
+    await renderEnRuta("/inventory")
+    expect(await screen.findByText("Catálogo")).toBeInTheDocument()
+    expect(screen.queryByText("Existencias")).not.toBeInTheDocument()
+  })
+
+  it("el permiso `products` no le abre el catálogo a un contador", async () => {
+    entrarComo({ rol: "contador", secciones: [PERMISSIONS.PRODUCTS, PERMISSIONS.DASHBOARD] })
+
+    await renderEnRuta("/products")
+
+    expect(await screen.findByText("Dashboard")).toBeInTheDocument()
+    expect(screen.queryByText("Catálogo")).not.toBeInTheDocument()
+  })
+
+  it("el vendedor con `products` sigue abriendo el catálogo", async () => {
+    entrarComo({ secciones: [PERMISSIONS.PRODUCTS] })
+
+    await renderEnRuta("/products")
+
+    expect(await screen.findByText("Catálogo")).toBeInTheDocument()
   })
 
   it("a quien no tiene ninguna sección le muestra el aviso de sin acceso", async () => {

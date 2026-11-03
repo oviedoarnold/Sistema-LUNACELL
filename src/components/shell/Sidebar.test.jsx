@@ -131,6 +131,14 @@ describe("Sidebar · permisos", () => {
     expect(enlaces()).toEqual(["/products"])
   })
 
+  it("el contador con la consulta del catálogo ve Inventario, sin Existencias ni Traslados, y su rol real", async () => {
+    await montarSidebar({ rol: "contador", secciones: [PERMISSIONS.PRODUCTS_READ] })
+
+    expect(enlaces()).toEqual(["/products"])
+    expect(screen.getByText("Contador")).toBeInTheDocument()
+    expect(screen.queryByText("Vendedor")).not.toBeInTheDocument()
+  })
+
   it("ver el inventario de su ubicación muestra Existencias y Traslados", async () => {
     await montarSidebar({ secciones: [PERMISSIONS.INVENTORY_OWN] })
 

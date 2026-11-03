@@ -12,6 +12,7 @@ import { useAuth } from "../hooks/useAuth"
 import { PERMISSIONS, permisosDelRol } from "../context/permissions"
 import { EMPRESA_PRUEBA, renderizarPantalla } from "../test/pantallas"
 import Clients from "./Clients"
+import Products from "./Products"
 import Suppliers from "./Suppliers"
 import Quotes from "./Quotes"
 import Receivables from "./Receivables"
@@ -62,7 +63,7 @@ describe("perfil contador: qué pantallas abre", () => {
       expect(await screen.findByText(`${abierta}:sí`)).toBeInTheDocument()
     }
 
-    for (const cerrada of ["pos", "products", "sales-void", "settings", "locations"]) {
+    for (const cerrada of ["pos", "products", "products-read", "sales-void", "settings", "locations"]) {
       expect(screen.getByText(`${cerrada}:no`)).toBeInTheDocument()
     }
 
@@ -70,15 +71,71 @@ describe("perfil contador: qué pantallas abre", () => {
     expect(screen.getByText("isAdmin:false")).toBeInTheDocument()
   })
 
+  it("`products-read` le abre el catálogo sin Existencias ni Traslados", async () => {
+    await renderizarPantalla(<AuthProvider><Permisos /></AuthProvider>, {
+      rolDelUsuario: "contador",
+      permisosDelUsuario: ["products-read"],
+    })
+
+    expect(await screen.findByText("products-read:sí")).toBeInTheDocument()
+
+    for (const cerrada of ["products", "inventory-own", "inventory-all"]) {
+      expect(screen.getByText(`${cerrada}:no`)).toBeInTheDocument()
+    }
+  })
+
+  it("a un vendedor no le abre nada `products-read`, y `products` le sigue abriendo el catálogo", async () => {
+    await renderizarPantalla(<AuthProvider><Permisos /></AuthProvider>, {
+      rolDelUsuario: "vendedor",
+      permisosDelUsuario: ["products-read"],
+    })
+
+    expect(await screen.findByText("products-read:no")).toBeInTheDocument()
+
+    await renderizarPantalla(<AuthProvider><Permisos /></AuthProvider>, {
+      rolDelUsuario: "vendedor",
+      permisosDelUsuario: ["products"],
+    })
+
+    expect(await screen.findByText("products-read:sí")).toBeInTheDocument()
+    expect(screen.getByText("products:sí")).toBeInTheDocument()
+  })
+
   it("al guardarlo, solo se le conservan las secciones de consulta", () => {
-    expect(permisosDelRol("contador", ["pos", "sales-history", "products", "inventory-all"])).toEqual([
+    expect(permisosDelRol("contador", ["pos", "sales-history", "products", "products-read", "inventory-all"])).toEqual([
       "sales-history",
+      "products-read",
       "inventory-all",
     ])
   })
 })
 
 describe("perfil contador: las pantallas no ofrecen escribir", () => {
+  it("Inventario: ve productos y precios de venta, sin costos, altas, cambios ni borrados", async () => {
+    const { falso } = await renderizarPantalla(
+      <AuthProvider><ProductProvider><LocationsProvider><Products /></LocationsProvider></ProductProvider></AuthProvider>,
+      {
+        rolDelUsuario: "contador",
+        permisosDelUsuario: ["products-read"],
+        productos: [{ id: "p1", code: "M-001", name: "Martillo de uña", category: "Herramientas", price: 180, stock: 20, minStock: 5 }],
+        esperar: ["productos_con_stock", "ubicaciones"],
+      }
+    )
+
+    expect(screen.getByText("Martillo de uña")).toBeInTheDocument()
+    expect(screen.getByText("M-001")).toBeInTheDocument()
+    expect(screen.getByText("Herramientas")).toBeInTheDocument()
+    expect(screen.getByText("L 180.00")).toBeInTheDocument()
+    expect(screen.getByText("20 u.")).toBeInTheDocument()
+
+    expect(screen.queryByText(/costo|margen|utilidad/i)).not.toBeInTheDocument()
+    expect(screen.queryByRole("button", { name: /nuevo producto|editar|eliminar/i })).not.toBeInTheDocument()
+
+    // Ni pide los costos ni las existencias por ubicación, que no le tocan.
+    expect(falso.rpc).not.toHaveBeenCalledWith("costos_de_productos")
+    expect(falso.from).not.toHaveBeenCalledWith("existencias_por_ubicacion")
+  })
+
   it("Clientes: ve la lista, sin alta ni edición", async () => {
     await renderizarPantalla(
       <AuthProvider><ClientsProvider><Clients /></ClientsProvider></AuthProvider>,

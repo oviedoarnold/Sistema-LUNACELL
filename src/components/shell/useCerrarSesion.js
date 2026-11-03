@@ -44,6 +44,8 @@ export function useCerrarSesion() {
   }
 }
 
+const NOMBRE_DEL_ROL = { admin: "Administrador", contador: "Contador" }
+
 // Lo que se muestra de la cuenta en sesión, igual en las dos barras.
 export function datosDeLaCuenta(user) {
   const iniciales = user?.name
@@ -58,6 +60,6 @@ export function datosDeLaCuenta(user) {
   return {
     iniciales,
     nombre: user?.name || "Usuario",
-    rol: user?.role === "admin" ? "Administrador" : "Vendedor",
+    rol: NOMBRE_DEL_ROL[user?.role] || "Vendedor",
   }
 }

@@ -9,6 +9,7 @@ import {
 } from "react-icons/fa"
 import Swal from "sweetalert2"
 import { LocationsContext, ProductContext } from "../context/contexts"
+import { PERMISSIONS } from "../context/permissions"
 import { useAuth } from "../hooks/useAuth"
 import { useExistencias } from "../hooks/useExistencias"
 import {
@@ -79,7 +80,14 @@ function Products() {
   */
   const enviando = useRef(false)
 
-  const { user, isAdmin } = useAuth()
+  const { user, isAdmin, hasPermission } = useAuth()
+
+  /*
+    Quien solo consulta (`products-read`) ve el catálogo sin nada que
+    escriba. La base se lo rechazaría igual (0036): esto evita ofrecerle
+    botones que fallarían.
+  */
+  const puedeAdministrar = hasPermission(PERMISSIONS.PRODUCTS)
   const { ubicacionesActivas = [] } = useContext(LocationsContext)
 
   const { costos, recargar: recargarCostos } = useCostos(Boolean(isAdmin))
@@ -94,7 +102,7 @@ function Products() {
     existencias,
     cargando: cargandoExistencias,
     recargar: recargarExistencias,
-  } = useExistencias()
+  } = useExistencias({ activo: puedeAdministrar })
 
   const [ubicacionId, setUbicacionId] = useState("")
 
@@ -224,8 +232,8 @@ function Products() {
   }
 
   return <div className="view active crud">
-    <PageHeader descripcion="Controla tus productos, precios y existencias.">
-      <button className="btn btn-primary" onClick={openNew}><FaPlus aria-hidden="true" />Nuevo producto</button>
+    <PageHeader descripcion={puedeAdministrar ? "Controla tus productos, precios y existencias." : "Consulta los productos, sus precios de venta y su stock."}>
+      {puedeAdministrar && <button className="btn btn-primary" onClick={openNew}><FaPlus aria-hidden="true" />Nuevo producto</button>}
     </PageHeader>
 
     {cargando && <p className="crud-cargando" role="status">Cargando inventario…</p>}
@@ -260,7 +268,7 @@ function Products() {
             {isAdmin && <th scope="col" className="num">Costo</th>}
             <th scope="col" className="num">Stock</th>
             <th scope="col">Estado</th>
-            <th></th>
+            {puedeAdministrar && <th></th>}
           </tr>
         </thead>
 
@@ -276,10 +284,10 @@ function Products() {
               {isAdmin && <td className="num celda-secundaria">{conCostos ? dinero(costos[p.id]) : "—"}</td>}
               <td className="num">{p.stock} u.</td>
               <td><StatusBadge variante={variante}>{label}</StatusBadge></td>
-              <td><div className="row-actions">
+              {puedeAdministrar && <td><div className="row-actions">
                 <button className="btn btn-secondary btn-sm" onClick={() => openEdit(p)}><FaPen aria-hidden="true" />Editar</button>
                 <button className="btn btn-danger btn-sm" onClick={() => remove(p.id)}><FaTrash aria-hidden="true" />Eliminar</button>
-              </div></td>
+              </div></td>}
             </tr>
           })}
         </tbody>
@@ -295,7 +303,7 @@ function Products() {
         <EmptyState
           Icono={FaBoxOpen}
           titulo="No hay productos todavía"
-          descripcion="Usa «Nuevo producto» para registrar el primero."
+          descripcion={puedeAdministrar ? "Usa «Nuevo producto» para registrar el primero." : "Cuando se registren productos, aparecerán aquí."}
         />
       ))}
     </div>

@@ -165,6 +165,100 @@ describe("0036: el contador consulta", () => {
   })
 })
 
+describe("0037: el contador consulta el catálogo con `products-read`", () => {
+  async function conConsulta() {
+    const e = await escenario()
+    const contador = await crearContador(e.a.empresa, ["products-read"])
+
+    await db.query(
+      `insert into movimientos_inventario (empresa_id, producto_id, ubicacion_id, tipo, cantidad, motivo)
+       values ($1, $2, $3, 'entrada', 40, 'Existencia inicial')`,
+      [e.a.empresa, e.cargador, e.camion1]
+    )
+
+    return { ...e, consulta: contador }
+  }
+
+  it("recibe las columnas públicas, con precio y stock, y ninguna con el costo", async () => {
+    const e = await conConsulta()
+
+    const { rows, fields } = await como(e.consulta.authId, "select * from productos_con_stock")
+
+    expect(rows).toHaveLength(1)
+    // 40 de entrada menos las dos ventas del escenario.
+    expect(rows[0]).toMatchObject({ codigo: "C-1", nombre: "Cargador", precio: "100.00", stock: 38 })
+    expect(fields.map((f) => f.name)).not.toContain("costo")
+    expect(JSON.stringify(rows[0])).not.toContain("40.00")
+  })
+
+  it("no alcanza el costo ni leyéndolo, ni filtrando, ni ordenando, ni por la función", async () => {
+    const e = await conConsulta()
+
+    const intentos = [
+      "select costo from productos",
+      "select * from productos",
+      "select id from productos where costo > 0",
+      "select id from productos order by costo",
+      "select * from costos_de_productos()",
+    ]
+
+    for (const consulta of intentos) {
+      await expect(como(e.consulta.authId, consulta), consulta).rejects.toMatchObject(RECHAZO)
+    }
+  })
+
+  it("no ve existencias ni traslados: esos son otra concesión", async () => {
+    const e = await conConsulta()
+
+    const existencias = await como(e.consulta.authId, "select ubicacion_id from inventario_ubicacion")
+    expect(existencias.rows).toEqual([])
+
+    const traslados = await como(e.consulta.authId, "select id from traslados")
+    expect(traslados.rows).toEqual([])
+  })
+
+  it("no escribe productos ni inventario, por la API ni por las funciones", async () => {
+    const e = await conConsulta()
+
+    const intentos = [
+      ["insert into productos (empresa_id, codigo, nombre, precio) values ($1, 'X', 'X', 1)", [e.a.empresa]],
+      ["update productos set precio = 1 where id = $1", [e.cargador]],
+      ["delete from productos where id = $1", [e.cargador]],
+      ["select registrar_movimiento_ubicacion($1, $2, 'entrada', 5, 'x')", [e.cargador, e.camion1]],
+      ["select registrar_traslado($1, $2, $3::jsonb)", [e.camion1, e.camion2, JSON.stringify([{ producto_id: e.cargador, cantidad: 1 }])]],
+    ]
+
+    for (const [consulta, valores] of intentos) {
+      await expect(como(e.consulta.authId, consulta, valores), consulta).rejects.toMatchObject(RECHAZO)
+    }
+
+    const { rows } = await db.query("select precio, costo from productos where id = $1", [e.cargador])
+    expect(rows[0]).toEqual({ precio: "100.00", costo: "40.00" })
+    expect(await contar(db, "productos", "empresa_id = $1", [e.a.empresa])).toBe(1)
+  })
+
+  it("a un vendedor no le da ninguna escritura de productos", async () => {
+    const e = await conConsulta()
+    const vendedor = await crearVendedor(db, { empresa: e.a.empresa, permisos: ["products-read"] })
+
+    await expect(
+      como(vendedor.authId, "insert into productos (empresa_id, codigo, nombre, precio) values ($1, 'X', 'X', 1)", [e.a.empresa])
+    ).rejects.toMatchObject(RECHAZO)
+
+    await expect(
+      como(vendedor.authId, "update productos set precio = 1 where id = $1", [e.cargador])
+    ).rejects.toMatchObject(RECHAZO)
+  })
+
+  it("la base solo acepta las secciones de la lista", async () => {
+    const e = await conConsulta()
+
+    await expect(
+      db.query("insert into permisos_usuario (usuario_id, empresa_id, seccion) values ($1, $2, 'products-write')", [e.consulta.usuario, e.a.empresa])
+    ).rejects.toMatchObject({ code: "23514" })
+  })
+})
+
 describe("0036: 6. el contador no modifica nada por llamadas directas", () => {
   it("ni por la API directa sobre las tablas", async () => {
     const e = await escenario()

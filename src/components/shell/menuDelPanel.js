@@ -71,7 +71,7 @@ export const GRUPOS_DEL_MENU = [
         to: "/products",
         label: "Inventario",
         Icono: FaBox,
-        permiso: PERMISSIONS.PRODUCTS,
+        permiso: PERMISSIONS.PRODUCTS_READ,
       },
       /*
         Existencias tiene su propio permiso y no comparte el del catálogo:
