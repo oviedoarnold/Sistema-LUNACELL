@@ -207,6 +207,9 @@ inventory-own   ver el inventario de mi ubicación
 inventory-all   ver el inventario de todas las ubicaciones de mi empresa
 ```
 
+`products-read` (0037) es otra cosa: abre la consulta del catálogo al
+contador, sin existencias por ubicación.
+
 Reutilizan `permisos_usuario`, que ya existía, en vez de estrenar un
 sistema aparte. Son dos y no uno porque «ver lo mío» lo necesita
 cualquiera que venda, y «ver todo» es una concesión distinta: con un solo

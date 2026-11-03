@@ -3,6 +3,13 @@ export const PERMISSIONS = {
   POS: "pos",
   QUOTES: "quotes",
   PRODUCTS: "products",
+
+  /*
+    Consultar el catálogo, sin administrarlo. Aparte de `products`, que abre
+    también las escrituras: esta no concede ninguna. Es del contador; quien
+    tiene `products` ya consulta el catálogo (ver IMPLICA).
+  */
+  PRODUCTS_READ: "products-read",
   CLIENTS: "clients",
   SUPPLIERS: "suppliers",
   SALES_HISTORY: "sales-history",
@@ -47,6 +54,7 @@ export const PERMISSIONS = {
 */
 const IMPLICA = {
   [PERMISSIONS.INVENTORY_ALL]: [PERMISSIONS.INVENTORY_OWN],
+  [PERMISSIONS.PRODUCTS]: [PERMISSIONS.PRODUCTS_READ],
 }
 
 /*
@@ -83,11 +91,13 @@ export const ROLES = {
   Las secciones que se le pueden habilitar a un contador: las que tienen
   algo que consultar. Las demás son operación pura —facturar, administrar
   el catálogo, anular, ubicaciones, configuración— y no se le ofrecen. Si
-  alguien se las marcara por SQL, la pantalla tampoco las abre.
+  alguien se las marcara por SQL, la pantalla tampoco las abre, y `products`
+  no le abre la consulta del catálogo: esa solo la da `products-read`.
 */
 export const CONTADOR_PERMISSIONS = [
   PERMISSIONS.DASHBOARD,
   PERMISSIONS.QUOTES,
+  PERMISSIONS.PRODUCTS_READ,
   PERMISSIONS.CLIENTS,
   PERMISSIONS.SUPPLIERS,
   PERMISSIONS.SALES_HISTORY,
@@ -95,12 +105,16 @@ export const CONTADOR_PERMISSIONS = [
   PERMISSIONS.INVENTORY_ALL,
 ]
 
-/* Lo que se guarda para un rol: todo para el administrador, y lo consultable para el contador. */
+/*
+  Lo que vale para un rol: todo para el administrador, lo consultable para
+  el contador y, para los demás, lo suyo menos la consulta del catálogo, que
+  no se les ofrece: a ellos se les da `products`.
+*/
 export function permisosDelRol(rol, permisos = []) {
   if (rol === ROLES.ADMIN) return ADMIN_PERMISSIONS
   if (rol === ROLES.CONTADOR) return permisos.filter((p) => CONTADOR_PERMISSIONS.includes(p))
 
-  return permisos
+  return permisos.filter((p) => p !== PERMISSIONS.PRODUCTS_READ)
 }
 
 /*

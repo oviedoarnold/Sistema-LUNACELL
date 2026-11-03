@@ -52,6 +52,7 @@ conexión, el panel y las cotizaciones. Ninguno calcula margen ni utilidad.
 
 - Dashboard;
 - Cotizar;
+- Consultar productos (`products-read`, 0037);
 - Clientes;
 - Proveedores;
 - Historial de facturas, que incluye Cuentas por cobrar;
@@ -59,6 +60,8 @@ conexión, el panel y las cotizaciones. Ninguno calcula margen ni utilidad.
 
 **Ve:**
 
+- Con «Consultar productos», el catálogo: código, nombre, categoría, precio
+  de venta, stock total y estado. No le da Existencias ni Traslados.
 - Con «Historial de facturas», las ventas, los abonos y los pagos de
   **todas** las ubicaciones, porque no opera desde ninguna.
 - Con «El inventario de todas las ubicaciones», las existencias y los
@@ -83,6 +86,7 @@ auditoría de accesos o de rescates, ni la conciliación.
 
 **Las pantallas**, además, le esconden lo que escribe:
 
+- en Inventario, «Nuevo producto», «Editar» y «Eliminar»;
 - en Clientes y Proveedores, «Nuevo» y «Editar»;
 - en Cotizar, armar, facturar y eliminar;
 - en Cuentas por cobrar, «Abonar»;
@@ -92,7 +96,32 @@ auditoría de accesos o de rescates, ni la conciliación.
 **Inicio de sesión.** Lo hace la función `acceso` con la clave del
 servidor, sin `auth.uid()`, así que el disparador no se lo impide.
 
-## Despliegue
+## Consulta del catálogo (0037)
+
+`products` abre también las escrituras de productos, así que no sirve para
+dar solo la consulta. `products-read` es una sección aparte, que solo se le
+ofrece al contador y no concede nada en la base: es la marca con la que la
+pantalla le abre el catálogo. Quien tiene `products` ya consulta el catálogo.
+
+**Orden de despliegue: primero la 0037, después el frontend.** El frontend
+nuevo guarda `products-read` para el contador y, entre los permisos del
+administrador, al editarlo; con la base vieja, la restricción de secciones
+rechazaría ese guardado. El frontend viejo funciona con la base nueva.
+
+Reversión, solo si el frontend ya se revirtió:
+
+```sql
+begin;
+delete from public.permisos_usuario where seccion = 'products-read';
+alter table public.permisos_usuario drop constraint permisos_usuario_seccion_check;
+alter table public.permisos_usuario add constraint permisos_usuario_seccion_check
+  check (seccion in ('dashboard', 'pos', 'quotes', 'products', 'clients', 'suppliers',
+    'sales-history', 'settings', 'locations', 'inventory-own', 'inventory-all', 'sales-void'));
+delete from supabase_migrations.schema_migrations where name = '0037_consulta_de_catalogo';
+commit;
+```
+
+## Despliegue de la 0035 y la 0036
 
 Aquí el orden es el contrario al de la 0033: **primero el frontend,
 después las migraciones.**

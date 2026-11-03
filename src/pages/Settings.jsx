@@ -105,6 +105,19 @@ function permisosDelNivel(permisos = [], nivel) {
   return resto
 }
 
+/*
+  Al pasar a contador no se hereda el inventario de los permisos sugeridos
+  para un vendedor: Existencias y Traslados se le dan a propósito, con el
+  selector de inventario.
+*/
+function permisosAlCambiarDeRol(rol, permisos) {
+  const delRol = permisosDelRol(rol, permisos)
+
+  return rol === ROLES.CONTADOR
+    ? permisosDelNivel(delRol, NIVEL_INVENTARIO.NINGUNO)
+    : delRol
+}
+
 function buildCompanyForm(company) {
   return {
     name: company?.name || "",
@@ -352,6 +365,13 @@ function Settings() {
     },
     {
       id:
+        permissions.PRODUCTS_READ,
+      label: "Consultar productos",
+      description:
+        "Ver el catálogo con precios de venta y stock, sin costos. No permite modificar nada.",
+    },
+    {
+      id:
         permissions.CLIENTS,
       label: "Clientes",
       description:
@@ -505,7 +525,7 @@ function Settings() {
          * Contador: solo conserva las
          * secciones de consulta.
          */
-        permissions: permisosDelRol(
+        permissions: permisosAlCambiarDeRol(
           role,
           current.role === "admin"
             ? [...sellerPermissions]
@@ -1538,8 +1558,9 @@ function Settings() {
                       <div className="permisos-rejilla">
 
                         {permissionOptions.filter((permission) =>
-                          userForm.role !== ROLES.CONTADOR ||
-                          CONTADOR_PERMISSIONS.includes(permission.id)
+                          userForm.role === ROLES.CONTADOR
+                            ? CONTADOR_PERMISSIONS.includes(permission.id)
+                            : permission.id !== permissions.PRODUCTS_READ
                         ).map((permission) => {
                           const checked = userForm.permissions.includes(
                             permission.id

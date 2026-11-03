@@ -328,6 +328,33 @@ describe("Settings: usuarios", () => {
       expect(within(modal).queryByText(operativa)).not.toBeInTheDocument()
     }
   })
+
+  /*
+    La consulta del catálogo es del contador, y va aparte del inventario:
+    marcarla no le da Existencias ni Traslados, y el inventario sugerido
+    para un vendedor no se le hereda al elegir el rol.
+  */
+  it("el rol contador ofrece consultar productos, sin marcarla y sin heredar el inventario", async () => {
+    await renderSettings()
+
+    fireEvent.click(screen.getByRole("button", { name: /nuevo usuario/i }))
+    const modal = document.querySelector(".modal")
+
+    expect(within(modal).queryByText("Consultar productos")).not.toBeInTheDocument()
+
+    fireEvent.change(within(modal).getByLabelText(/^rol$/i), { target: { value: "contador" } })
+
+    const consultar = within(modal).getByRole("checkbox", { name: /consultar productos/i })
+    expect(consultar).not.toBeChecked()
+
+    const inventario = within(modal).getByLabelText(/inventario que puede consultar/i)
+    expect(inventario).toHaveDisplayValue("No puede consultar existencias")
+
+    fireEvent.click(consultar)
+
+    expect(consultar).toBeChecked()
+    expect(inventario).toHaveDisplayValue("No puede consultar existencias")
+  })
 })
 
 /*
