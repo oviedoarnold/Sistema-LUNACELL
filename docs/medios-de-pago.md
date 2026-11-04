@@ -14,6 +14,10 @@ venta a crédito no lleva medios: se cobra con sus abonos.
   enlace llevan referencia obligatoria; el efectivo, ninguna.
 - **El POS no preselecciona un medio**, para que una transferencia que nadie
   cambió no quede como efectivo.
+- **La pantalla no deja superar el total**, ni pegando: el importe se ajusta a lo
+  pendiente y lo avisa. Un solo medio lleva el total; al marcar otro hay que bajar
+  el primero para liberar saldo. Si el total baja con varios medios, los importes
+  no se cambian solos: la venta no se confirma hasta corregirlos.
 - **Un reintento no duplica.** La misma clave con los mismos medios devuelve lo que
   ya existe; con otros medios se rechaza (`LM005`, u `OF003` sin conexión).
 - **Solo se agrega.** Ni el dueño de la base cambia, borra o vacía un cobro.
