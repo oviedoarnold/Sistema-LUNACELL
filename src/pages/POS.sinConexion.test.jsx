@@ -220,7 +220,6 @@ describe("POS sin conexión en una ubicación habilitada", () => {
     fireEvent.click(screen.getByRole("checkbox", { name: "Efectivo" }))
     fireEvent.click(screen.getByRole("checkbox", { name: "Tarjeta" }))
     fireEvent.change(screen.getByLabelText("Importe de Efectivo"), { target: { value: "107" } })
-    fireEvent.change(screen.getByLabelText("Importe de Tarjeta"), { target: { value: "100" } })
     fireEvent.change(screen.getByLabelText("Referencia de Tarjeta"), { target: { value: "AUT-1" } })
     fireEvent.click(botonGuardarSinConexion())
     await waitFor(() => expect(screen.getByText(/1 venta pendiente de sincronizar/i)).toBeInTheDocument())

@@ -1,7 +1,7 @@
 /*
   Con qué se cobra: un medio con el total (pago único), o dos medios distintos
-  con su importe (pago mixto). La base admite más; el límite de dos es de esta
-  aplicación.
+  (pago mixto): se escribe un importe y el otro se calcula con lo que falta. La
+  base admite más medios; el límite de dos es de esta aplicación.
 
   Lo que se comprueba aquí es para avisar antes de enviar. Quien decide es la
   base (0039), que vuelve a comprobar que los importes sumen el total que ella
@@ -40,11 +40,25 @@ const vacios = () => Object.fromEntries(MEDIOS_DE_PAGO.map((m) => [m.id, ""]))
   transferencia que nadie cambió quedaría como efectivo, y el reporte diría algo
   falso sin que nadie lo notara.
 */
-export const selectorVacio = (modalidad = UNICO) => ({ modalidad, elegidos: [], montos: vacios(), referencias: vacios() })
+export const selectorVacio = (modalidad = UNICO) => ({
+  modalidad,
+  elegidos: [],
+  montos: vacios(),
+  referencias: vacios(),
+  // El medio cuyo importe escribió el cajero en pago mixto; el otro se calcula.
+  escrito: null,
+})
 
-/* Los importes de los demás medios elegidos, en centavos. */
-const asignadoSin = ({ elegidos, montos }, medio) =>
-  elegidos.filter((m) => m !== medio).reduce((suma, m) => suma + centavos(montos[m]), 0)
+const esCalculado = ({ elegidos, escrito }, medio) =>
+  elegidos.length === MEDIOS_EN_MIXTO && escrito !== null && escrito !== medio
+
+/* Sale de la resta y no del estado: así sigue al total si este cambia. */
+export const importeDe = (valor, medio, total) =>
+  esCalculado(valor, medio)
+    ? aTexto(Math.max(0, centavos(total) - centavos(valor.montos[valor.escrito])))
+    : valor.montos[medio]
+
+export { esCalculado as importeCalculado }
 
 /*
   Cambiar de modalidad empieza de cero: lo que se escribió para la otra no puede
@@ -72,6 +86,7 @@ export function elegirMedio(valor, medio) {
       .filter((id) => (id === medio ? marcado : valor.elegidos.includes(id))),
     montos: { ...valor.montos, [medio]: "" },
     referencias: { ...valor.referencias, [medio]: "" },
+    escrito: valor.escrito === medio ? null : valor.escrito,
   }
 }
 
@@ -97,16 +112,22 @@ export function limpiarImporte(texto) {
 }
 
 /*
-  Escribir un importe sin que la suma pueda pasar del total, también al pegar:
-  lo que se pasa se deja en lo que queda disponible, y `ajustado` lo dice.
+  Escribir un importe sin que pase del total, también al pegar: lo que se pasa se
+  deja en el total, y `ajustado` lo dice. El medio que se escribe manda: el otro
+  pasa a calcularse con lo que falta, aunque antes se hubiera escrito a mano.
 */
 export function escribirImporte(valor, medio, texto, total) {
   const limpio = limpiarImporte(texto)
-  const disponible = Math.max(0, centavos(total) - asignadoSin(valor, medio))
-  const ajustado = centavos(limpio) > disponible
-  const monto = ajustado ? aTexto(disponible) : limpio
+  const ajustado = centavos(limpio) > centavos(total)
 
-  return { valor: { ...valor, montos: { ...valor.montos, [medio]: monto } }, ajustado }
+  return {
+    valor: {
+      ...valor,
+      montos: { ...vacios(), [medio]: ajustado ? aTexto(centavos(total)) : limpio },
+      escrito: limpio === "" ? null : medio,
+    },
+    ajustado,
+  }
 }
 
 export const escribirReferencia = (valor, medio, texto) => ({
@@ -119,23 +140,21 @@ export const escribirReferencia = (valor, medio, texto) => ({
   siempre el total, aunque el total cambie después. En pago mixto, un medio sin
   importe no viaja, y problemaDelSelector impide confirmar así.
 */
-export function cobrosDelSelector({ modalidad, elegidos, montos, referencias }, total) {
+export function cobrosDelSelector(valor, total) {
+  const { modalidad, elegidos, referencias } = valor
+
   if (modalidad !== MIXTO) {
     return elegidos.map((medio) => ({ medio, monto: centavos(total) / 100, referencia: referencias[medio].trim() }))
   }
 
   return elegidos
-    .filter((medio) => centavos(montos[medio]) > 0)
-    .map((medio) => ({ medio, monto: centavos(montos[medio]) / 100, referencia: referencias[medio].trim() }))
+    .filter((medio) => centavos(importeDe(valor, medio, total)) > 0)
+    .map((medio) => ({ medio, monto: centavos(importeDe(valor, medio, total)) / 100, referencia: referencias[medio].trim() }))
 }
 
 /* Cuánto falta por asignar; negativo si sobra porque el total bajó. */
 export const faltaPorAsignar = (cobros, total) =>
   (centavos(total) - cobros.reduce((suma, c) => suma + centavos(c.monto), 0)) / 100
-
-/* Sin saldo pendiente el otro medio no admite importe; el que ya tiene uno se puede editar. */
-export const importeBloqueado = (valor, medio, total) =>
-  centavos(valor.montos[medio]) === 0 && asignadoSin(valor, medio) >= centavos(total)
 
 /*
   Null si se puede enviar; si no, qué falta. Vale para lo que ya salió del
@@ -169,15 +188,12 @@ export function problemaDelSelector(valor, total) {
   if (valor.modalidad === MIXTO) {
     if (valor.elegidos.length !== MEDIOS_EN_MIXTO) return `Elige ${MEDIOS_EN_MIXTO} medios de pago.`
 
-    const sinImporte = valor.elegidos.find((medio) => centavos(valor.montos[medio]) <= 0)
+    if (valor.escrito === null) return "Escribe el importe de uno de los medios: el otro se calcula solo."
 
-    if (sinImporte) {
-      const { etiqueta } = MEDIO_POR_ID[sinImporte]
+    const sinImporte = valor.elegidos.find((medio) => centavos(importeDe(valor, medio, total)) <= 0)
 
-      return importeBloqueado(valor, sinImporte, total)
-        ? `Baja el otro importe para asignarle saldo a ${etiqueta}.`
-        : `Escribe el importe de ${etiqueta}.`
-    }
+    if (sinImporte) return `Baja el otro importe para asignarle saldo a ${MEDIO_POR_ID[sinImporte].etiqueta}.`
+
   }
 
   return problemaDeCobros(cobrosDelSelector(valor, total), total)

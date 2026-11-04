@@ -696,31 +696,31 @@ describe("POS: venta registrada por el servidor", () => {
     referencia("Transferencia", "TRF-1")
     importe("Efectivo", "207")
 
-    // Efectivo lleva todo: la cuenta cuadra, pero Transferencia no tiene saldo.
-    expect(screen.getByLabelText("Importe de Transferencia")).toBeDisabled()
+    // Efectivo lleva todo: la cuenta cuadra, pero Transferencia queda en cero.
+    expect(screen.getByLabelText("Importe de Transferencia")).toHaveValue("0.00")
     expect(screen.getByText(/baja el otro importe/i)).toBeInTheDocument()
     expect(botonFacturar()).toBeDisabled()
   })
 
-  it("un pago mixto no se confirma hasta sumar el total y tener las referencias", async () => {
+  it("en pago mixto basta un importe: el otro se calcula y la venta manda los dos", async () => {
     const { falso } = await renderPOS()
 
     agregar("Martillo de uña")
     mixto()
     marcar("Efectivo")
     marcar("Transferencia")
+
+    expect(screen.getByText(/el otro se calcula solo/i)).toBeInTheDocument()
+    expect(botonFacturar()).toBeDisabled()
+
     importe("Efectivo", "100")
-    importe("Transferencia", "100")
+
+    expect(screen.getByLabelText("Importe de Transferencia")).toHaveValue("107.00")
 
     const resumen = screen.getByText("Pendiente").closest("dl")
 
-    expect(within(resumen).getByText("Pendiente").nextSibling).toHaveTextContent("7.00")
-    expect(within(resumen).getByText("Importe asignado").nextSibling).toHaveTextContent("200.00")
-    expect(botonFacturar()).toBeDisabled()
-
-    importe("Transferencia", "107")
-
     expect(within(resumen).getByText("Pendiente").nextSibling).toHaveTextContent("0.00")
+    expect(within(resumen).getByText("Importe asignado").nextSibling).toHaveTextContent("207.00")
     expect(screen.getByText("Escribe la referencia de Transferencia.")).toBeInTheDocument()
     expect(botonFacturar()).toBeDisabled()
 
@@ -734,7 +734,7 @@ describe("POS: venta registrada por el servidor", () => {
     ])
   })
 
-  it("no deja superar el total, ni pegando: el importe se ajusta y lo dice", async () => {
+  it("escribir sobre el importe calculado cambia cuál se calcula", async () => {
     await renderPOS()
 
     agregar("Martillo de uña")
@@ -742,10 +742,43 @@ describe("POS: venta registrada por el servidor", () => {
     marcar("Efectivo")
     marcar("Tarjeta")
     importe("Efectivo", "100")
+    importe("Tarjeta", "7.50")
+
+    expect(screen.getByLabelText("Importe de Efectivo")).toHaveValue("199.50")
+    expect(screen.getByLabelText("Importe de Tarjeta")).toHaveValue("7.50")
+    expect(screen.getByLabelText("Importe de Efectivo").closest(".field")).toHaveClass("medios-de-pago-calculado")
+    expect(screen.getByLabelText("Importe de Tarjeta").closest(".field")).not.toHaveClass("medios-de-pago-calculado")
+  })
+
+  it("no deja superar el total, ni pegando: el importe se ajusta y lo dice", async () => {
+    await renderPOS()
+
+    agregar("Martillo de uña")
+    mixto()
+    marcar("Efectivo")
+    marcar("Tarjeta")
     importe("Tarjeta", "1,125.00")
 
-    expect(screen.getByLabelText("Importe de Tarjeta")).toHaveValue("107.00")
-    expect(screen.getByText(/se ajustó a lo que quedaba pendiente/i)).toBeInTheDocument()
+    expect(screen.getByLabelText("Importe de Tarjeta")).toHaveValue("207.00")
+    expect(screen.getByText(/se ajustó al total/i)).toBeInTheDocument()
+  })
+
+  it("el aviso del ajuste se queda si se sigue tecleando sobre el tope, y se va al corregir", async () => {
+    await renderPOS()
+
+    agregar("Martillo de uña")
+    mixto()
+    marcar("Efectivo")
+    marcar("Tarjeta")
+    importe("Tarjeta", "999")
+    importe("Tarjeta", "207.009")
+
+    expect(screen.getByLabelText("Importe de Tarjeta")).toHaveValue("207.00")
+    expect(screen.getByText(/se ajustó al total/i)).toBeInTheDocument()
+
+    importe("Tarjeta", "100")
+
+    expect(screen.queryByText(/se ajustó al total/i)).not.toBeInTheDocument()
   })
 
   /*
@@ -804,7 +837,7 @@ describe("POS: venta registrada por el servidor", () => {
     expect(rpcDeVenta(falso)[1].p_cobros).toEqual([{ medio: "efectivo", monto: 207, referencia: "" }])
   })
 
-  it("al cambiar el total: el pago único lo sigue, y el mixto bloquea hasta corregir", async () => {
+  it("al cambiar el total: el importe calculado lo sigue, y si el escrito se pasa bloquea hasta corregir", async () => {
     await renderPOS()
 
     agregar("Martillo de uña")
@@ -818,19 +851,31 @@ describe("POS: venta registrada por el servidor", () => {
     mixto()
     marcar("Efectivo")
     marcar("Transferencia")
-    importe("Efectivo", "300")
-    importe("Transferencia", "114")
     referencia("Transferencia", "TRF-1")
+    importe("Efectivo", "114")
+
+    expect(screen.getByLabelText("Importe de Transferencia")).toHaveValue("300.00")
+
     fireEvent.click(screen.getByRole("button", { name: /quitar una unidad de martillo/i }))
 
-    // Bajó a 207.00: los importes no se cambian solos, y no se puede confirmar.
-    expect(screen.getByText("Excedente").nextSibling).toHaveTextContent("207.00")
+    // Bajó a 207.00: el calculado la sigue y sigue cuadrando.
+    expect(screen.getByLabelText("Importe de Efectivo")).toHaveValue("114")
+    expect(screen.getByLabelText("Importe de Transferencia")).toHaveValue("93.00")
+    expect(botonFacturar()).toBeEnabled()
+
+    fireEvent.click(screen.getByRole("button", { name: /agregar una unidad de martillo/i }))
+    importe("Efectivo", "300")
+    fireEvent.click(screen.getByRole("button", { name: /quitar una unidad de martillo/i }))
+
+    // El escrito no se cambia solo: si pasa del total, no se puede confirmar.
+    expect(screen.getByLabelText("Importe de Efectivo")).toHaveValue("300")
+    expect(screen.getByText("Excedente").nextSibling).toHaveTextContent("93.00")
     expect(screen.getByText(/el total bajó/i)).toBeInTheDocument()
     expect(botonFacturar()).toBeDisabled()
 
-    importe("Efectivo", "93")
+    importe("Efectivo", "100")
 
-    expect(screen.getByText("Pendiente").nextSibling).toHaveTextContent("0.00")
+    expect(screen.getByLabelText("Importe de Transferencia")).toHaveValue("107.00")
     expect(botonFacturar()).toBeEnabled()
   })
 

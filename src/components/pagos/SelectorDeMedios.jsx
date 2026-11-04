@@ -12,7 +12,8 @@ import {
   escribirImporte,
   escribirReferencia,
   faltaPorAsignar,
-  importeBloqueado,
+  importeCalculado,
+  importeDe,
   problemaDelSelector,
 } from "../../utils/mediosDePago"
 
@@ -48,7 +49,8 @@ function SelectorDeMedios({ valor, total, onCambiar }) {
   const escribir = (medio, texto) => {
     const resultado = escribirImporte(valor, medio, texto, total)
 
-    setAjustado(resultado.ajustado)
+    // Si se sigue tecleando sobre el tope, el importe no cambia y el aviso se queda.
+    setAjustado(resultado.ajustado || (ajustado && resultado.valor.montos[medio] === valor.montos[medio]))
     onCambiar(resultado.valor)
   }
 
@@ -93,7 +95,7 @@ function SelectorDeMedios({ valor, total, onCambiar }) {
         {MEDIOS_DE_PAGO.filter((m) => valor.elegidos.includes(m.id) && (mixto || m.conReferencia)).map((m) => (
           <div key={m.id} className="medios-de-pago-fila">
             {mixto && (
-              <div className="field">
+              <div className={`field${importeCalculado(valor, m.id) ? " medios-de-pago-calculado" : ""}`}>
                 <label htmlFor={`${id}-monto-${m.id}`}>Importe de {m.etiqueta}</label>
 
                 <input
@@ -102,8 +104,8 @@ function SelectorDeMedios({ valor, total, onCambiar }) {
                   inputMode="decimal"
                   autoComplete="off"
                   placeholder="0.00"
-                  value={valor.montos[m.id]}
-                  disabled={importeBloqueado(valor, m.id, total)}
+                  value={importeDe(valor, m.id, total)}
+                  disabled={!(total > 0)}
                   onFocus={(e) => e.target.select()}
                   onChange={(e) => escribir(m.id, e.target.value)}
                 />
@@ -131,7 +133,7 @@ function SelectorDeMedios({ valor, total, onCambiar }) {
 
       {ajustado && (
         <p className="medios-de-pago-aviso" role="status">
-          El importe se ajustó a lo que quedaba pendiente.
+          El importe se ajustó al total.
         </p>
       )}
     </fieldset>

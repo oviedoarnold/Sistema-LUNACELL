@@ -63,6 +63,16 @@
   min-width: 0;
 }
 
+/* El importe que salió de la resta. Se puede escribir encima, y entonces manda ese. */
+.medios-de-pago-calculado label::after {
+  content: " · calculado";
+  font-weight: 400;
+}
+
+.medios-de-pago-calculado input {
+  background: var(--background);
+}
+
 .medios-de-pago-resumen {
   display: grid;
   gap: 10px;
