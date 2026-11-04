@@ -220,7 +220,7 @@ describe("POS sin conexión en una ubicación habilitada", () => {
     fireEvent.click(screen.getByRole("checkbox", { name: "Efectivo" }))
     fireEvent.click(screen.getByRole("checkbox", { name: "Tarjeta" }))
     fireEvent.change(screen.getByLabelText("Importe de Efectivo"), { target: { value: "107" } })
-    fireEvent.change(screen.getByLabelText("Referencia de Tarjeta"), { target: { value: "AUT-1" } })
+    fireEvent.change(screen.getByLabelText(/^Referencia de Tarjeta/), { target: { value: "AUT-1" } })
     fireEvent.click(botonGuardarSinConexion())
     await waitFor(() => expect(screen.getByText(/1 venta pendiente de sincronizar/i)).toBeInTheDocument())
 
@@ -231,6 +231,22 @@ describe("POS sin conexión en una ubicación habilitada", () => {
       { medio: "efectivo", monto: 107, referencia: "" },
       { medio: "tarjeta", monto: 100, referencia: "AUT-1" },
     ])
+  })
+
+  it("guarda y envía una venta sin referencia", async () => {
+    await renderPOS()
+    await esperarCopia()
+    await quitarConexion()
+
+    agregar("Martillo de uña")
+    fireEvent.click(screen.getByRole("radio", { name: "Enlace de pago" }))
+    fireEvent.click(botonGuardarSinConexion())
+    await waitFor(() => expect(screen.getByText(/1 venta pendiente de sincronizar/i)).toBeInTheDocument())
+
+    await devolverConexion()
+
+    await waitFor(() => expect(servidor.recibidas).toHaveLength(1))
+    expect(servidor.recibidas[0].p_cobros).toEqual([{ medio: "enlace", monto: 207, referencia: "" }])
   })
 
   it("un pago mixto sin los dos importes no se puede guardar", async () => {

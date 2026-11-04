@@ -179,8 +179,6 @@ describe("venta al contado con medios de pago", () => {
     ["más de dos decimales", [efectivo(114.999), tarjeta(0.001)]],
     ["importe que no es número", [{ medio: "efectivo", monto: "mucho" }]],
     ["medio repetido", [efectivo(100), efectivo(15)]],
-    ["transferencia sin referencia", [{ medio: "transferencia", monto: 115 }]],
-    ["tarjeta con referencia en blanco", [{ medio: "tarjeta", monto: 115, referencia: "   " }]],
     ["enlace con referencia que no es texto", [{ medio: "enlace", monto: 115, referencia: 123 }]],
     ["efectivo con referencia", [{ medio: "efectivo", monto: 115, referencia: "RECIBO" }]],
     ["referencia demasiado larga", [tarjeta(115, "x".repeat(121))]],
@@ -191,6 +189,112 @@ describe("venta al contado con medios de pago", () => {
 
     expect(error.code).toBe("LM001")
     expect(await existencia(db, e.camion1, e.cargador.id)).toBe(antes)
+  })
+})
+
+describe("sin referencia (0040)", () => {
+  it.each([
+    ["transferencia", { medio: "transferencia", monto: 115 }],
+    ["tarjeta", { medio: "tarjeta", monto: 115, referencia: "" }],
+    ["enlace", { medio: "enlace", monto: 115, referencia: "   " }],
+  ])("una venta con %s se registra, y la referencia queda vacía", async (medio, cobro) => {
+    const e = await escenario()
+    const venta = await vender(e, e.vendedor.authId, [cobro])
+
+    expect(await cobrosDeVenta(venta.venta_id)).toEqual([
+      expect.objectContaining({ medio, monto: 115, referencia: "" }),
+    ])
+  })
+
+  it("la comisión interna se calcula igual, y la tarjeta conserva su 7 %", async () => {
+    const e = await escenario()
+    const venta = await vender(e, e.vendedor.authId, [efectivo(15), { medio: "tarjeta", monto: 100 }])
+
+    expect(await comisionesDe(venta.venta_id)).toEqual([{ medio: "tarjeta", base: 100, tasa: 7, monto: 7 }])
+  })
+
+  it("sigue exigiendo que los importes sumen el total", async () => {
+    const e = await escenario()
+    const error = await fallo(vender(e, e.vendedor.authId, [{ medio: "tarjeta", monto: 100 }]))
+
+    expect(error.code).toBe("LM002")
+  })
+
+  it("una referencia escrita se sigue guardando", async () => {
+    const e = await escenario()
+    const venta = await vender(e, e.vendedor.authId, [tarjeta(115, " AUT-7 ")])
+
+    expect(await cobrosDeVenta(venta.venta_id)).toEqual([expect.objectContaining({ referencia: "AUT-7" })])
+  })
+
+  it("un reintento sin referencia no duplica", async () => {
+    const e = await escenario()
+    const cobros = [{ medio: "tarjeta", monto: 115 }]
+    const primera = await vender(e, e.vendedor.authId, cobros, { clave: "sin-ref-1" })
+    const segunda = await vender(e, e.vendedor.authId, cobros, { clave: "sin-ref-1" })
+
+    expect(segunda.repetida).toBe(true)
+    expect(segunda.venta_id).toBe(primera.venta_id)
+    expect(await cobrosDeVenta(primera.venta_id)).toHaveLength(1)
+  })
+
+  it("agregar la referencia en un reintento cuenta como otros medios", async () => {
+    const e = await escenario()
+
+    await vender(e, e.vendedor.authId, [{ medio: "tarjeta", monto: 115 }], { clave: "sin-ref-2" })
+
+    const error = await fallo(vender(e, e.vendedor.authId, [tarjeta(115)], { clave: "sin-ref-2" }))
+
+    expect(error.code).toBe("LM005")
+  })
+
+  it("un abono mixto se registra sin referencia", async () => {
+    const e = await escenario()
+
+    await ventaACredito(e)
+
+    const pago = await cobrar(e.vendedor.authId, e.clienteId, 100, [efectivo(40), { medio: "transferencia", monto: 60 }])
+
+    expect(await cobrosDePago(pago.pago_id)).toEqual([
+      expect.objectContaining({ medio: "efectivo", monto: 40, referencia: "" }),
+      expect.objectContaining({ medio: "transferencia", monto: 60, referencia: "" }),
+    ])
+  })
+
+  it("una venta sin conexión sincroniza sin referencia, sin duplicar al reintentar", async () => {
+    const e = await escenario()
+    const venta = ventaSinConexion(e)
+    const cobros = [{ medio: "enlace", monto: 230 }]
+    const primera = await sincronizar(e.vendedor.authId, venta, cobros)
+    const segunda = await sincronizar(e.vendedor.authId, venta, cobros)
+
+    expect(primera.estado).toBe("registrada")
+    expect(segunda.estado).toBe("ya_registrada")
+    expect(await cobrosDeVenta(primera.venta_id)).toEqual([expect.objectContaining({ medio: "enlace", referencia: "" })])
+  })
+
+  it("un rescate sin referencia se aplica al conciliar", async () => {
+    const e = await escenario()
+    const venta = ventaSinConexion(e)
+    const r = await rescatar(e.admin.authId, venta, [{ medio: "transferencia", monto: 230 }])
+
+    expect(r).toMatchObject({ estado: "en_conciliacion", motivo: "rescate" })
+
+    const aplicada = await conciliar(db, e.admin.authId, r.conciliacion_id, "aplicar")
+    const { rows } = await db.query("select referencia from cobros_por_medio where venta_id = $1", [aplicada.venta_id])
+
+    expect(rows).toEqual([{ referencia: "" }])
+  })
+
+  it("el reporte cuenta el cobro sin referencia", async () => {
+    const e = await escenario()
+
+    await vender(e, e.vendedor.authId, [{ medio: "tarjeta", monto: 115 }])
+
+    const r = await medios(e.admin.authId)
+
+    expect(r.totales.total).toBe(115)
+    expect(r.por_medio).toEqual([expect.objectContaining({ medio: "tarjeta" })])
   })
 })
 

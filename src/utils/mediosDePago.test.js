@@ -47,9 +47,11 @@ describe("pago único", () => {
     expect(valor.referencias.tarjeta).toBe("")
   })
 
-  it("la referencia es obligatoria donde corresponde", () => {
-    expect(problemaDelSelector(unico("tarjeta"), 100)).toMatch(/referencia de tarjeta/i)
-    expect(problemaDelSelector(unico("efectivo"), 100)).toBeNull()
+  it("la referencia es opcional: sin ella se confirma, y no se inventa una", () => {
+    for (const medio of ["efectivo", "transferencia", "tarjeta", "enlace"]) {
+      expect(problemaDelSelector(unico(medio), 100)).toBeNull()
+      expect(cobrosDelSelector(unico(medio), 100)[0].referencia).toBe("")
+    }
   })
 
   it("sin medio dice que falta elegirlo", () => {
@@ -138,9 +140,18 @@ describe("pago mixto", () => {
     ["sin importes", () => marcados("efectivo", "tarjeta"), /se calcula solo/i],
     ["con el otro en cero", () => conImporte(100, "efectivo", "100"), /baja el otro importe/i],
     ["con el escrito en cero", () => conImporte(100, "efectivo", "0"), /baja el otro importe/i],
-    ["sin referencia", () => conImporte(100, "efectivo", "40"), /referencia de tarjeta/i],
   ])("no se confirma %s", (_, valor, mensaje) => {
     expect(problemaDelSelector(valor(), 100)).toMatch(mensaje)
+  })
+
+  it("con un importe y sin referencias, se confirma", () => {
+    const valor = conImporte(100, "efectivo", "40")
+
+    expect(problemaDelSelector(valor, 100)).toBeNull()
+    expect(cobrosDelSelector(valor, 100)).toEqual([
+      { medio: "efectivo", monto: 40, referencia: "" },
+      { medio: "tarjeta", monto: 60, referencia: "" },
+    ])
   })
 
   it("con un importe y las referencias, se confirma", () => {
@@ -263,7 +274,6 @@ describe("problemaDeCobros", () => {
     ["importe negativo", [efectivo(-1)], 10, /mayor que cero/i],
     ["importe que no es número", [efectivo(Number.NaN)], 10, /mayor que cero/i],
     ["más de dos decimales", [efectivo(9.999)], 10, /dos decimales/i],
-    ["sin referencia", [{ medio: "tarjeta", monto: 10, referencia: "" }], 10, /referencia de tarjeta/i],
     ["referencia larga", [{ medio: "tarjeta", monto: 10, referencia: "x".repeat(121) }], 10, /demasiado larga/i],
     ["no suman", [efectivo(9)], 10, /deben sumar/i],
     ["más de dos medios", [efectivo(1), { medio: "tarjeta", monto: 1, referencia: "A" }, { medio: "enlace", monto: 1, referencia: "L" }], 3, /hasta 2 medios/i],

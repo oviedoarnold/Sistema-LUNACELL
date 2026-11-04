@@ -121,7 +121,7 @@ function SelectorDeMedios({ valor, total, onCambiar }) {
                   type="text"
                   maxLength="120"
                   autoComplete="off"
-                  placeholder="Autorización o comprobante"
+                  placeholder="Opcional"
                   value={valor.referencias[m.id]}
                   onChange={(e) => onCambiar(escribirReferencia(valor, m.id, e.target.value))}
                 />

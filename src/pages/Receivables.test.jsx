@@ -294,7 +294,7 @@ describe("medios de pago del abono", () => {
     expect(botonConfirmar()).toBeDisabled()
   })
 
-  it("una transferencia pide su referencia", async () => {
+  it("una transferencia no exige referencia, y si se escribe se envía", async () => {
     await renderCxC()
     const rpc = responderRpc(pagoDelServidor())
 
@@ -302,10 +302,9 @@ describe("medios de pago del abono", () => {
     escribirMonto(100)
     unico("Transferencia")
 
-    expect(screen.getByText("Escribe la referencia de Transferencia.")).toBeInTheDocument()
-    expect(botonConfirmar()).toBeDisabled()
+    expect(botonConfirmar()).toBeEnabled()
 
-    fireEvent.change(screen.getByLabelText("Referencia de Transferencia"), { target: { value: "TRF-77" } })
+    fireEvent.change(screen.getByLabelText(/^Referencia de Transferencia/), { target: { value: "TRF-77" } })
     clicConfirmar()
 
     await waitFor(() => expect(rpc).toHaveBeenCalled())
@@ -333,9 +332,9 @@ describe("medios de pago del abono", () => {
 
     expect(screen.getByLabelText("Importe de Tarjeta")).toHaveValue("60.00")
     expect(screen.getByText("Pendiente").nextSibling).toHaveTextContent("0.00")
-    expect(botonConfirmar()).toBeDisabled()
+    expect(botonConfirmar()).toBeEnabled()
 
-    fireEvent.change(screen.getByLabelText("Referencia de Tarjeta"), { target: { value: "AUT-1" } })
+    fireEvent.change(screen.getByLabelText(/^Referencia de Tarjeta/), { target: { value: "AUT-1" } })
     clicConfirmar()
 
     await waitFor(() => expect(rpc).toHaveBeenCalled())
@@ -368,7 +367,7 @@ describe("medios de pago del abono", () => {
     marcar("Efectivo")
     marcar("Tarjeta")
     fireEvent.change(screen.getByLabelText("Importe de Tarjeta"), { target: { value: "100" } })
-    fireEvent.change(screen.getByLabelText("Referencia de Tarjeta"), { target: { value: "VIEJA" } })
+    fireEvent.change(screen.getByLabelText(/^Referencia de Tarjeta/), { target: { value: "VIEJA" } })
     unico("Pago único")
     unico("Efectivo")
     clicConfirmar()

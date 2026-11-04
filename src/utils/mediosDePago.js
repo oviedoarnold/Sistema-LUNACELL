@@ -27,8 +27,6 @@ export const MEDIOS_EN_MIXTO = 2
 export const etiquetaDelMedio = (medio) =>
   medio === SIN_REGISTRAR ? "Sin registrar" : MEDIO_POR_ID[medio]?.etiqueta || medio
 
-export const llevaReferencia = (medio) => Boolean(MEDIO_POR_ID[medio]?.conReferencia)
-
 const centavos = (valor) => Math.round(Number(valor) * 100)
 
 const aTexto = (cuantos) => (cuantos / 100).toFixed(2)
@@ -171,7 +169,6 @@ export function problemaDeCobros(cobros, total) {
 
     if (!Number.isFinite(monto) || monto <= 0) return `El importe de ${etiqueta} debe ser mayor que cero.`
     if (Math.abs(monto * 100 - centavos(monto)) > 1e-6) return `El importe de ${etiqueta} admite dos decimales.`
-    if (llevaReferencia(medio) && !referencia) return `Escribe la referencia de ${etiqueta}.`
     if (referencia.length > 120) return `La referencia de ${etiqueta} es demasiado larga.`
   }
 
