@@ -120,9 +120,9 @@ const totales = () => document.querySelector(".totals")
 
 // A crédito no hay selector: se cobra con los abonos.
 const elegirEfectivo = () => {
-  const casilla = screen.queryByRole("checkbox", { name: "Efectivo" })
+  const opcion = screen.queryByRole("radio", { name: "Efectivo" })
 
-  if (casilla) fireEvent.click(casilla)
+  if (opcion) fireEvent.click(opcion)
 }
 
 const buscar = (texto) =>
@@ -134,6 +134,78 @@ const abrirClienteNuevo = () => abrirAltaDeCliente(/nombre/i)
 
 const quitar = quitarDelCarrito
 
+
+describe("POS: artículos facturados", () => {
+  const numeros = () => [...document.querySelectorAll(".pos-linea-numero")].map((n) => n.textContent)
+
+  const cuenta = () => document.querySelector(".pos-articulos-cuenta")
+
+  it("con el carrito vacío no numera nada y cuenta cero", async () => {
+    await renderPOS()
+
+    expect(numeros()).toEqual([])
+    expect(cuenta()).toHaveTextContent("0 productos · 0 unidades")
+  })
+
+  it("numera desde 1 al agregar, y renumera al eliminar", async () => {
+    await renderPOS()
+
+    agregar("Martillo de uña")
+
+    expect(numeros()).toEqual(["1."])
+    expect(cuenta()).toHaveTextContent("1 producto · 1 unidad")
+
+    agregar("Cemento gris")
+
+    expect(numeros()).toEqual(["1.", "2."])
+    expect(cuenta()).toHaveTextContent("2 productos · 2 unidades")
+
+    quitar("Martillo de uña")
+
+    expect(numeros()).toEqual(["1."])
+    expect(document.querySelector(".cart-row")).toHaveTextContent("1.Cemento gris")
+    expect(cuenta()).toHaveTextContent("1 producto · 1 unidad")
+  })
+
+  it("una línea con varias unidades es un producto: no confunde las dos cifras", async () => {
+    await renderPOS()
+
+    agregar("Martillo de uña")
+    fireEvent.click(screen.getByRole("button", { name: /agregar una unidad de martillo/i }))
+
+    expect(numeros()).toEqual(["1."])
+    expect(cuenta()).toHaveTextContent("1 producto · 2 unidades")
+  })
+
+  it("la línea muestra nombre, precio, cantidad, subtotal y eliminar", async () => {
+    await renderPOS()
+
+    agregar("Martillo de uña")
+
+    const fila = document.querySelector(".cart-row")
+
+    expect(fila).toHaveTextContent("Martillo de uña")
+    expect(fila).toHaveTextContent("L 180.00 c/u")
+    expect(within(fila).getByText("1")).toBeInTheDocument()
+    expect(fila.querySelector(".sub")).toHaveTextContent("L 180.00")
+    expect(within(fila).getByTitle(/eliminar/i)).toBeInTheDocument()
+  })
+
+  it("la numeración es solo visual: no llega a lo que se envía", async () => {
+    const { falso } = await renderPOS()
+
+    agregar("Martillo de uña")
+    agregar("Cemento gris")
+    elegirEfectivo()
+    fireEvent.click(screen.getByRole("button", { name: /generar factura/i }))
+
+    await waitFor(() => expect(falso.datos.ventas).toHaveLength(1))
+
+    const [, argumentos] = falso.rpc.mock.calls.find(([nombre]) => nombre === "registrar_venta_con_medios")
+
+    expect(JSON.stringify(argumentos)).not.toMatch(/numero|linea/i)
+  })
+})
 
 describe("POS: catálogo", () => {
   it("lista los productos disponibles", async () => {
@@ -472,64 +544,187 @@ describe("POS: venta registrada por el servidor", () => {
 
   const rpcDeVenta = (falso) => falso.rpc.mock.calls.find(([nombre]) => nombre === "registrar_venta_con_medios")
 
+  const unico = (nombre) => fireEvent.click(screen.getByRole("radio", { name: nombre }))
+
+  const mixto = () => fireEvent.click(screen.getByRole("radio", { name: "Pago mixto" }))
+
   const marcar = (nombre) => fireEvent.click(screen.getByRole("checkbox", { name: nombre }))
 
   const importe = (nombre, valor) => fireEvent.change(screen.getByLabelText(`Importe de ${nombre}`), { target: { value: valor } })
 
-  const clicFacturar = () => fireEvent.click(screen.getByRole("button", { name: /generar factura/i }))
+  const referencia = (nombre, valor) => fireEvent.change(screen.getByLabelText(`Referencia de ${nombre}`), { target: { value: valor } })
+
+  const botonFacturar = () => screen.getByRole("button", { name: /generar factura/i })
+
+  const clicFacturar = () => fireEvent.click(botonFacturar())
 
   it("sin elegir el medio de pago no se puede confirmar: nada viene preseleccionado", async () => {
     await renderPOS()
 
     agregar("Martillo de uña")
 
-    expect(screen.getAllByRole("checkbox").filter((c) => c.checked)).toEqual([])
-    expect(screen.getByRole("button", { name: /generar factura/i })).toBeDisabled()
+    expect(screen.getByRole("radio", { name: "Pago único" })).toBeChecked()
+    expect(screen.getByRole("radio", { name: "Efectivo" })).not.toBeChecked()
+    expect(botonFacturar()).toBeDisabled()
+    expect(screen.getByText("Elige el medio de pago.")).toBeInTheDocument()
   })
 
-  it("con un medio manda el total y su referencia", async () => {
+  it.each([
+    ["Efectivo", "efectivo", ""],
+    ["Transferencia", "transferencia", "TRF-1"],
+    ["Tarjeta", "tarjeta", "AUT-1"],
+    ["Enlace de pago", "enlace", "LNK-1"],
+  ])("pago único con %s: manda el total, sin pedir importe", async (etiqueta, medio, ref) => {
     const { falso } = await renderPOS()
 
     agregar("Martillo de uña")
-    marcar("Tarjeta")
+    unico(etiqueta)
 
-    expect(screen.getByLabelText("Importe de Tarjeta")).toHaveValue("207.00")
-    expect(screen.getByLabelText("Importe de Tarjeta")).toHaveAttribute("readonly")
-    expect(screen.getByRole("button", { name: /generar factura/i })).toBeDisabled()
-    expect(screen.getByText("Escribe la referencia de Tarjeta.")).toBeInTheDocument()
+    expect(screen.queryByLabelText(`Importe de ${etiqueta}`)).not.toBeInTheDocument()
+    expect(screen.getByText("Importe asignado").nextSibling).toHaveTextContent("207.00")
 
-    fireEvent.change(screen.getByLabelText("Referencia de Tarjeta"), { target: { value: "AUT-1" } })
+    if (ref) {
+      expect(screen.getByText(`Escribe la referencia de ${etiqueta}.`)).toBeInTheDocument()
+      expect(botonFacturar()).toBeDisabled()
+      referencia(etiqueta, ref)
+    } else {
+      expect(screen.queryByLabelText(/^referencia/i)).not.toBeInTheDocument()
+    }
+
     clicFacturar()
 
     await waitFor(() => expect(falso.datos.ventas).toHaveLength(1))
-    expect(rpcDeVenta(falso)[1].p_cobros).toEqual([{ medio: "tarjeta", monto: 207, referencia: "AUT-1" }])
+    expect(rpcDeVenta(falso)[1].p_cobros).toEqual([{ medio, monto: 207, referencia: ref }])
   })
 
-  it("un pago mixto no se puede confirmar hasta que los importes suman el total", async () => {
+  it("en pago único, elegir otro medio reemplaza al anterior y borra su referencia", async () => {
     const { falso } = await renderPOS()
 
     agregar("Martillo de uña")
+    unico("Tarjeta")
+    referencia("Tarjeta", "AUT-1")
+    unico("Efectivo")
+
+    expect(screen.getByRole("radio", { name: "Tarjeta" })).not.toBeChecked()
+    expect(screen.queryByLabelText("Referencia de Tarjeta")).not.toBeInTheDocument()
+
+    unico("Tarjeta")
+
+    expect(screen.getByLabelText("Referencia de Tarjeta")).toHaveValue("")
+
+    unico("Efectivo")
+    clicFacturar()
+
+    await waitFor(() => expect(falso.datos.ventas).toHaveLength(1))
+    expect(rpcDeVenta(falso)[1].p_cobros).toEqual([{ medio: "efectivo", monto: 207, referencia: "" }])
+  })
+
+  /* Las seis combinaciones posibles de dos medios entre cuatro. */
+  it.each([
+    ["Efectivo", "efectivo", "Transferencia", "transferencia"],
+    ["Efectivo", "efectivo", "Tarjeta", "tarjeta"],
+    ["Efectivo", "efectivo", "Enlace de pago", "enlace"],
+    ["Transferencia", "transferencia", "Tarjeta", "tarjeta"],
+    ["Transferencia", "transferencia", "Enlace de pago", "enlace"],
+    ["Tarjeta", "tarjeta", "Enlace de pago", "enlace"],
+  ])("pago mixto con %s y %s: manda los dos, con decimales exactos", async (etiquetaA, medioA, etiquetaB, medioB) => {
+    const { falso } = await renderPOS()
+    const refDe = (medio) => (medio === "efectivo" ? "" : `REF-${medio}`)
+
+    agregar("Martillo de uña")
+    mixto()
+    marcar(etiquetaA)
+    marcar(etiquetaB)
+    importe(etiquetaA, "100.10")
+    importe(etiquetaB, "106.90")
+
+    if (refDe(medioA)) referencia(etiquetaA, refDe(medioA))
+    referencia(etiquetaB, refDe(medioB))
+
+    clicFacturar()
+
+    await waitFor(() => expect(falso.datos.ventas).toHaveLength(1))
+    expect(rpcDeVenta(falso)[1].p_cobros).toEqual([
+      { medio: medioA, monto: 100.1, referencia: refDe(medioA) },
+      { medio: medioB, monto: 106.9, referencia: refDe(medioB) },
+    ])
+  })
+
+  it("en pago mixto un tercer medio queda bloqueado, y se libera al soltar uno", async () => {
+    await renderPOS()
+
+    agregar("Martillo de uña")
+    mixto()
+    marcar("Efectivo")
+    marcar("Tarjeta")
+
+    expect(screen.getByRole("checkbox", { name: "Transferencia" })).toBeDisabled()
+    expect(screen.getByRole("checkbox", { name: "Enlace de pago" })).toBeDisabled()
+
+    fireEvent.click(screen.getByRole("checkbox", { name: "Transferencia" }))
+
+    expect(screen.queryByLabelText("Importe de Transferencia")).not.toBeInTheDocument()
+
+    marcar("Tarjeta")
+
+    expect(screen.getByRole("checkbox", { name: "Transferencia" })).toBeEnabled()
+  })
+
+  it("un pago mixto no se confirma con un solo medio, aunque ese medio lleve el total", async () => {
+    await renderPOS()
+
+    agregar("Martillo de uña")
+    mixto()
+    marcar("Efectivo")
+
+    expect(screen.queryByLabelText("Referencia de Efectivo")).not.toBeInTheDocument()
+    expect(screen.getByLabelText("Importe de Efectivo")).toHaveValue("")
+
+    importe("Efectivo", "207")
+
+    expect(screen.getByText("Elige 2 medios de pago.")).toBeInTheDocument()
+    expect(botonFacturar()).toBeDisabled()
+  })
+
+  it("un pago mixto exige importe positivo en los dos medios", async () => {
+    await renderPOS()
+
+    agregar("Martillo de uña")
+    mixto()
     marcar("Efectivo")
     marcar("Transferencia")
+    referencia("Transferencia", "TRF-1")
+    importe("Efectivo", "207")
 
-    // Efectivo conserva el total: sin saldo, Transferencia no admite importe.
-    expect(screen.getByLabelText("Importe de Efectivo")).toHaveValue("207.00")
+    // Efectivo lleva todo: la cuenta cuadra, pero Transferencia no tiene saldo.
     expect(screen.getByLabelText("Importe de Transferencia")).toBeDisabled()
+    expect(screen.getByText(/baja el otro importe/i)).toBeInTheDocument()
+    expect(botonFacturar()).toBeDisabled()
+  })
 
+  it("un pago mixto no se confirma hasta sumar el total y tener las referencias", async () => {
+    const { falso } = await renderPOS()
+
+    agregar("Martillo de uña")
+    mixto()
+    marcar("Efectivo")
+    marcar("Transferencia")
     importe("Efectivo", "100")
     importe("Transferencia", "100")
-    fireEvent.change(screen.getByLabelText("Referencia de Transferencia"), { target: { value: "TRF-1" } })
 
     const resumen = screen.getByText("Pendiente").closest("dl")
 
     expect(within(resumen).getByText("Pendiente").nextSibling).toHaveTextContent("7.00")
     expect(within(resumen).getByText("Importe asignado").nextSibling).toHaveTextContent("200.00")
-    expect(screen.getByRole("button", { name: /generar factura/i })).toBeDisabled()
+    expect(botonFacturar()).toBeDisabled()
 
     importe("Transferencia", "107")
 
     expect(within(resumen).getByText("Pendiente").nextSibling).toHaveTextContent("0.00")
+    expect(screen.getByText("Escribe la referencia de Transferencia.")).toBeInTheDocument()
+    expect(botonFacturar()).toBeDisabled()
 
+    referencia("Transferencia", "TRF-1")
     clicFacturar()
 
     await waitFor(() => expect(falso.datos.ventas).toHaveLength(1))
@@ -543,6 +738,7 @@ describe("POS: venta registrada por el servidor", () => {
     await renderPOS()
 
     agregar("Martillo de uña")
+    mixto()
     marcar("Efectivo")
     marcar("Tarjeta")
     importe("Efectivo", "100")
@@ -560,8 +756,10 @@ describe("POS: venta registrada por el servidor", () => {
     await renderPOS()
 
     agregar("Martillo de uña")
+    mixto()
     marcar("Efectivo")
     marcar("Tarjeta")
+    importe("Efectivo", "207.00")
 
     const campo = screen.getByLabelText("Importe de Efectivo")
 
@@ -571,83 +769,78 @@ describe("POS: venta registrada por el servidor", () => {
     expect(campo.selectionEnd).toBe("207.00".length)
   })
 
-  it("al cambiar el total: con un medio lo sigue, y con varios bloquea hasta corregir", async () => {
-    await renderPOS()
-
-    agregar("Martillo de uña")
-    marcar("Efectivo")
-    agregar("Martillo de uña")
-
-    // Dos martillos: 414.00. El único medio sigue al total.
-    expect(screen.getByLabelText("Importe de Efectivo")).toHaveValue("414.00")
-
-    marcar("Transferencia")
-    importe("Efectivo", "300")
-    importe("Transferencia", "114")
-    fireEvent.change(screen.getByLabelText("Referencia de Transferencia"), { target: { value: "TRF-1" } })
-    fireEvent.click(screen.getByRole("button", { name: /quitar una unidad de martillo/i }))
-
-    // Bajó a 207.00: los importes no se cambian solos, y no se puede confirmar.
-    expect(screen.getByText("Excedente").nextSibling).toHaveTextContent("207.00")
-    expect(screen.getByText(/el total bajó/i)).toBeInTheDocument()
-    expect(screen.getByRole("button", { name: /generar factura/i })).toBeDisabled()
-
-    importe("Efectivo", "93")
-
-    expect(screen.getByText("Pendiente").nextSibling).toHaveTextContent("0.00")
-    expect(screen.getByRole("button", { name: /generar factura/i })).toBeEnabled()
-  })
-
-  it("desmarcar borra importe y referencia, y el que queda solo vuelve a llevar el total", async () => {
+  it("cambiar de modalidad limpia todo: nada oculto ni antiguo viaja", async () => {
     const { falso } = await renderPOS()
 
     agregar("Martillo de uña")
+    mixto()
     marcar("Efectivo")
     marcar("Tarjeta")
     importe("Efectivo", "100")
     importe("Tarjeta", "107")
-    fireEvent.change(screen.getByLabelText("Referencia de Tarjeta"), { target: { value: "AUT-9" } })
+    referencia("Tarjeta", "AUT-VIEJA")
 
-    marcar("Tarjeta")
+    unico("Pago único")
 
-    expect(screen.queryByLabelText("Importe de Tarjeta")).not.toBeInTheDocument()
-    expect(screen.getByLabelText("Importe de Efectivo")).toHaveValue("207.00")
+    expect(screen.queryByLabelText(/^importe de/i)).not.toBeInTheDocument()
+    expect(screen.getByText("Importe asignado").nextSibling).toHaveTextContent("0.00")
+    expect(botonFacturar()).toBeDisabled()
 
-    marcar("Tarjeta")
+    unico("Tarjeta")
 
-    expect(screen.getByLabelText("Importe de Tarjeta")).toHaveValue("")
+    expect(screen.getByLabelText("Referencia de Tarjeta")).toHaveValue("")
 
-    marcar("Tarjeta")
+    referencia("Tarjeta", "AUT-NUEVA")
+    mixto()
+
+    expect(screen.getByRole("checkbox", { name: "Tarjeta" })).not.toBeChecked()
+    expect(botonFacturar()).toBeDisabled()
+
+    unico("Pago único")
+    unico("Efectivo")
     clicFacturar()
 
     await waitFor(() => expect(falso.datos.ventas).toHaveLength(1))
     expect(rpcDeVenta(falso)[1].p_cobros).toEqual([{ medio: "efectivo", monto: 207, referencia: "" }])
   })
 
-  it("con los cuatro medios manda cada importe con decimales exactos", async () => {
-    const { falso } = await renderPOS()
+  it("al cambiar el total: el pago único lo sigue, y el mixto bloquea hasta corregir", async () => {
+    await renderPOS()
 
     agregar("Martillo de uña")
+    unico("Efectivo")
+    agregar("Martillo de uña")
+
+    // Dos martillos: 414.00. El único medio sigue al total.
+    expect(screen.getByText("Importe asignado").nextSibling).toHaveTextContent("414.00")
+    expect(botonFacturar()).toBeEnabled()
+
+    mixto()
     marcar("Efectivo")
     marcar("Transferencia")
-    marcar("Tarjeta")
-    marcar("Enlace de pago")
-    importe("Efectivo", "100.10")
-    importe("Transferencia", "100.20")
-    importe("Tarjeta", "6.60")
-    importe("Enlace de pago", "0.10")
-    fireEvent.change(screen.getByLabelText("Referencia de Transferencia"), { target: { value: "T" } })
-    fireEvent.change(screen.getByLabelText("Referencia de Tarjeta"), { target: { value: "A" } })
-    fireEvent.change(screen.getByLabelText("Referencia de Enlace de pago"), { target: { value: "L" } })
-    clicFacturar()
+    importe("Efectivo", "300")
+    importe("Transferencia", "114")
+    referencia("Transferencia", "TRF-1")
+    fireEvent.click(screen.getByRole("button", { name: /quitar una unidad de martillo/i }))
 
-    await waitFor(() => expect(falso.datos.ventas).toHaveLength(1))
-    expect(rpcDeVenta(falso)[1].p_cobros).toEqual([
-      { medio: "efectivo", monto: 100.1, referencia: "" },
-      { medio: "transferencia", monto: 100.2, referencia: "T" },
-      { medio: "tarjeta", monto: 6.6, referencia: "A" },
-      { medio: "enlace", monto: 0.1, referencia: "L" },
-    ])
+    // Bajó a 207.00: los importes no se cambian solos, y no se puede confirmar.
+    expect(screen.getByText("Excedente").nextSibling).toHaveTextContent("207.00")
+    expect(screen.getByText(/el total bajó/i)).toBeInTheDocument()
+    expect(botonFacturar()).toBeDisabled()
+
+    importe("Efectivo", "93")
+
+    expect(screen.getByText("Pendiente").nextSibling).toHaveTextContent("0.00")
+    expect(botonFacturar()).toBeEnabled()
+  })
+
+  it("el panel muestra un solo total: el cuadre no lo repite", async () => {
+    await renderPOS()
+
+    agregar("Martillo de uña")
+    unico("Efectivo")
+
+    expect(screen.getAllByText("Total")).toHaveLength(1)
   })
 
   it("la vista previa tampoco confirma mientras los medios no cuadran", async () => {
@@ -666,7 +859,8 @@ describe("POS: venta registrada por el servidor", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /crédito/i }))
 
-    expect(screen.queryByRole("checkbox", { name: "Efectivo" })).not.toBeInTheDocument()
+    expect(screen.queryByRole("radio", { name: "Efectivo" })).not.toBeInTheDocument()
+    expect(screen.queryByText("Importe asignado")).not.toBeInTheDocument()
     expect(rpcDeVenta(falso)).toBeUndefined()
   })
 

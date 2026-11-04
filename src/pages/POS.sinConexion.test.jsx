@@ -128,7 +128,7 @@ async function devolverConexion() {
   })
 }
 
-const elegirEfectivo = () => fireEvent.click(screen.getByRole("checkbox", { name: "Efectivo" }))
+const elegirEfectivo = () => fireEvent.click(screen.getByRole("radio", { name: "Efectivo" }))
 
 const botonGuardarSinConexion = () => screen.getByRole("button", { name: /guardar venta sin conexión/i })
 
@@ -216,6 +216,7 @@ describe("POS sin conexión en una ubicación habilitada", () => {
     await quitarConexion()
 
     agregar("Martillo de uña")
+    fireEvent.click(screen.getByRole("radio", { name: "Pago mixto" }))
     fireEvent.click(screen.getByRole("checkbox", { name: "Efectivo" }))
     fireEvent.click(screen.getByRole("checkbox", { name: "Tarjeta" }))
     fireEvent.change(screen.getByLabelText("Importe de Efectivo"), { target: { value: "107" } })
@@ -231,6 +232,20 @@ describe("POS sin conexión en una ubicación habilitada", () => {
       { medio: "efectivo", monto: 107, referencia: "" },
       { medio: "tarjeta", monto: 100, referencia: "AUT-1" },
     ])
+  })
+
+  it("un pago mixto sin los dos importes no se puede guardar", async () => {
+    await renderPOS()
+    await esperarCopia()
+    await quitarConexion()
+
+    agregar("Martillo de uña")
+    fireEvent.click(screen.getByRole("radio", { name: "Pago mixto" }))
+    fireEvent.click(screen.getByRole("checkbox", { name: "Efectivo" }))
+    fireEvent.click(screen.getByRole("checkbox", { name: "Tarjeta" }))
+    fireEvent.change(screen.getByLabelText("Importe de Efectivo"), { target: { value: "207" } })
+
+    expect(botonGuardarSinConexion()).toBeDisabled()
   })
 
   it("descuenta del disponible lo que ya vendió el teléfono y no deja vender de más", async () => {

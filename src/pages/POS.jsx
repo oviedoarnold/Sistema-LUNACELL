@@ -24,8 +24,8 @@ import ClientAutocomplete from "../components/documents/ClientAutocomplete"
 import ModalDeCliente from "../components/documents/ModalDeCliente"
 import { useCarrito } from "../hooks/useCarrito"
 import { useExistenciaDeMiUbicacion } from "../hooks/useExistenciaDeMiUbicacion"
-import SelectorDeMedios from "../components/pagos/SelectorDeMedios"
-import { cobrosDelSelector, problemaDeCobros, selectorVacio } from "../utils/mediosDePago"
+import SelectorDeMedios, { ResumenDeMedios } from "../components/pagos/SelectorDeMedios"
+import { cobrosDelSelector, problemaDelSelector, selectorVacio } from "../utils/mediosDePago"
 import { totalesDe } from "../lib/sinConexion/venta"
 import { useClienteDelDocumento } from "../hooks/useClienteDelDocumento"
 import DocumentPreviewModal from "../components/documents/DocumentPreviewModal"
@@ -280,7 +280,10 @@ function POS() {
 
   // Mientras los medios no sumen el total, la venta no se puede confirmar.
   const mediosSinCuadrar =
-    paymentType === "contado" && problemaDeCobros(cobrosDeLaVenta(), totalACobrar) !== null
+    paymentType === "contado" && problemaDelSelector(medios, totalACobrar) !== null
+
+  // Productos distintos y unidades son cifras diferentes: dos cargadores son un producto.
+  const unidades = cart.reduce((suma, item) => suma + Number(item.quantity), 0)
 
   const handlePaymentTypeChange = (
     type
@@ -628,7 +631,7 @@ function POS() {
     }
 
     if (paymentType === "contado") {
-      const problema = problemaDeCobros(cobrosDeLaVenta(), totalACobrar)
+      const problema = problemaDelSelector(medios, totalACobrar)
 
       if (problema) {
         Swal.fire({ icon: "warning", title: "Revisa el medio de pago", text: problema })
@@ -923,217 +926,244 @@ function POS() {
           className="card cart-card"
           aria-labelledby="pos-titulo-venta"
         >
-          <div className="card-pad">
-            <h2 id="pos-titulo-venta" className="pos-titulo">
-              Venta actual
-            </h2>
+          <div className="card-pad pos-panel">
+            <div className="pos-panel-cuerpo">
+              <h2 id="pos-titulo-venta" className="pos-titulo">
+                Venta actual
+              </h2>
 
-            {/*
-              No es la etiqueta de un campo sino el nombre de un grupo de
-              botones. Como <label> no anunciaba nada y dejaba el grupo sin
-              nombre, pasa a rotularlo con aria-labelledby.
-            */}
-            <div
-              className="field"
-              role="group"
-              aria-labelledby="pos-forma-pago"
-            >
-              <span id="pos-forma-pago" className="rotulo-de-grupo">
-                Forma de pago
-              </span>
+              {/*
+                No es la etiqueta de un campo sino el nombre de un grupo de
+                botones. Como <label> no anunciaba nada y dejaba el grupo sin
+                nombre, pasa a rotularlo con aria-labelledby.
+              */}
+              <div
+                className="field"
+                role="group"
+                aria-labelledby="pos-forma-pago"
+              >
+                <span id="pos-forma-pago" className="rotulo-de-grupo">
+                  Forma de pago
+                </span>
 
-              <div className="pay-toggle">
-                <button
-                  type="button"
-                  className={paymentType === "contado" ? "active" : ""}
-                  aria-pressed={paymentType === "contado"}
-                  onClick={() => handlePaymentTypeChange("contado")}
-                >
-                  <FaMoneyBillWave aria-hidden="true" />
-                  Contado
-                </button>
+                <div className="pay-toggle">
+                  <button
+                    type="button"
+                    className={paymentType === "contado" ? "active" : ""}
+                    aria-pressed={paymentType === "contado"}
+                    onClick={() => handlePaymentTypeChange("contado")}
+                  >
+                    <FaMoneyBillWave aria-hidden="true" />
+                    Contado
+                  </button>
 
-                <button
-                  type="button"
-                  className={paymentType === "credito" ? "active" : ""}
-                  aria-pressed={paymentType === "credito"}
-                  onClick={() => handlePaymentTypeChange("credito")}
-                >
-                  <FaRegCreditCard aria-hidden="true" />
-                  Crédito
-                </button>
+                  <button
+                    type="button"
+                    className={paymentType === "credito" ? "active" : ""}
+                    aria-pressed={paymentType === "credito"}
+                    onClick={() => handlePaymentTypeChange("credito")}
+                  >
+                    <FaRegCreditCard aria-hidden="true" />
+                    Crédito
+                  </button>
+                </div>
               </div>
-            </div>
 
-            <div className="pos-campo">
-              <ClientAutocomplete
-                clients={clients}
-                label={
-                  paymentType === "credito"
-                    ? "Cliente requerido para crédito"
-                    : "Cliente"
-                }
-                placeholder={
-                  paymentType === "credito"
-                    ? "Busca el nombre del cliente..."
-                    : "Escribe el nombre o busca un cliente..."
-                }
-                value={clientSearch}
-                selectedClient={selectedClient}
-                required={paymentType === "credito"}
-                allowFreeText={paymentType === "contado"}
-                onChange={handleClientSearchChange}
-                onSelect={handleSelectClient}
-                onClear={handleClearClient}
-                onCreateNew={modoSinConexion ? undefined : openNewClientModal}
-              />
-            </div>
+              <div className="pos-cliente-rtn">
+                <div className="pos-campo">
+                  <ClientAutocomplete
+                    clients={clients}
+                    label={
+                      paymentType === "credito"
+                        ? "Cliente requerido para crédito"
+                        : "Cliente"
+                    }
+                    placeholder={
+                      paymentType === "credito"
+                        ? "Busca el nombre del cliente..."
+                        : "Nombre o buscar cliente..."
+                    }
+                    value={clientSearch}
+                    selectedClient={selectedClient}
+                    required={paymentType === "credito"}
+                    allowFreeText={paymentType === "contado"}
+                    onChange={handleClientSearchChange}
+                    onSelect={handleSelectClient}
+                    onClear={handleClearClient}
+                    onCreateNew={modoSinConexion ? undefined : openNewClientModal}
+                  />
+                </div>
 
-            {paymentType === "credito" && (
-              <div className="field pos-campo">
-                <label htmlFor="pos-fecha-de-vencimiento">
-                  Fecha de vencimiento
-                </label>
+                <div className="field pos-campo">
+                  <label htmlFor="pos-rtn-del-comprador-opcional">
+                    RTN del comprador{" "}
+                    <span className="etiqueta-suave">(opcional)</span>
+                  </label>
 
-                <input
-                  id="pos-fecha-de-vencimiento"
-                  type="date"
-                  value={dueDate}
-                  onChange={(event) => setDueDate(event.target.value)}
-                />
+                  <input
+                    id="pos-rtn-del-comprador-opcional"
+                    type="text"
+                    maxLength="20"
+                    placeholder="Ej. 0801-1990-01234"
+                    value={buyerRTN}
+                    onChange={(event) => setBuyerRTN(event.target.value)}
+                  />
+                </div>
               </div>
-            )}
 
-            {paymentType === "contado" && (
-              <SelectorDeMedios
-                valor={medios}
-                total={totalACobrar}
-                moneda={copiaLocal?.empresa?.moneda || company?.currency}
-                onCambiar={setMedios}
-              />
-            )}
+              {paymentType === "credito" && (
+                <div className="field pos-campo">
+                  <label htmlFor="pos-fecha-de-vencimiento">
+                    Fecha de vencimiento
+                  </label>
 
-            <div className="field pos-campo">
-              <label htmlFor="pos-rtn-del-comprador-opcional">
-                RTN del comprador{" "}
-                <span className="etiqueta-suave">(opcional)</span>
-              </label>
-
-              <input
-                id="pos-rtn-del-comprador-opcional"
-                type="text"
-                maxLength="20"
-                placeholder="Ej. 0801-1990-01234"
-                value={buyerRTN}
-                onChange={(event) => setBuyerRTN(event.target.value)}
-              />
-
-              <span className="hint">
-                Se imprime en la factura si el cliente lo solicita.
-              </span>
-            </div>
-
-            <div className="cart-items">
-              {cart.length === 0 ? (
-                <EmptyState
-                  Icono={FaShoppingCart}
-                  titulo="Todavía no hay productos"
-                  descripcion="Agrega productos de la lista para iniciar la venta."
-                />
-              ) : (
-                cart.map((item) => (
-                  <div key={item.id} className="cart-row">
-                    <div className="name">
-                      {item.name}
-
-                      <small>{formatMoney(item.price)} c/u</small>
-                    </div>
-
-                    <div className="stepper">
-                      <button
-                        type="button"
-                        aria-label={`Quitar una unidad de ${item.name}`}
-                        onClick={() => changeQuantity(item.id, -1)}
-                      >
-                        −
-                      </button>
-
-                      <span>{item.quantity}</span>
-
-                      <button
-                        type="button"
-                        aria-label={`Agregar una unidad de ${item.name}`}
-                        onClick={() => changeQuantity(item.id, 1)}
-                      >
-                        +
-                      </button>
-                    </div>
-
-                    <div className="sub">
-                      {formatMoney(item.price * item.quantity)}
-                    </div>
-
-                    <button
-                      type="button"
-                      className="icon-btn danger cart-remove-button"
-                      onClick={() => removeFromCart(item.id)}
-                      aria-label={`Eliminar ${item.name} de la venta`}
-                      title="Eliminar producto"
-                    >
-                      <FaTrash aria-hidden="true" />
-                    </button>
-                  </div>
-                ))
+                  <input
+                    id="pos-fecha-de-vencimiento"
+                    type="date"
+                    value={dueDate}
+                    onChange={(event) => setDueDate(event.target.value)}
+                  />
+                </div>
               )}
+
+              {paymentType === "contado" && (
+                <SelectorDeMedios
+                  valor={medios}
+                  total={totalACobrar}
+                  onCambiar={setMedios}
+                />
+              )}
+
+              <section className="pos-articulos" aria-labelledby="pos-titulo-articulos">
+                <div className="pos-articulos-cabecera">
+                  <h3 id="pos-titulo-articulos" className="pos-titulo">
+                    Artículos facturados
+                  </h3>
+
+                  <span className="pos-articulos-cuenta">
+                    {cart.length} {cart.length === 1 ? "producto" : "productos"} · {unidades}{" "}
+                    {unidades === 1 ? "unidad" : "unidades"}
+                  </span>
+                </div>
+
+                <div className="cart-items">
+                  {cart.length === 0 ? (
+                    <EmptyState
+                      Icono={FaShoppingCart}
+                      titulo="Todavía no hay productos"
+                      descripcion="Agrega productos de la lista para iniciar la venta."
+                    />
+                  ) : (
+                    cart.map((item, indice) => (
+                      <div key={item.id} className="cart-row">
+                        {/* Solo se ve aquí: no cambia el orden ni los datos de la factura. */}
+                        <span className="pos-linea-numero">{indice + 1}.</span>
+
+                        <div className="name">
+                          {item.name}
+
+                          <small>{formatMoney(item.price)} c/u</small>
+                        </div>
+
+                        <div className="stepper">
+                          <button
+                            type="button"
+                            aria-label={`Quitar una unidad de ${item.name}`}
+                            onClick={() => changeQuantity(item.id, -1)}
+                          >
+                            −
+                          </button>
+
+                          <span>{item.quantity}</span>
+
+                          <button
+                            type="button"
+                            aria-label={`Agregar una unidad de ${item.name}`}
+                            onClick={() => changeQuantity(item.id, 1)}
+                          >
+                            +
+                          </button>
+                        </div>
+
+                        <div className="sub">
+                          {formatMoney(item.price * item.quantity)}
+                        </div>
+
+                        <button
+                          type="button"
+                          className="icon-btn danger cart-remove-button"
+                          onClick={() => removeFromCart(item.id)}
+                          aria-label={`Eliminar ${item.name} de la venta`}
+                          title="Eliminar producto"
+                        >
+                          <FaTrash aria-hidden="true" />
+                        </button>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </section>
             </div>
 
-            <div className="totals">
-              <div className="totals-row">
-                <span>Subtotal</span>
+            <div className="pos-panel-pie">
+              <div className="totals">
+                <div className="totals-row">
+                  <span>Subtotal</span>
 
-                <span className="v">{formatMoney(subtotal)}</span>
+                  <span className="v">{formatMoney(subtotal)}</span>
+                </div>
+
+                <div className="totals-row">
+                  <span>ISV ({tasaISV}%)</span>
+
+                  <span className="v">{formatMoney(tax)}</span>
+                </div>
+
+                <div className="totals-row grand">
+                  <span>Total</span>
+
+                  <span className="v">{formatMoney(total)}</span>
+                </div>
               </div>
 
-              <div className="totals-row">
-                <span>ISV ({tasaISV}%)</span>
+              {paymentType === "contado" && (
+                <ResumenDeMedios
+                  valor={medios}
+                  total={totalACobrar}
+                  moneda={copiaLocal?.empresa?.moneda || company?.currency}
+                />
+              )}
 
-                <span className="v">{formatMoney(tax)}</span>
+              <div className="pos-acciones">
+                <button
+                  type="button"
+                  className="btn btn-primary btn-lg btn-block"
+                  disabled={cart.length === 0 || facturando || !existenciaLista || bloqueadoSinConexion || mediosSinCuadrar}
+                  onClick={generateSale}
+                >
+                  {textoDelBotonDeVenta(facturando, modoSinConexion)}
+                </button>
+
+                <div className="pos-acciones-secundarias">
+                  <button
+                    type="button"
+                    className="btn btn-secondary"
+                    disabled={cart.length === 0}
+                    onClick={openPreview}
+                  >
+                    Vista previa
+                  </button>
+
+                  <button
+                    type="button"
+                    className="btn btn-ghost"
+                    disabled={cart.length === 0}
+                    onClick={clearCurrentSale}
+                  >
+                    Vaciar venta
+                  </button>
+                </div>
               </div>
-
-              <div className="totals-row grand">
-                <span>Total</span>
-
-                <span className="v">{formatMoney(total)}</span>
-              </div>
-            </div>
-
-            <div className="pos-acciones">
-              <button
-                type="button"
-                className="btn btn-primary btn-lg btn-block"
-                disabled={cart.length === 0 || facturando || !existenciaLista || bloqueadoSinConexion || mediosSinCuadrar}
-                onClick={generateSale}
-              >
-                {textoDelBotonDeVenta(facturando, modoSinConexion)}
-              </button>
-
-              <button
-                type="button"
-                className="btn btn-secondary btn-block"
-                disabled={cart.length === 0}
-                onClick={openPreview}
-              >
-                Vista previa
-              </button>
-
-              <button
-                type="button"
-                className="btn btn-ghost btn-block"
-                disabled={cart.length === 0}
-                onClick={clearCurrentSale}
-              >
-                Vaciar venta
-              </button>
             </div>
           </div>
         </aside>

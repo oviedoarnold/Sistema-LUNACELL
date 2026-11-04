@@ -106,7 +106,7 @@ const escribirMonto = (valor) => {
 }
 
 const confirmar = () => {
-  const efectivo = screen.getByRole("checkbox", { name: "Efectivo" })
+  const efectivo = screen.getByRole("radio", { name: "Efectivo" })
 
   if (!efectivo.checked) fireEvent.click(efectivo)
 
@@ -277,6 +277,8 @@ describe("validación del monto en la pantalla", () => {
 })
 
 describe("medios de pago del abono", () => {
+  const unico = (nombre) => fireEvent.click(screen.getByRole("radio", { name: nombre }))
+
   const marcar = (nombre) => fireEvent.click(screen.getByRole("checkbox", { name: nombre }))
 
   const botonConfirmar = () => screen.getByRole("button", { name: /confirmar abono/i })
@@ -298,7 +300,7 @@ describe("medios de pago del abono", () => {
 
     abrirCobro()
     escribirMonto(100)
-    marcar("Transferencia")
+    unico("Transferencia")
 
     expect(screen.getByText("Escribe la referencia de Transferencia.")).toBeInTheDocument()
     expect(botonConfirmar()).toBeDisabled()
@@ -316,8 +318,12 @@ describe("medios de pago del abono", () => {
 
     abrirCobro()
     escribirMonto(100)
+    unico("Pago mixto")
     marcar("Efectivo")
     marcar("Tarjeta")
+
+    expect(screen.getByRole("checkbox", { name: "Transferencia" })).toBeDisabled()
+
     fireEvent.change(screen.getByLabelText("Importe de Efectivo"), { target: { value: "40" } })
     fireEvent.change(screen.getByLabelText("Importe de Tarjeta"), { target: { value: "50" } })
     fireEvent.change(screen.getByLabelText("Referencia de Tarjeta"), { target: { value: "AUT-1" } })
@@ -337,6 +343,38 @@ describe("medios de pago del abono", () => {
       { medio: "tarjeta", monto: 60, referencia: "AUT-1" },
     ])
   })
+
+  it("un pago mixto con un solo medio no se confirma, aunque lleve todo el monto", async () => {
+    await renderCxC()
+
+    abrirCobro()
+    escribirMonto(100)
+    unico("Pago mixto")
+    marcar("Efectivo")
+    fireEvent.change(screen.getByLabelText("Importe de Efectivo"), { target: { value: "100" } })
+
+    expect(screen.getByText("Elige 2 medios de pago.")).toBeInTheDocument()
+    expect(botonConfirmar()).toBeDisabled()
+  })
+
+  it("cambiar de modalidad limpia importes y referencias", async () => {
+    await renderCxC()
+    const rpc = responderRpc(pagoDelServidor())
+
+    abrirCobro()
+    escribirMonto(100)
+    unico("Pago mixto")
+    marcar("Efectivo")
+    marcar("Tarjeta")
+    fireEvent.change(screen.getByLabelText("Importe de Tarjeta"), { target: { value: "100" } })
+    fireEvent.change(screen.getByLabelText("Referencia de Tarjeta"), { target: { value: "VIEJA" } })
+    unico("Pago único")
+    unico("Efectivo")
+    clicConfirmar()
+
+    await waitFor(() => expect(rpc).toHaveBeenCalled())
+    expect(rpc.mock.calls[0][1].p_cobros).toEqual([{ medio: "efectivo", monto: 100, referencia: "" }])
+  })
 })
 
 describe("el monto y los medios juntos", () => {
@@ -345,10 +383,10 @@ describe("el monto y los medios juntos", () => {
 
     abrirCobro()
     escribirMonto(100)
-    fireEvent.click(screen.getByRole("checkbox", { name: "Efectivo" }))
+    fireEvent.click(screen.getByRole("radio", { name: "Efectivo" }))
     escribirMonto(250.5)
 
-    expect(screen.getByLabelText("Importe de Efectivo")).toHaveValue("250.50")
+    expect(screen.getByText("Importe asignado").nextSibling).toHaveTextContent("250.50")
   })
 
   it("si el monto no vale, el botón sigue activo para explicar por qué", async () => {
