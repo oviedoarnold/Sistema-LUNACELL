@@ -105,7 +105,7 @@ function Receivables() {
     setClaveDelCobro(null)
   }
 
-  const confirmarCobro = async ({ monto, nota }) => {
+  const confirmarCobro = async ({ monto, nota, cobros }) => {
     if (!cuentaDelCobro || enviando) return
 
     setEnviando(true)
@@ -118,6 +118,7 @@ function Receivables() {
         monto,
         nota,
         clave: claveDelCobro,
+        cobros,
       })
     } catch (problema) {
       /*

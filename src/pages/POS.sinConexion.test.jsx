@@ -98,7 +98,11 @@ async function renderPOS({ ubicacion = CAMION, rpcsExtra = {}, fallarEn = {} } =
       rolDelUsuario: "vendedor",
       permisosDelUsuario: ["pos", "clients", "inventory-own", "sales-history"],
       fallarEn,
-      rpcsExtra: { sincronizar_venta_sin_conexion: (a) => servidor.rpc(a), ...rpcsExtra },
+      rpcsExtra: {
+        sincronizar_venta_sin_conexion: (a) => servidor.rpc(a),
+        sincronizar_venta_con_medios: (a) => servidor.rpc(a),
+        ...rpcsExtra,
+      },
       esperar: ["ventas"],
     }
   )
@@ -124,6 +128,8 @@ async function devolverConexion() {
   })
 }
 
+const elegirEfectivo = () => fireEvent.change(screen.getByLabelText("Medio de pago"), { target: { value: "efectivo" } })
+
 const botonGuardarSinConexion = () => screen.getByRole("button", { name: /guardar venta sin conexión/i })
 
 const filaDelCatalogo = (nombre) => screen.getAllByText(nombre)[0].closest(".picker-item")
@@ -147,6 +153,7 @@ describe("POS con conexión", () => {
     expect(screen.getByText(/en línea/i)).toBeInTheDocument()
 
     agregar("Martillo de uña")
+    elegirEfectivo()
     fireEvent.click(screen.getByRole("button", { name: /generar factura/i }))
 
     await waitFor(() => expect(falso.datos.ventas).toHaveLength(1))
@@ -161,6 +168,7 @@ describe("POS con conexión", () => {
     const antes = consultasDeUbicacion()
 
     agregar("Martillo de uña")
+    elegirEfectivo()
     fireEvent.click(screen.getByRole("button", { name: /generar factura/i }))
     await waitFor(() => expect(falso.datos.ventas).toHaveLength(1))
 
@@ -179,6 +187,7 @@ describe("POS sin conexión en una ubicación habilitada", () => {
     expect(screen.getByText(/modo sin conexión/i)).toBeInTheDocument()
 
     agregar("Martillo de uña")
+    elegirEfectivo()
     fireEvent.click(botonGuardarSinConexion())
 
     await waitFor(() => expect(screen.getByText("COMPROBANTE PROVISIONAL")).toBeInTheDocument())
@@ -186,9 +195,21 @@ describe("POS sin conexión en una ubicación habilitada", () => {
     expect(screen.getAllByText(/^PROV-[A-Z0-9]{4}-000001$/).length).toBeGreaterThan(0)
     expect(screen.queryByText(/^CAI$/)).not.toBeInTheDocument()
     expect(falso.datos.ventas).toHaveLength(0)
-    expect(falso.rpc).not.toHaveBeenCalledWith("registrar_venta_ubicacion", expect.anything())
+    expect(falso.rpc).not.toHaveBeenCalledWith("registrar_venta_con_medios", expect.anything())
     expect(Swal.fire).toHaveBeenCalledWith(expect.objectContaining({ title: "Venta guardada en este teléfono" }))
     await waitFor(() => expect(screen.getByText(/1 venta pendiente de sincronizar/i)).toBeInTheDocument())
+  })
+
+  it("sin elegir el medio de pago no guarda la venta", async () => {
+    await renderPOS()
+    await esperarCopia()
+    await quitarConexion()
+
+    agregar("Martillo de uña")
+    fireEvent.click(botonGuardarSinConexion())
+
+    await waitFor(() => expect(Swal.fire).toHaveBeenCalledWith(expect.objectContaining({ title: "Revisa el medio de pago" })))
+    expect(screen.queryByText("COMPROBANTE PROVISIONAL")).not.toBeInTheDocument()
   })
 
   it("descuenta del disponible lo que ya vendió el teléfono y no deja vender de más", async () => {
@@ -200,6 +221,7 @@ describe("POS sin conexión en una ubicación habilitada", () => {
 
     agregar("Martillo de uña")
     agregar("Martillo de uña")
+    elegirEfectivo()
     fireEvent.click(botonGuardarSinConexion())
     await waitFor(() => expect(screen.getByText(/2 ventas? pendientes? de sincronizar|1 venta pendiente/i)).toBeInTheDocument())
 
@@ -233,6 +255,7 @@ describe("POS sin conexión en una ubicación habilitada", () => {
     await quitarConexion()
 
     agregar("Martillo de uña")
+    elegirEfectivo()
     fireEvent.click(botonGuardarSinConexion())
     await waitFor(() => expect(screen.getByText(/1 venta pendiente de sincronizar/i)).toBeInTheDocument())
 
@@ -241,6 +264,7 @@ describe("POS sin conexión en una ubicación habilitada", () => {
     await waitFor(() => expect(servidor.recibidas).toHaveLength(1))
     expect(servidor.recibidas[0]).toMatchObject({ p_ubicacion_id: "camion-01", p_forma_pago: "contado" })
     expect(servidor.recibidas[0].p_clave_idempotencia).toMatch(/^off-/)
+    expect(servidor.recibidas[0].p_cobros).toEqual([{ medio: "efectivo", monto: 207, referencia: "" }])
     await waitFor(() => expect(screen.getByText(/sin ventas pendientes/i)).toBeInTheDocument())
 
     fireEvent.click(screen.getByRole("button", { name: /ventas sin conexión/i }))
@@ -260,6 +284,7 @@ describe("POS sin conexión en una ubicación habilitada", () => {
     await quitarConexion()
 
     agregar("Martillo de uña")
+    elegirEfectivo()
     fireEvent.click(botonGuardarSinConexion())
     await waitFor(() => expect(screen.getByText(/1 venta pendiente de sincronizar/i)).toBeInTheDocument())
     await devolverConexion()
@@ -285,6 +310,7 @@ describe("POS sin conexión en una ubicación habilitada", () => {
     await esperarCopia()
     await quitarConexion()
     agregar("Martillo de uña")
+    elegirEfectivo()
     fireEvent.click(botonGuardarSinConexion())
     await waitFor(() => expect(screen.getByText(/1 venta pendiente de sincronizar/i)).toBeInTheDocument())
 
@@ -306,7 +332,7 @@ describe("POS sin conexión en una ubicación habilitada", () => {
 })
 
 describe("venta en línea que se queda sin respuesta", () => {
-  // registrar_venta_ubicacion SÍ registra, pero la respuesta no llega.
+  // registrar_venta_con_medios SÍ registra, pero la respuesta no llega.
   const registrarSinRespuesta = (argumentos, { datos }) => {
     datos.ventas.push({
       id: "v-en-linea",
@@ -326,11 +352,12 @@ describe("venta en línea que se queda sin respuesta", () => {
   }
 
   it("ofrece guardarla en el teléfono; al volver la conexión comprueba que ya existía y no la registra dos veces", async () => {
-    await renderPOS({ rpcsExtra: { registrar_venta_ubicacion: registrarSinRespuesta } })
+    await renderPOS({ rpcsExtra: { registrar_venta_con_medios: registrarSinRespuesta } })
     await esperarCopia()
 
     Swal.fire.mockResolvedValueOnce({ isConfirmed: false, isDenied: true, isDismissed: false })
     agregar("Martillo de uña")
+    elegirEfectivo()
     fireEvent.click(screen.getByRole("button", { name: /generar factura/i }))
 
     await waitFor(() => expect(Swal.fire).toHaveBeenCalledWith(expect.objectContaining({ title: "No hubo respuesta del servidor" })))
@@ -349,7 +376,7 @@ describe("venta en línea que se queda sin respuesta", () => {
     let intentos = 0
     const { falso } = await renderPOS({
       rpcsExtra: {
-        registrar_venta_ubicacion: (argumentos, contexto) => {
+        registrar_venta_con_medios: (argumentos, contexto) => {
           intentos += 1
           if (intentos === 1) return { data: null, error: { code: "", message: "TypeError: Failed to fetch" }, status: 0 }
           contexto.datos.ventas.push({ id: "v-2", empresa_id: EMPRESA, numero_factura: "000-001-01-00000078", fecha: "2026-10-10T12:00:00Z", total: 207, subtotal: 180, isv: 27, tasa_isv: 15, forma_pago: "contado", estado: "pagada" })
@@ -361,10 +388,11 @@ describe("venta en línea que se queda sin respuesta", () => {
 
     Swal.fire.mockResolvedValueOnce({ isConfirmed: true, isDenied: false, isDismissed: false })
     agregar("Martillo de uña")
+    elegirEfectivo()
     fireEvent.click(screen.getByRole("button", { name: /generar factura/i }))
 
     await waitFor(() => expect(intentos).toBe(2))
-    const claves = falso.rpc.mock.calls.filter(([n]) => n === "registrar_venta_ubicacion").map(([, a]) => a.p_clave_idempotencia)
+    const claves = falso.rpc.mock.calls.filter(([n]) => n === "registrar_venta_con_medios").map(([, a]) => a.p_clave_idempotencia)
     expect(new Set(claves).size).toBe(1)
     expect(screen.queryByText("COMPROBANTE PROVISIONAL")).not.toBeInTheDocument()
   })
@@ -395,11 +423,12 @@ describe("POS sin conexión en una ubicación sin autorización", () => {
 
 describe("venta guardada tras un intento en línea que no se registró", () => {
   it("se envía como venta sin conexión y lleva en la nota la clave del intento, para revisar duplicados", async () => {
-    await renderPOS({ fallarEn: { registrar_venta_ubicacion: { code: "", message: "TypeError: Failed to fetch" } } })
+    await renderPOS({ fallarEn: { registrar_venta_con_medios: { code: "", message: "TypeError: Failed to fetch" } } })
     await esperarCopia()
 
     Swal.fire.mockResolvedValueOnce({ isConfirmed: false, isDenied: true, isDismissed: false })
     agregar("Martillo de uña")
+    elegirEfectivo()
     fireEvent.click(screen.getByRole("button", { name: /generar factura/i }))
     await waitFor(() => expect(screen.getByText("COMPROBANTE PROVISIONAL")).toBeInTheDocument())
 
@@ -421,6 +450,7 @@ describe("decisión del administrador sobre una venta en conciliación", () => {
     await esperarCopia()
     await quitarConexion()
     agregar("Martillo de uña")
+    elegirEfectivo()
     fireEvent.click(botonGuardarSinConexion())
     await waitFor(() => expect(screen.getByText(/1 venta pendiente de sincronizar/i)).toBeInTheDocument())
     await devolverConexion()

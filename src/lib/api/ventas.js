@@ -200,6 +200,10 @@ const MOTIVOS_DE_VENTA = {
   LV006: "producto-invalido",
   LV007: "existencia-insuficiente",
   LV008: "ubicacion-no-vende",
+  LM001: "medios-invalidos",
+  LM002: "medios-no-suman",
+  LM003: "credito-con-medios",
+  LM005: "clave-reusada",
   42501: "sin-permiso",
 }
 
@@ -234,7 +238,7 @@ export class ErrorDeVenta extends Error {
 export async function crearVenta(venta, { clave = null } = {}) {
   const esCredito = venta.paymentType === "credito"
 
-  const { data, error, status } = await supabase.rpc("registrar_venta_ubicacion", {
+  const argumentos = {
     p_items: (venta.items || []).map((item) => ({
       producto_id: item.productId ?? item.id,
       cantidad: Number(item.qty ?? item.quantity),
@@ -246,7 +250,16 @@ export async function crearVenta(venta, { clave = null } = {}) {
     p_fecha_vencimiento: esCredito ? venta.dueDate || null : null,
     p_nota: venta.note || "",
     p_clave_idempotencia: clave,
-  })
+  }
+
+  /*
+    Con medios de pago va por registrar_venta_con_medios() (0039), que hace lo
+    mismo y los guarda en la misma transacción. Una venta a crédito no se cobra
+    al venderla y sigue por el camino de siempre.
+  */
+  const { data, error, status } = venta.cobros?.length
+    ? await supabase.rpc("registrar_venta_con_medios", { ...argumentos, p_cobros: venta.cobros })
+    : await supabase.rpc("registrar_venta_ubicacion", argumentos)
 
   if (error) {
     const motivo = MOTIVOS_DE_VENTA[error.code]

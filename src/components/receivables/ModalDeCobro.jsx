@@ -1,9 +1,15 @@
 import { useMemo, useState } from "react"
 
+import SelectorDeMedios from "../pagos/SelectorDeMedios"
 import ModalShell from "../forms/ModalShell"
 import FormField from "../forms/FormField"
 import { formatMoney } from "../../utils/format"
 import { previaDelReparto } from "../../utils/cuentasPorCobrar"
+import {
+  cobrosDelSelector,
+  problemaDeCobros,
+  selectorVacio,
+} from "../../utils/mediosDePago"
 
 /*
   Cobrarle a un cliente.
@@ -28,6 +34,7 @@ function ModalDeCobro({
   const [monto, setMonto] = useState("")
   const [nota, setNota] = useState("")
   const [avisoLocal, setAvisoLocal] = useState("")
+  const [medios, setMedios] = useState(selectorVacio)
 
   const montoNumero = Number(monto)
 
@@ -60,6 +67,14 @@ function ModalDeCobro({
       return false
     }
 
+    const problema = problemaDeCobros(cobrosDelSelector(medios, montoNumero), montoNumero)
+
+    if (problema) {
+      setAvisoLocal(problema)
+
+      return false
+    }
+
     setAvisoLocal("")
 
     return true
@@ -71,7 +86,7 @@ function ModalDeCobro({
     if (cobrando) return
     if (!validar()) return
 
-    onConfirmar({ monto: montoNumero, nota: nota.trim() })
+    onConfirmar({ monto: montoNumero, nota: nota.trim(), cobros: cobrosDelSelector(medios, montoNumero) })
   }
 
   const aviso = avisoLocal || error
@@ -173,6 +188,16 @@ function ModalDeCobro({
         >
           Abonar toda la deuda ({formatMoney(cuenta.deudaTotal, moneda)})
         </button>
+
+        <SelectorDeMedios
+          valor={medios}
+          total={Number.isFinite(montoNumero) ? montoNumero : 0}
+          moneda={moneda}
+          onCambiar={(siguiente) => {
+            setMedios(siguiente)
+            setAvisoLocal("")
+          }}
+        />
 
         {previa.length > 0 && (
           <div className="cxc-previa">

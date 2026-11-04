@@ -1,0 +1,37 @@
+/* El selector de medios de pago, en el punto de venta y en los abonos. */
+.medios-de-pago-mixto {
+  border: 1px solid var(--line, #e5e0d6);
+  border-radius: 8px;
+  margin: 0 0 14px;
+  padding: 10px 12px;
+  min-width: 0;
+}
+
+.medios-de-pago-mixto legend {
+  font-size: 13px;
+  padding: 0 4px;
+}
+
+.medios-de-pago-fila {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: 8px;
+}
+
+.medios-de-pago-resto {
+  font-size: 13px;
+  margin: 4px 0 0;
+}
+
+/* Las tasas de comisión, en Configuración. */
+.tasas-de-comision-fila {
+  align-items: flex-end;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.tasas-de-comision-fila .field {
+  margin: 0;
+}

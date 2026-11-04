@@ -30,6 +30,9 @@ const MOTIVOS = {
   LC002: "sin-deuda",
   LC003: "clave-reusada",
   LC004: "reparto-incompleto",
+  LM001: "medios-invalidos",
+  LM002: "medios-no-suman",
+  LM005: "clave-reusada",
 }
 
 export class ErrorDeCobro extends Error {
@@ -77,14 +80,19 @@ export const aPagoDeApp = (dato) => ({
 */
 export async function registrarPagoCliente(
   clienteId,
-  { monto, nota = "", clave = null }
+  { monto, nota = "", clave = null, cobros = [] }
 ) {
-  const { data, error } = await supabase.rpc("registrar_pago_cliente", {
+  const argumentos = {
     p_cliente_id: clienteId,
     p_monto: monto,
     p_clave_idempotencia: clave,
     p_nota: nota,
-  })
+  }
+
+  // Con medios de pago, registrar_pago_con_medios() (0039) hace lo mismo y los guarda.
+  const { data, error } = cobros.length
+    ? await supabase.rpc("registrar_pago_con_medios", { ...argumentos, p_cobros: cobros })
+    : await supabase.rpc("registrar_pago_cliente", argumentos)
 
   if (error) {
     const motivo = MOTIVOS[error.code]

@@ -1208,7 +1208,8 @@ export function crearSupabaseFalso({
         return Promise.resolve(siguienteCorrelativo(argumentos.p_tipo))
       }
 
-      if (nombre === "registrar_venta_ubicacion") {
+      // Los medios los valida la base (0039); aquí vende igual que sin ellos.
+      if (nombre === "registrar_venta_ubicacion" || nombre === "registrar_venta_con_medios") {
         const falla = fallaDe(nombre, "rpc")
 
         return Promise.resolve(

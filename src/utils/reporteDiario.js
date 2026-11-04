@@ -9,6 +9,7 @@
 
 import { textoDelTratamiento } from "./anulacion"
 import { formatMoney } from "./format"
+import { etiquetaDelMedio, textoDeMedios } from "./mediosDePago"
 
 const ZONA = "America/Tegucigalpa"
 
@@ -45,6 +46,12 @@ const formatoDeFechaYHora = new Intl.DateTimeFormat("es-HN", {
 
 export const fechaYHoraEnHonduras = (fecha) => formatoDeFechaYHora.format(new Date(fecha))
 
+const SIN_MEDIO = "Sin registrar"
+
+/* A crédito no se cobra al vender: el medio va en cada abono. */
+const medioDeVenta = ({ forma_pago }, cobros) =>
+  textoDeMedios(cobros) || (forma_pago === "credito" ? "" : SIN_MEDIO)
+
 const conEstado = (venta) => {
   const origen = ORIGEN_DE_VENTA[venta.origen]
   const estado = ESTADO_DE_VENTA[venta.estado] || venta.estado
@@ -68,13 +75,18 @@ const dinero = (titulo) => ({ titulo, tipo: "dinero" })
 /*
   Los indicadores: `valor` es lo que dice la cifra y `tipo` cómo se escribe.
 */
-export function indicadoresDelReporte({ indicadores: i, moneda }) {
+export function indicadoresDelReporte({ indicadores: i, moneda, medios }) {
+  const { totales: t } = medios
+
   return [
     { id: "ventas", etiqueta: "Ventas válidas", valor: i.ventas_total, tipo: "dinero", detalle: cuantas(i.ventas_cantidad, "venta", "ventas") },
     { id: "ticket", etiqueta: "Ticket promedio", valor: i.ticket_promedio, tipo: "dinero" },
     { id: "contado", etiqueta: "Ventas al contado", valor: i.contado_total, tipo: "dinero", detalle: cuantas(i.contado_cantidad, "venta", "ventas") },
     { id: "credito", etiqueta: "Ventas al crédito", valor: i.credito_total, tipo: "dinero", detalle: cuantas(i.credito_cantidad, "venta", "ventas") },
     { id: "cobros", etiqueta: "Cobros recibidos", valor: i.cobros_total, tipo: "dinero", detalle: "Contado válido más abonos del día" },
+    { id: "sin-registrar", etiqueta: "Cobros sin medio registrado", valor: t.sin_registrar, tipo: "dinero", detalle: "Registrados antes de los medios de pago" },
+    { id: "comision", etiqueta: "Comisión estimada del proveedor", valor: t.comision, tipo: "dinero", detalle: `Interna: no se cobra al cliente. ${formatMoney(t.comision_de_anuladas, moneda)} de ventas anuladas este día` },
+    { id: "neto", etiqueta: "Cobros menos comisión", valor: t.neto, tipo: "dinero" },
     { id: "abonos", etiqueta: "Abonos cobrados", valor: i.abonos_total, tipo: "dinero", detalle: `${cuantas(i.abonos_cantidad, "abono", "abonos")}, por la fecha del abono` },
     { id: "anuladas", etiqueta: "Anulaciones del día", valor: i.anuladas_total, tipo: "dinero", detalle: `${cuantas(i.anuladas_cantidad, "anulación", "anulaciones")}, fuera de las ventas; ${formatMoney(i.reembolsos_pendientes, moneda)} por reembolsar` },
   ]
@@ -86,7 +98,29 @@ export function indicadoresDelReporte({ indicadores: i, moneda }) {
   de su columna.
 */
 export function seccionesDelReporte(reporte) {
+  const { medios } = reporte
+
   return [
+    {
+      id: "medios",
+      titulo: "Cobros por medio de pago",
+      vacio: "No hubo cobros este día.",
+      columnas: [texto("Medio"), numero("Operaciones"), dinero("Cobrado"), dinero("Comisión estimada"), dinero("Neto")],
+      filas: medios.por_medio.map((m) => ({
+        clave: m.medio,
+        celdas: [etiquetaDelMedio(m.medio), m.operaciones, m.monto, m.comision, m.neto],
+      })),
+    },
+    {
+      id: "medios-por-ubicacion",
+      titulo: "Cobros por ubicación y medio de pago",
+      vacio: "No hubo cobros este día.",
+      columnas: [texto("Ubicación"), dinero("Efectivo"), dinero("Transferencia"), dinero("Tarjeta"), dinero("Enlace de pago"), dinero("Sin registrar"), dinero("Total"), dinero("Comisión estimada")],
+      filas: medios.por_ubicacion.map((u) => ({
+        clave: u.ubicacion_id || "sin-ubicacion",
+        celdas: [u.ubicacion, u.efectivo, u.transferencia, u.tarjeta, u.enlace, u.sin_registrar, u.total, u.comision],
+      })),
+    },
     {
       id: "ubicaciones",
       titulo: "Ventas por ubicación",
@@ -111,30 +145,30 @@ export function seccionesDelReporte(reporte) {
       id: "operaciones",
       titulo: "Detalle de operaciones",
       vacio: "No hay ventas registradas este día.",
-      columnas: [texto("Fecha y hora"), texto("Correlativo"), texto("Ubicación"), texto("Vendedor"), texto("Cliente"), texto("Productos"), texto("Forma de pago"), dinero("Total"), texto("Estado")],
+      columnas: [texto("Fecha y hora"), texto("Correlativo"), texto("Ubicación"), texto("Vendedor"), texto("Cliente"), texto("Productos"), texto("Forma de pago"), texto("Medio de pago"), dinero("Total"), texto("Estado")],
       filas: reporte.ventas.map((v) => ({
         clave: v.id,
-        celdas: [fechaYHoraEnHonduras(v.fecha), v.numero, v.ubicacion, v.vendedor, v.cliente, productosDe(v), FORMA_DE_PAGO[v.forma_pago] || v.forma_pago, v.total, conEstado(v)],
+        celdas: [fechaYHoraEnHonduras(v.fecha), v.numero, v.ubicacion, v.vendedor, v.cliente, productosDe(v), FORMA_DE_PAGO[v.forma_pago] || v.forma_pago, medioDeVenta(v, medios.por_venta[v.id]), v.total, conEstado(v)],
       })),
     },
     {
       id: "abonos",
       titulo: "Abonos cobrados",
       vacio: "No se cobraron abonos este día.",
-      columnas: [texto("Fecha del abono"), texto("Factura"), texto("Fecha de la venta"), texto("Ubicación"), texto("Cobró"), texto("Cliente"), dinero("Monto")],
+      columnas: [texto("Fecha del abono"), texto("Factura"), texto("Fecha de la venta"), texto("Ubicación"), texto("Cobró"), texto("Cliente"), texto("Medio de pago"), dinero("Monto")],
       filas: reporte.abonos.map((a) => ({
         clave: a.id,
-        celdas: [fechaYHoraEnHonduras(a.fecha), a.numero, fechaYHoraEnHonduras(a.fecha_venta), a.ubicacion, a.cobrador, a.cliente, a.monto],
+        celdas: [fechaYHoraEnHonduras(a.fecha), a.numero, fechaYHoraEnHonduras(a.fecha_venta), a.ubicacion, a.cobrador, a.cliente, textoDeMedios(medios.por_abono[a.id]) || SIN_MEDIO, a.monto],
       })),
     },
     {
       id: "anulaciones",
       titulo: "Anulaciones",
       vacio: "No se anularon ventas este día.",
-      columnas: [texto("Fecha de anulación"), texto("Documento"), texto("Fecha de la venta"), texto("Ubicación"), texto("Anuló"), texto("Cliente"), texto("Forma de pago"), dinero("Total"), texto("Dinero"), texto("Motivo")],
+      columnas: [texto("Fecha de anulación"), texto("Documento"), texto("Fecha de la venta"), texto("Ubicación"), texto("Anuló"), texto("Cliente"), texto("Forma de pago"), texto("Medio de pago"), dinero("Total"), texto("Dinero"), texto("Motivo")],
       filas: reporte.anulaciones.map((a) => ({
         clave: a.id,
-        celdas: [fechaYHoraEnHonduras(a.fecha), a.numero, fechaYHoraEnHonduras(a.fecha_venta), a.ubicacion, a.anulada_por, a.cliente, FORMA_DE_PAGO[a.forma_pago] || a.forma_pago, a.total, textoDelTratamiento(a.tratamiento_dinero), a.motivo],
+        celdas: [fechaYHoraEnHonduras(a.fecha), a.numero, fechaYHoraEnHonduras(a.fecha_venta), a.ubicacion, a.anulada_por, a.cliente, FORMA_DE_PAGO[a.forma_pago] || a.forma_pago, medioDeVenta(a, medios.por_anulacion[a.id]), a.total, textoDelTratamiento(a.tratamiento_dinero), a.motivo],
       })),
     },
     {

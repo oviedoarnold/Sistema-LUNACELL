@@ -106,6 +106,10 @@ const escribirMonto = (valor) => {
 }
 
 const confirmar = () => {
+  const medio = screen.getByLabelText("Medio de pago")
+
+  if (!medio.value) fireEvent.change(medio, { target: { value: "efectivo" } })
+
   fireEvent.click(screen.getByRole("button", { name: /confirmar abono/i }))
 }
 
@@ -272,8 +276,73 @@ describe("validación del monto en la pantalla", () => {
   })
 })
 
+describe("medios de pago del abono", () => {
+  const elegir = (valor) => fireEvent.change(screen.getByLabelText("Medio de pago"), { target: { value: valor } })
+
+  const clicConfirmar = () => fireEvent.click(screen.getByRole("button", { name: /confirmar abono/i }))
+
+  it("sin elegir el medio no cobra", async () => {
+    await renderCxC()
+    const rpc = responderRpc(pagoDelServidor())
+
+    abrirCobro()
+    escribirMonto(100)
+    clicConfirmar()
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(/elige el medio/i)
+    expect(rpc).not.toHaveBeenCalled()
+  })
+
+  it("una transferencia pide su referencia", async () => {
+    await renderCxC()
+    const rpc = responderRpc(pagoDelServidor())
+
+    abrirCobro()
+    escribirMonto(100)
+    elegir("transferencia")
+    clicConfirmar()
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(/referencia de transferencia/i)
+    expect(rpc).not.toHaveBeenCalled()
+
+    fireEvent.change(screen.getByLabelText("Referencia"), { target: { value: "TRF-77" } })
+    clicConfirmar()
+
+    await waitFor(() => expect(rpc).toHaveBeenCalled())
+    expect(rpc.mock.calls[0][1].p_cobros).toEqual([{ medio: "transferencia", monto: 100, referencia: "TRF-77" }])
+  })
+
+  it("un pago mixto manda cada importe, y no sale si no suman el monto", async () => {
+    await renderCxC()
+    const rpc = responderRpc(pagoDelServidor())
+
+    abrirCobro()
+    escribirMonto(100)
+    elegir("mixto")
+    fireEvent.change(screen.getByLabelText("Efectivo"), { target: { value: "40" } })
+    fireEvent.change(screen.getByLabelText("Tarjeta"), { target: { value: "50" } })
+    fireEvent.change(screen.getByLabelText("Referencia de Tarjeta"), { target: { value: "AUT-1" } })
+
+    expect(screen.getByText(/falta asignar/i)).toHaveTextContent("10.00")
+
+    clicConfirmar()
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(/deben sumar el total/i)
+    expect(rpc).not.toHaveBeenCalled()
+
+    fireEvent.change(screen.getByLabelText("Tarjeta"), { target: { value: "60" } })
+    clicConfirmar()
+
+    await waitFor(() => expect(rpc).toHaveBeenCalled())
+    expect(rpc.mock.calls[0][1].p_cobros).toEqual([
+      { medio: "efectivo", monto: 40, referencia: "" },
+      { medio: "tarjeta", monto: 60, referencia: "AUT-1" },
+    ])
+  })
+})
+
 describe("registrar el cobro", () => {
-  it("manda solo cliente, monto, clave y nota", async () => {
+  it("manda solo cliente, monto, clave, nota y medios", async () => {
     await renderCxC()
     const rpc = responderRpc(pagoDelServidor())
 
@@ -288,13 +357,15 @@ describe("registrar el cobro", () => {
 
     const [funcion, argumentos] = rpc.mock.calls[0]
 
-    expect(funcion).toBe("registrar_pago_cliente")
+    expect(funcion).toBe("registrar_pago_con_medios")
     expect(Object.keys(argumentos).sort()).toEqual([
       "p_clave_idempotencia",
       "p_cliente_id",
+      "p_cobros",
       "p_monto",
       "p_nota",
     ])
+    expect(argumentos.p_cobros).toEqual([{ medio: "efectivo", monto: 4000, referencia: "" }])
     expect(argumentos.p_cliente_id).toBe("c1")
     expect(argumentos.p_monto).toBe(4000)
     expect(argumentos.p_nota).toBe("Depósito 881")

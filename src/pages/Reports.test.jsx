@@ -20,18 +20,23 @@ const UBICACIONES = [
   { id: "camion-2", name: "Camión 02", type: "camion" },
 ]
 
-const montar = ({ responder = () => ({ data: REPORTE, error: null }), ...extra } = {}) => {
+const montar = ({
+  responder = () => ({ data: REPORTE, error: null }),
+  responderMedios = () => ({ data: REPORTE.medios, error: null }),
+  ...extra
+} = {}) => {
   const reporteDiario = vi.fn(responder)
+  const medios = vi.fn(responderMedios)
 
   return renderizarPantalla(
     <AuthProvider><LocationsProvider><Reports /></LocationsProvider></AuthProvider>,
     {
       ubicaciones: UBICACIONES,
       esperar: ["ubicaciones"],
-      rpcsExtra: { reporte_diario: reporteDiario },
+      rpcsExtra: { reporte_diario: reporteDiario, reporte_medios_de_pago: medios },
       ...extra,
     }
-  ).then((resultado) => ({ ...resultado, reporteDiario }))
+  ).then((resultado) => ({ ...resultado, reporteDiario, medios }))
 }
 
 describe("Reportes: el administrador", () => {
@@ -71,6 +76,30 @@ describe("Reportes: el administrador", () => {
     expect(screen.getByRole("cell", { name: "Pagada (Sin conexión)" })).toBeInTheDocument()
     expect(screen.getByRole("cell", { name: "1 x Cargador, 2 x Cubo" })).toBeInTheDocument()
     expect(document.body.textContent).not.toMatch(/costo|margen|utilidad/i)
+  })
+
+  it("muestra los cobros por medio y por ubicación, sin inventar el medio de lo anterior", async () => {
+    const { medios } = await montar()
+
+    const seccion = (await screen.findByRole("heading", { name: "Cobros por medio de pago" })).closest("section")
+
+    expect(medios).toHaveBeenCalledWith({ p_dia: hoyEnHonduras(), p_ubicacion: null }, expect.anything())
+    expect(within(seccion).getByRole("cell", { name: "Tarjeta" })).toBeInTheDocument()
+    expect(within(seccion).getByRole("cell", { name: "Sin registrar" })).toBeInTheDocument()
+    expect(screen.getByRole("heading", { name: "Cobros por ubicación y medio de pago" })).toBeInTheDocument()
+    expect(screen.getByRole("cell", { name: "Efectivo 15.00, Tarjeta 100.00 (AUT-9)" })).toBeInTheDocument()
+
+    const indicadores = screen.getByRole("region", { name: /indicadores del día/i })
+
+    expect(within(indicadores).getByText("Comisión estimada del proveedor").closest(".stat-card")).toHaveTextContent("L 7.00")
+    expect(within(indicadores).getByText("Cobros menos comisión").closest(".stat-card")).toHaveTextContent("L 158.00")
+  })
+
+  it("si fallan los medios no muestra un reporte a medias", async () => {
+    await montar({ responderMedios: () => ({ data: null, error: { code: "XX000", message: "fallo" } }) })
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("No se pudo cargar el reporte.")
+    expect(screen.queryByRole("region", { name: /indicadores del día/i })).not.toBeInTheDocument()
   })
 
   it("avisa de las ventas por conciliar, que no están en las cifras", async () => {
@@ -160,10 +189,11 @@ describe("Reportes: los demás roles", () => {
     ["vendedor con Configuración", { rolDelUsuario: "vendedor", permisosDelUsuario: ["settings"] }],
     ["contador", { rolDelUsuario: "contador", permisosDelUsuario: ["sales-history", "settings"] }],
   ])("%s: no ve el reporte y ni siquiera se le pregunta a la base", async (_, rol) => {
-    const { reporteDiario } = await montar(rol)
+    const { reporteDiario, medios } = await montar(rol)
 
     expect(await screen.findByText("Solo para administradores")).toBeInTheDocument()
     expect(screen.queryByLabelText("Día")).not.toBeInTheDocument()
     expect(reporteDiario).not.toHaveBeenCalled()
+    expect(medios).not.toHaveBeenCalled()
   })
 })

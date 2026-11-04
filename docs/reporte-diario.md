@@ -39,9 +39,9 @@ pantalla, el CSV y el PDF muestran esas cifras y no suman nada.
 
 ## Limitaciones
 
-- **No se registra el método de pago.** La base solo distingue contado de
-  crédito: no se sabe si un contado fue en efectivo o por transferencia, y un
-  abono tampoco lo guarda. Separarlos exige capturarlo en el POS y en los cobros.
+- **Medios de pago:** se registran desde la 0039 (ver
+  [medios-de-pago.md](medios-de-pago.md)). Lo anterior aparece como «Sin
+  registrar»: no se le inventa un medio.
 - **Un día pasado puede cambiar**, y no se guarda una foto de cada cierre. Al
   sincronizar una venta sin conexión o conciliarla, entra en el día en que se
   hizo. Al anular una venta, deja de sumar en su día.
