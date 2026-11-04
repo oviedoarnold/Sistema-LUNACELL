@@ -1,13 +1,13 @@
 import { useMemo, useState } from "react"
 
-import SelectorDeMedios from "../pagos/SelectorDeMedios"
+import SelectorDeMedios, { ResumenDeMedios } from "../pagos/SelectorDeMedios"
 import ModalShell from "../forms/ModalShell"
 import FormField from "../forms/FormField"
 import { formatMoney } from "../../utils/format"
 import { previaDelReparto } from "../../utils/cuentasPorCobrar"
 import {
   cobrosDelSelector,
-  problemaDeCobros,
+  problemaDelSelector,
   selectorVacio,
 } from "../../utils/mediosDePago"
 
@@ -67,7 +67,7 @@ function ModalDeCobro({
       return false
     }
 
-    const problema = problemaDeCobros(cobrosDelSelector(medios, montoNumero), montoNumero)
+    const problema = problemaDelSelector(medios, montoNumero)
 
     if (problema) {
       setAvisoLocal(problema)
@@ -96,7 +96,7 @@ function ModalDeCobro({
     debe el cliente. Con uno válido, se espera a que los medios lo sumen.
   */
   const montoValido = Number.isFinite(montoNumero) && montoNumero > 0 && montoNumero <= cuenta.deudaTotal
-  const mediosSinCuadrar = montoValido && problemaDeCobros(cobrosDelSelector(medios, montoNumero), montoNumero) !== null
+  const mediosSinCuadrar = montoValido && problemaDelSelector(medios, montoNumero) !== null
 
   return (
     <ModalShell
@@ -199,11 +199,16 @@ function ModalDeCobro({
         <SelectorDeMedios
           valor={medios}
           total={Number.isFinite(montoNumero) ? montoNumero : 0}
-          moneda={moneda}
           onCambiar={(siguiente) => {
             setMedios(siguiente)
             setAvisoLocal("")
           }}
+        />
+
+        <ResumenDeMedios
+          valor={medios}
+          total={Number.isFinite(montoNumero) ? montoNumero : 0}
+          moneda={moneda}
         />
 
         {previa.length > 0 && (

@@ -13,62 +13,90 @@
   padding: 0 4px;
 }
 
-.medios-de-pago-casillas {
+.medios-de-pago-opciones {
   display: grid;
-  gap: 4px 12px;
-  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
-  margin-bottom: 8px;
+  gap: 2px 12px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin-bottom: 6px;
 }
 
-.medios-de-pago-casilla {
+.medios-de-pago-opcion {
   align-items: center;
   cursor: pointer;
   display: flex;
+  font-size: 14px;
   gap: 8px;
-  min-height: 44px;
+  min-height: 34px;
 }
 
-.medios-de-pago-casilla input {
+/* En una pantalla táctil, cada opción con altura para el dedo. */
+@media (pointer: coarse) {
+  .medios-de-pago-opcion {
+    min-height: 44px;
+  }
+}
+
+.medios-de-pago-opcion input {
   flex: none;
-  height: 20px;
-  width: 20px;
+  height: 18px;
+  margin: 0;
+  width: 18px;
+}
+
+.medios-de-pago-opcion:has(input:disabled) {
+  color: var(--text-muted);
+  cursor: not-allowed;
+}
+
+.medios-de-pago-modalidad {
+  font-weight: 600;
 }
 
 .medios-de-pago-fila {
   display: grid;
   gap: 8px;
-  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
 }
 
 .medios-de-pago-fila .field {
+  margin-bottom: 6px;
   min-width: 0;
 }
 
 .medios-de-pago-resumen {
   display: grid;
-  gap: 2px;
-  margin: 8px 0 0;
-}
-
-.medios-de-pago-resumen > div {
-  display: flex;
-  font-size: 14px;
-  justify-content: space-between;
+  gap: 10px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin: 0;
 }
 
 .medios-de-pago-resumen dt {
+  font-size: 12px;
   font-weight: 400;
 }
 
 .medios-de-pago-resumen dd {
+  font-size: 14px;
   font-weight: 600;
   margin: 0;
 }
 
+.medios-de-pago-falta dd {
+  color: var(--danger);
+}
+
 .medios-de-pago-aviso {
   font-size: 13px;
-  margin: 6px 0 0;
-  min-height: 1em;
+  margin: 4px 0 0;
+}
+
+.medios-de-pago-aviso:empty {
+  display: none;
+}
+
+/* El cuadre en los abonos, donde va suelto debajo del selector. */
+form > .medios-de-pago-cuadre {
+  margin-bottom: 14px;
 }
 
 /* Las tasas de comisión, en Configuración. */
