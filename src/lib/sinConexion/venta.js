@@ -11,6 +11,8 @@
   El comprobante es provisional: el número definitivo lo asigna el servidor
   al registrarla. Nunca se inventa numeración fiscal.
 */
+import { problemaDeCobros } from "../../utils/mediosDePago"
+
 import { mismoDueno } from "./copiaLocal"
 
 export class ErrorDeVentaLocal extends Error {
@@ -42,6 +44,7 @@ export function construirVentaLocal({
   nota = "",
   ahora = new Date(),
   claveEnLinea = null,
+  cobros = [],
 }) {
   if (!copia) throw new ErrorDeVentaLocal("No hay copia local para vender sin conexión.")
 
@@ -91,6 +94,17 @@ export function construirVentaLocal({
 
   const tasaIsv = Number(copia.empresa?.tasaIsv ?? 15)
   const { total } = totalesDe(renglones, tasaIsv)
+
+  if (formaPago === "credito" && cobros.length > 0) {
+    throw new ErrorDeVentaLocal("Una venta a crédito no lleva medios de pago.")
+  }
+
+  if (cobros.length > 0) {
+    const problema = problemaDeCobros(cobros, total)
+
+    if (problema) throw new ErrorDeVentaLocal(problema)
+  }
+
   const momento = ahora.toISOString()
 
   return {
@@ -104,6 +118,8 @@ export function construirVentaLocal({
     renglones,
     tasaIsv,
     totalCobrado: total,
+    // Una venta sin medios se envía por el camino anterior y queda «Sin registrar».
+    ...(cobros.length > 0 ? { cobros } : {}),
     formaPago,
     clienteId: cliente?.id ?? null,
     nombreCliente: String(nombreCliente || cliente?.nombre || "Consumidor Final").trim(),

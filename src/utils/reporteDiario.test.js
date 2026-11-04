@@ -30,13 +30,36 @@ describe("las secciones del reporte", () => {
     const { columnas, filas } = seccion("operaciones")
 
     expect(columnas.map((c) => c.titulo)).toEqual([
-      "Fecha y hora", "Correlativo", "Ubicación", "Vendedor", "Cliente", "Productos", "Forma de pago", "Total", "Estado",
+      "Fecha y hora", "Correlativo", "Ubicación", "Vendedor", "Cliente", "Productos", "Forma de pago", "Medio de pago", "Total", "Estado",
     ])
     expect(filas[0].celdas).toEqual([
       expect.stringMatching(/23:59/), "INT-00001", "Camión 01", "Chofer Uno", "=SUMA(A1), \"Ferremax\"",
-      "1 x Cargador, 2 x Cubo", "Contado", 115, "Pagada (Sin conexión)",
+      "1 x Cargador, 2 x Cubo", "Contado", "Efectivo 15.00, Tarjeta 100.00 (AUT-9)", 115, "Pagada (Sin conexión)",
     ])
     expect(filas[1].celdas.at(-1)).toBe("Anulada")
+  })
+
+  it("cobros sin medio dicen «Sin registrar», y una venta a crédito no lleva medio", () => {
+    const sinMedios = { ...REPORTE, medios: { ...REPORTE.medios, por_venta: {}, por_abono: {}, por_anulacion: {} } }
+    const operaciones = seccionesDelReporte(sinMedios).find((s) => s.id === "operaciones")
+    const aCredito = seccionesDelReporte({
+      ...sinMedios,
+      ventas: [{ ...REPORTE.ventas[0], forma_pago: "credito" }],
+    }).find((s) => s.id === "operaciones")
+    const abonos = seccionesDelReporte(sinMedios).find((s) => s.id === "abonos")
+
+    expect(operaciones.filas[0].celdas).toContain("Sin registrar")
+    expect(aCredito.filas[0].celdas).not.toContain("Sin registrar")
+    expect(abonos.filas[0].celdas).toContain("Sin registrar")
+  })
+
+  it("los cobros por medio llevan comisión y neto, y la sección no menciona costos", () => {
+    const { columnas, filas } = seccion("medios")
+
+    expect(columnas.map((c) => c.titulo)).toEqual(["Medio", "Operaciones", "Cobrado", "Comisión estimada", "Neto"])
+    expect(filas[1].celdas).toEqual(["Tarjeta", 1, 100, 7, 93])
+    expect(filas[2].celdas[0]).toBe("Sin registrar")
+    expect(JSON.stringify(REPORTE.medios)).not.toMatch(/costo|margen|utilidad/i)
   })
 
   it("un traslado dice de dónde a dónde, y los tipos se escriben en palabras", () => {

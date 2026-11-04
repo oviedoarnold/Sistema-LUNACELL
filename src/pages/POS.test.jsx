@@ -118,6 +118,13 @@ const borradorDeCotizacion = (cantidad) => ({
 
 const totales = () => screen.getByText("Total").closest("div").parentElement
 
+// A crédito no hay selector: se cobra con los abonos.
+const elegirEfectivo = () => {
+  const selector = screen.queryByLabelText("Medio de pago")
+
+  if (selector) fireEvent.change(selector, { target: { value: "efectivo" } })
+}
+
 const buscar = (texto) =>
   fireEvent.change(screen.getByPlaceholderText(/buscar producto/i), {
     target: { value: texto },
@@ -443,8 +450,10 @@ describe("POS: validación previa a facturar", () => {
   ve el motivo tal cual —cuánto hay y dónde— y no se emite nada.
 */
 describe("POS: venta registrada por el servidor", () => {
-  const generarFactura = () =>
+  const generarFactura = () => {
+    elegirEfectivo()
     fireEvent.click(screen.getByRole("button", { name: /generar factura/i }))
+  }
 
   const avisoDeError = () =>
     Swal.fire.mock.calls.find(([opciones]) => opciones?.icon === "error")
@@ -459,6 +468,80 @@ describe("POS: venta registrada por el servidor", () => {
 
     expect(falso.datos.ventas[0].numero_factura).toMatch(/^VTA-\d{6}$/)
     expect(falso.datos.ventas[0].ubicacion_id).toBe("bodega")
+  })
+
+  const rpcDeVenta = (falso) => falso.rpc.mock.calls.find(([nombre]) => nombre === "registrar_venta_con_medios")
+
+  const elegirMedio = (valor) => fireEvent.change(screen.getByLabelText("Medio de pago"), { target: { value: valor } })
+
+  const clicFacturar = () => fireEvent.click(screen.getByRole("button", { name: /generar factura/i }))
+
+  it("sin elegir el medio de pago no vende: nada viene preseleccionado", async () => {
+    const { falso } = await renderPOS()
+
+    agregar("Martillo de uña")
+
+    expect(screen.getByLabelText("Medio de pago")).toHaveValue("")
+
+    clicFacturar()
+
+    await waitFor(() => expect(Swal.fire).toHaveBeenCalledWith(expect.objectContaining({ title: "Revisa el medio de pago" })))
+    expect(falso.datos.ventas).toHaveLength(0)
+  })
+
+  it("con un medio manda el total y su referencia", async () => {
+    const { falso } = await renderPOS()
+
+    agregar("Martillo de uña")
+    elegirMedio("tarjeta")
+    clicFacturar()
+
+    await waitFor(() => expect(Swal.fire).toHaveBeenCalledWith(expect.objectContaining({ text: "Escribe la referencia de Tarjeta." })))
+    expect(falso.datos.ventas).toHaveLength(0)
+
+    fireEvent.change(screen.getByLabelText("Referencia"), { target: { value: "AUT-1" } })
+    clicFacturar()
+
+    await waitFor(() => expect(falso.datos.ventas).toHaveLength(1))
+    expect(rpcDeVenta(falso)[1].p_cobros).toEqual([{ medio: "tarjeta", monto: 207, referencia: "AUT-1" }])
+  })
+
+  it("un pago mixto no sale hasta que los importes suman el total", async () => {
+    const { falso } = await renderPOS()
+
+    agregar("Martillo de uña")
+    elegirMedio("mixto")
+    fireEvent.change(screen.getByLabelText("Efectivo"), { target: { value: "100" } })
+    fireEvent.change(screen.getByLabelText("Transferencia"), { target: { value: "100" } })
+    fireEvent.change(screen.getByLabelText("Referencia de Transferencia"), { target: { value: "TRF-1" } })
+
+    expect(screen.getByText(/falta asignar/i)).toHaveTextContent("7.00")
+
+    clicFacturar()
+
+    await waitFor(() => expect(Swal.fire).toHaveBeenCalledWith(expect.objectContaining({ title: "Revisa el medio de pago" })))
+    expect(falso.datos.ventas).toHaveLength(0)
+
+    fireEvent.change(screen.getByLabelText("Transferencia"), { target: { value: "107" } })
+
+    expect(screen.getByText(/los importes suman el total/i)).toBeInTheDocument()
+
+    clicFacturar()
+
+    await waitFor(() => expect(falso.datos.ventas).toHaveLength(1))
+    expect(rpcDeVenta(falso)[1].p_cobros).toEqual([
+      { medio: "efectivo", monto: 100, referencia: "" },
+      { medio: "transferencia", monto: 107, referencia: "TRF-1" },
+    ])
+  })
+
+  it("a crédito no pide medio de pago y sigue por el camino de siempre", async () => {
+    const { falso } = await renderPOS()
+
+    fireEvent.click(screen.getByRole("button", { name: /crédito/i }))
+
+    expect(screen.queryByLabelText("Medio de pago")).not.toBeInTheDocument()
+    expect(rpcDeVenta(falso)).toBeUndefined()
   })
 
   /*
@@ -566,6 +649,7 @@ describe("POS: existencias de la ubicación operativa", () => {
     await waitFor(() => expect(disponibleDe("Martillo de uña")).toBe("10 disp."))
 
     agregar("Martillo de uña")
+    elegirEfectivo()
     fireEvent.click(botonFacturar())
 
     await waitFor(() => expect(falso.datos.ventas).toHaveLength(1))

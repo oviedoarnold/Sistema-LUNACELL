@@ -24,6 +24,9 @@ import ClientAutocomplete from "../components/documents/ClientAutocomplete"
 import ModalDeCliente from "../components/documents/ModalDeCliente"
 import { useCarrito } from "../hooks/useCarrito"
 import { useExistenciaDeMiUbicacion } from "../hooks/useExistenciaDeMiUbicacion"
+import SelectorDeMedios from "../components/pagos/SelectorDeMedios"
+import { cobrosDelSelector, problemaDeCobros, selectorVacio } from "../utils/mediosDePago"
+import { totalesDe } from "../lib/sinConexion/venta"
 import { useClienteDelDocumento } from "../hooks/useClienteDelDocumento"
 import DocumentPreviewModal from "../components/documents/DocumentPreviewModal"
 import ComprobanteProvisional from "../components/sinConexion/ComprobanteProvisional"
@@ -165,6 +168,7 @@ function POS() {
 
   const [search, setSearch] = useState("")
   const [paymentType, setPaymentType] = useState("contado")
+  const [medios, setMedios] = useState(selectorVacio)
 
   const [buyerRTN, setBuyerRTN] = useState(
     () => saleDraft?.rtn || ""
@@ -262,10 +266,23 @@ function POS() {
     [cart, tasaISV]
   )
 
+  /*
+    El total que se reparte entre los medios, con la misma fórmula que la base:
+    redondeo por línea e ISV sobre el subtotal. Si el precio cambió desde que se
+    cargó el catálogo, el servidor lo rechaza en vez de cobrar otro importe.
+  */
+  const totalACobrar = useMemo(
+    () => totalesDe(cart.map((item) => ({ precio_unitario: item.price, cantidad: item.quantity })), tasaISV).total,
+    [cart, tasaISV]
+  )
+
+  const cobrosDeLaVenta = () => (paymentType === "contado" ? cobrosDelSelector(medios, totalACobrar) : [])
+
   const handlePaymentTypeChange = (
     type
   ) => {
     setPaymentType(type)
+    setMedios(selectorVacio())
     handleClearClient()
 
     if (type === "credito") {
@@ -475,6 +492,7 @@ function POS() {
     tax,
     total,
     note: "",
+    cobros: cobrosDeLaVenta(),
   })
 
   /*
@@ -515,6 +533,7 @@ function POS() {
     vaciarCarrito()
     setSearch("")
     setPaymentType("contado")
+    setMedios(selectorVacio())
     handleClearClient()
     setDueDate(toISODateInDays(30))
   }
@@ -540,6 +559,7 @@ function POS() {
         */
         nota: claveEnLinea ? `Intento en línea sin respuesta: ${claveEnLinea}` : "",
         claveEnLinea,
+        cobros: cobrosDeLaVenta(),
       })
 
       setPreviewOpen(false)
@@ -601,6 +621,16 @@ function POS() {
 
     if (facturando) {
       return null
+    }
+
+    if (paymentType === "contado") {
+      const problema = problemaDeCobros(cobrosDeLaVenta(), totalACobrar)
+
+      if (problema) {
+        Swal.fire({ icon: "warning", title: "Revisa el medio de pago", text: problema })
+
+        return null
+      }
     }
 
     setFacturando(true)
@@ -968,6 +998,15 @@ function POS() {
                   onChange={(event) => setDueDate(event.target.value)}
                 />
               </div>
+            )}
+
+            {paymentType === "contado" && (
+              <SelectorDeMedios
+                valor={medios}
+                total={totalACobrar}
+                moneda={copiaLocal?.empresa?.moneda || company?.currency}
+                onCambiar={setMedios}
+              />
             )}
 
             <div className="field pos-campo">

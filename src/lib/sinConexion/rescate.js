@@ -34,6 +34,20 @@ function renglonValido(r) {
   )
 }
 
+function cobrosValidos(cobros) {
+  return (
+    Array.isArray(cobros) &&
+    cobros.every(
+      (c) =>
+        c !== null &&
+        typeof c === "object" &&
+        textoNoVacio(c.medio) &&
+        numeroFinito(c.monto) &&
+        c.monto > 0
+    )
+  )
+}
+
 // Null si la venta se puede enviar; si no, por qué no.
 export function validarVentaDeRespaldo(venta) {
   if (venta === null || typeof venta !== "object" || Array.isArray(venta)) return "No es una venta."
@@ -57,6 +71,7 @@ export function validarVentaDeRespaldo(venta) {
   if (!numeroFinito(venta.tasaIsv) || venta.tasaIsv < 0 || venta.tasaIsv > 100) return "La tasa de impuesto no es válida."
   if (!["contado", "credito"].includes(venta.formaPago)) return "La forma de pago no es válida."
   if (venta.formaPago === "credito" && !textoNoVacio(venta.clienteId)) return "Una venta a crédito necesita un cliente."
+  if (venta.cobros !== undefined && !cobrosValidos(venta.cobros)) return "Los medios de pago de la venta no son válidos."
 
   return null
 }

@@ -1,8 +1,11 @@
 /*
   Las RPC del modo sin conexión (0027):
-  - sincronizar_venta_sin_conexion: la llama el teléfono del vendedor;
+  - sincronizar_venta_sin_conexion: la llama el teléfono del vendedor. Una
+    venta con medios de pago va por sincronizar_venta_con_medios (0039), y la
+    que se guardó antes de esa versión, por el camino de siempre;
   - rescatar_venta_sin_conexion: la llama un administrador con un archivo de
-    emergencia (la pantalla llega en OFF-1.3).
+    emergencia (la pantalla llega en OFF-1.3). Con medios de pago, igual:
+    rescatar_venta_con_medios.
 
   Los nombres de los parámetros son el contrato con la base: cambiar uno
   rompe la sincronización. Las pruebas los fijan.
@@ -41,6 +44,8 @@ export function aParametrosDeRescate(venta, lote = null) {
   }
 }
 
+const conMedios = (venta) => Array.isArray(venta.cobros) && venta.cobros.length > 0
+
 /*
   La función de envío que usa el sincronizador. Devuelve { data, error,
   status } tal como responde supabase-js; una excepción (sin red) la maneja
@@ -49,7 +54,10 @@ export function aParametrosDeRescate(venta, lote = null) {
 */
 export function crearEnvio(supabase, ahora = () => new Date()) {
   return async (venta, { signal } = {}) => {
-    const consulta = supabase.rpc("sincronizar_venta_sin_conexion", aParametrosDeSincronizacion(venta, ahora()))
+    const parametros = aParametrosDeSincronizacion(venta, ahora())
+    const consulta = conMedios(venta)
+      ? supabase.rpc("sincronizar_venta_con_medios", { ...parametros, p_cobros: venta.cobros })
+      : supabase.rpc("sincronizar_venta_sin_conexion", parametros)
     const { data, error, status } = await (signal && consulta.abortSignal ? consulta.abortSignal(signal) : consulta)
 
     return { data, error, status }
@@ -62,7 +70,10 @@ export function crearEnvio(supabase, ahora = () => new Date()) {
 */
 export function crearRescate(supabase) {
   return async (venta, lote, { signal } = {}) => {
-    const consulta = supabase.rpc("rescatar_venta_sin_conexion", aParametrosDeRescate(venta, lote))
+    const parametros = aParametrosDeRescate(venta, lote)
+    const consulta = conMedios(venta)
+      ? supabase.rpc("rescatar_venta_con_medios", { ...parametros, p_cobros: venta.cobros })
+      : supabase.rpc("rescatar_venta_sin_conexion", parametros)
     const { data, error, status } = await (signal && consulta.abortSignal ? consulta.abortSignal(signal) : consulta)
 
     return { data, error, status }

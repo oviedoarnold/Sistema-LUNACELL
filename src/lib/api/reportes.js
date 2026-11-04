@@ -1,15 +1,19 @@
 import { supabase } from "../supabase"
 
 /*
-  El reporte diario. Todo se calcula en reporte_diario(), que además
-  comprueba que quien pregunta sea administrador; aquí solo viajan el día y
-  la ubicación (null es «Todas»).
+  El reporte diario. Todo se calcula en reporte_diario() y
+  reporte_medios_de_pago(), que además comprueban que quien pregunta sea
+  administrador; aquí solo viajan el día y la ubicación (null es «Todas»).
 */
 export async function traerReporteDiario(dia, ubicacionId = null) {
-  const { data, error } = await supabase.rpc("reporte_diario", {
-    p_dia: dia,
-    p_ubicacion: ubicacionId,
-  })
+  const argumentos = { p_dia: dia, p_ubicacion: ubicacionId }
+
+  const [diario, medios] = await Promise.all([
+    supabase.rpc("reporte_diario", argumentos),
+    supabase.rpc("reporte_medios_de_pago", argumentos),
+  ])
+
+  const error = diario.error || medios.error
 
   if (error) {
     console.error("No se pudo cargar el reporte:", error)
@@ -21,5 +25,5 @@ export async function traerReporteDiario(dia, ubicacionId = null) {
     )
   }
 
-  return data
+  return { ...diario.data, medios: medios.data }
 }
