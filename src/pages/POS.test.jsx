@@ -552,7 +552,7 @@ describe("POS: venta registrada por el servidor", () => {
 
   const importe = (nombre, valor) => fireEvent.change(screen.getByLabelText(`Importe de ${nombre}`), { target: { value: valor } })
 
-  const referencia = (nombre, valor) => fireEvent.change(screen.getByLabelText(`Referencia de ${nombre}`), { target: { value: valor } })
+  const referencia = (nombre, valor) => fireEvent.change(screen.getByLabelText(new RegExp(`^Referencia de ${nombre}`)), { target: { value: valor } })
 
   const botonFacturar = () => screen.getByRole("button", { name: /generar factura/i })
 
@@ -584,8 +584,7 @@ describe("POS: venta registrada por el servidor", () => {
     expect(screen.getByText("Importe asignado").nextSibling).toHaveTextContent("207.00")
 
     if (ref) {
-      expect(screen.getByText(`Escribe la referencia de ${etiqueta}.`)).toBeInTheDocument()
-      expect(botonFacturar()).toBeDisabled()
+      expect(botonFacturar()).toBeEnabled()
       referencia(etiqueta, ref)
     } else {
       expect(screen.queryByLabelText(/^referencia/i)).not.toBeInTheDocument()
@@ -597,6 +596,39 @@ describe("POS: venta registrada por el servidor", () => {
     expect(rpcDeVenta(falso)[1].p_cobros).toEqual([{ medio, monto: 207, referencia: ref }])
   })
 
+  it("sin referencia la venta sale igual, sin inventar una", async () => {
+    const { falso } = await renderPOS()
+
+    agregar("Martillo de uña")
+    unico("Tarjeta")
+
+    expect(screen.getByLabelText(/^Referencia de Tarjeta/)).toHaveValue("")
+    expect(screen.getByLabelText(/^Referencia de Tarjeta/)).toHaveAttribute("placeholder", "Opcional")
+    expect(botonFacturar()).toBeEnabled()
+
+    clicFacturar()
+
+    await waitFor(() => expect(falso.datos.ventas).toHaveLength(1))
+    expect(rpcDeVenta(falso)[1].p_cobros).toEqual([{ medio: "tarjeta", monto: 207, referencia: "" }])
+  })
+
+  it("en pago mixto tampoco pide referencia", async () => {
+    const { falso } = await renderPOS()
+
+    agregar("Martillo de uña")
+    mixto()
+    marcar("Transferencia")
+    marcar("Enlace de pago")
+    importe("Transferencia", "100")
+    clicFacturar()
+
+    await waitFor(() => expect(falso.datos.ventas).toHaveLength(1))
+    expect(rpcDeVenta(falso)[1].p_cobros).toEqual([
+      { medio: "transferencia", monto: 100, referencia: "" },
+      { medio: "enlace", monto: 107, referencia: "" },
+    ])
+  })
+
   it("en pago único, elegir otro medio reemplaza al anterior y borra su referencia", async () => {
     const { falso } = await renderPOS()
 
@@ -606,11 +638,11 @@ describe("POS: venta registrada por el servidor", () => {
     unico("Efectivo")
 
     expect(screen.getByRole("radio", { name: "Tarjeta" })).not.toBeChecked()
-    expect(screen.queryByLabelText("Referencia de Tarjeta")).not.toBeInTheDocument()
+    expect(screen.queryByLabelText(/^Referencia de Tarjeta/)).not.toBeInTheDocument()
 
     unico("Tarjeta")
 
-    expect(screen.getByLabelText("Referencia de Tarjeta")).toHaveValue("")
+    expect(screen.getByLabelText(/^Referencia de Tarjeta/)).toHaveValue("")
 
     unico("Efectivo")
     clicFacturar()
@@ -677,7 +709,7 @@ describe("POS: venta registrada por el servidor", () => {
     mixto()
     marcar("Efectivo")
 
-    expect(screen.queryByLabelText("Referencia de Efectivo")).not.toBeInTheDocument()
+    expect(screen.queryByLabelText(/^Referencia de Efectivo/)).not.toBeInTheDocument()
     expect(screen.getByLabelText("Importe de Efectivo")).toHaveValue("")
 
     importe("Efectivo", "207")
@@ -721,8 +753,7 @@ describe("POS: venta registrada por el servidor", () => {
 
     expect(within(resumen).getByText("Pendiente").nextSibling).toHaveTextContent("0.00")
     expect(within(resumen).getByText("Importe asignado").nextSibling).toHaveTextContent("207.00")
-    expect(screen.getByText("Escribe la referencia de Transferencia.")).toBeInTheDocument()
-    expect(botonFacturar()).toBeDisabled()
+    expect(botonFacturar()).toBeEnabled()
 
     referencia("Transferencia", "TRF-1")
     clicFacturar()
@@ -821,7 +852,7 @@ describe("POS: venta registrada por el servidor", () => {
 
     unico("Tarjeta")
 
-    expect(screen.getByLabelText("Referencia de Tarjeta")).toHaveValue("")
+    expect(screen.getByLabelText(/^Referencia de Tarjeta/)).toHaveValue("")
 
     referencia("Tarjeta", "AUT-NUEVA")
     mixto()

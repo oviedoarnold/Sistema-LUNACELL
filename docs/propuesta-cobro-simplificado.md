@@ -1,8 +1,8 @@
 # Propuesta: cobro simplificado en el POS
 
-Estado: propuesta. De aquí, solo el cálculo automático del pago mixto está
-implementado. Las referencias opcionales y cualquier cargo al comprador siguen sin
-hacerse y necesitan decisión.
+Estado: el cálculo automático del pago mixto está publicado. Las referencias opcionales
+están en la migración 0040 y su frontend. Cualquier cargo al comprador sigue sin hacerse
+y necesita decisión.
 
 ## 1. Cálculo automático del pago mixto (implementado)
 
@@ -23,11 +23,10 @@ vuelve a comprobar que sumen el total que él calculó (`LM002`, u `OF001` sin c
 Eso cubre el caso de una copia sin conexión con un precio viejo: la venta no se pierde
 ni se cobra otro importe.
 
-## 2. Referencias: qué exige hoy el servidor
+## 2. Referencias opcionales
 
-**No se pueden quitar sin una migración.** Quitarlas solo de la pantalla haría fallar
-las ventas por transferencia, tarjeta y enlace. La base las exige en dos sitios de la
-0039:
+Quitarlas solo de la pantalla habría hecho fallar las ventas por transferencia, tarjeta y
+enlace. La 0039 las exige en dos sitios, y la 0040 cambia los dos:
 
 | Dónde | Regla | Efecto si llega vacía |
 |---|---|---|
@@ -37,26 +36,14 @@ las ventas por transferencia, tarjeta y enlace. La base las exige en dos sitios 
 Rellenarla con un texto fijo como «SIN REFERENCIA» pasaría la validación, pero dejaría
 un dato falso en un registro que no se puede corregir. No se propone.
 
-### Migración propuesta (0040, sin crear ni aplicar)
-
-```sql
-alter table public.cobros_por_medio drop constraint cobros_por_medio_referencia;
-alter table public.cobros_por_medio add constraint cobros_por_medio_referencia check (
-  (medio = 'efectivo' and referencia = '')
-  or (medio <> 'efectivo' and char_length(referencia) <= 120)
-);
--- Y en medios_de_cobro_invalidos(), quitar solo este bloque:
---   if v_medio <> 'efectivo' and v_referencia = '' then ... end if;
-```
-
-Se conservan: el medio válido, el importe positivo, la suma exacta, que el efectivo no
+Se conservan el medio válido, el importe positivo, la suma exacta, que el efectivo no
 lleve referencia y el largo máximo. `medios_sin_conexion_invalidos()` usa la misma
 función, así que las ventas sin conexión quedan cubiertas sin tocarla.
 
 **Orden obligatorio:**
 
 1. Aplicar la 0040. Las versiones actuales siguen funcionando, porque mandan referencia.
-2. Publicar el frontend sin la exigencia, en `problemaDeCobros()` y en el selector.
+2. Publicar el frontend que deja de exigirla, en `problemaDeCobros()` y en el selector.
 
 Al revés, las ventas en línea fallarían, y las guardadas sin conexión no subirían hasta
 aplicar la migración. Un teléfono con una versión anterior sigue pidiendo la referencia
@@ -70,8 +57,8 @@ hasta actualizarse, sin causar errores.
 - Los registros no se pueden editar, así que no se podrá completarlos después.
 - Volver a exigirla requeriría otra migración, sin validar las filas ya guardadas.
 
-**Recomendación:** dejarla como campo opcional, en lugar de eliminarla. El vendedor no
-queda bloqueado, y quien tenga el número puede anotarlo.
+El campo sigue visible como opcional: el vendedor no queda bloqueado, y quien tenga el
+número puede anotarlo.
 
 ## 3. Conciliación de importes
 

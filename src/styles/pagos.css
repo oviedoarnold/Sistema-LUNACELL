@@ -64,9 +64,19 @@
 }
 
 /* El importe que salió de la resta. Se puede escribir encima, y entonces manda ese. */
-.medios-de-pago-calculado label::after {
-  content: " · calculado";
-  font-weight: 400;
+.medios-de-pago-calculado {
+  position: relative;
+}
+
+/* Dentro del campo y no en la etiqueta, que en una columna estrecha se partiría. */
+.medios-de-pago-calculado::after {
+  position: absolute;
+  right: 8px;
+  bottom: 8px;
+  color: var(--text-muted);
+  content: "calculado";
+  font-size: 11px;
+  pointer-events: none;
 }
 
 .medios-de-pago-calculado input {

@@ -10,8 +10,9 @@ venta a crédito no lleva medios: se cobra con sus abonos.
 
 - **Los importes suman exactamente** el total de la venta que calculó el servidor,
   o el monto del abono. Si no, se deshace todo: venta, existencia y correlativo.
-- **Un medio por operación**, una sola vez cada uno. Transferencia, tarjeta y
-  enlace llevan referencia obligatoria; el efectivo, ninguna.
+- **Un medio por operación**, una sola vez cada uno. En transferencia, tarjeta y
+  enlace la referencia es opcional (0040): nunca se inventa, y sin ella queda vacía.
+  El efectivo no lleva.
 - **El POS no preselecciona un medio**, para que una transferencia que nadie
   cambió no quede como efectivo.
 - **Pago único o pago mixto.** El único lleva un medio y el total, sin escribir
@@ -26,6 +27,8 @@ venta a crédito no lleva medios: se cobra con sus abonos.
   venta sin conexión al guardarse. La base sigue admitiendo los cuatro, así que una
   llamada directa a la función con tres pasa si los importes suman; y una venta con
   más de dos guardada antes en un teléfono se sincroniza igual.
+- **Un cobro sin referencia** se concilia por fecha y medio, no uno a uno. No se
+  puede completar después, porque los cobros no admiten cambios.
 - **Un reintento no duplica.** La misma clave con los mismos medios devuelve lo que
   ya existe; con otros medios se rechaza (`LM005`, u `OF003` sin conexión).
 - **Solo se agrega.** Ni el dueño de la base cambia, borra o vacía un cobro.
@@ -85,6 +88,15 @@ un medio a una ubicación es una convención, no un dato del cobro.
 **Primero la 0039, después el frontend.** La migración no afecta a la versión
 actual, que no usa nada de lo nuevo. Con el frontend nuevo y sin la migración, las
 ventas de contado fallarían.
+
+**Primero la 0040, después el frontend que deja de pedir la referencia.** Las
+versiones anteriores siguen funcionando, porque mandan referencia. Al revés, las
+ventas sin referencia fallarían con `LM001`, y las guardadas sin conexión no subirían
+(`OF001`) hasta aplicarla.
+
+Para revertir solo la 0040 no se quita lo ya guardado: se vuelve a poner la comprobación
+en `medios_de_cobro_invalidos()` y se recrea la restricción con `not valid`, para que
+no falle por los cobros sin referencia.
 
 Reversión, después de revertir el frontend. Borra los cobros y comisiones ya
 registrados, que no se pueden reconstruir; las ventas y los abonos no se tocan:
