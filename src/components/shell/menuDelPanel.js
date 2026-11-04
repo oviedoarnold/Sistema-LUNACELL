@@ -2,6 +2,7 @@ import {
   FaBalanceScale,
   FaBox,
   FaBoxes,
+  FaChartBar,
   FaCashRegister,
   FaCog,
   FaExchangeAlt,
@@ -31,7 +32,7 @@ import { PERMISSIONS } from "../../context/permissions"
   son exactamente los que ya existen en NAV_ROUTES, y una prueba comprueba
   que las dos listas no se separen.
 
-  No se incluyen módulos que todavía no existen —reportes, kardex—: un
+  No se incluyen módulos que todavía no existen —kardex—: un
   menú con elementos muertos invita a pulsarlos.
 */
 
@@ -144,6 +145,13 @@ export const GRUPOS_DEL_MENU = [
         label: "Historial",
         Icono: FaHistory,
         permiso: PERMISSIONS.SALES_HISTORY,
+      },
+      {
+        to: "/reports",
+        label: "Reportes",
+        Icono: FaChartBar,
+        permiso: PERMISSIONS.SETTINGS,
+        soloAdmin: true,
       },
     ],
   },

@@ -15,6 +15,7 @@ import Transfers from "../pages/Transfers"
 import POS from "../pages/POS"
 import Quotes from "../pages/Quotes"
 import SalesHistory from "../pages/SalesHistory"
+import Reports from "../pages/Reports"
 import Receivables from "../pages/Receivables"
 import Locations from "../pages/Locations"
 import Clients from "../pages/Clients"
@@ -206,6 +207,22 @@ function AppRouter() {
             <ProtectedRoute permission={PERMISSIONS.SETTINGS}>
               <MainLayout>
                 <Conciliacion />
+              </MainLayout>
+            </ProtectedRoute>
+          }
+        />
+
+        {/*
+          Reporte diario: solo administradores. Igual que Conciliación, la
+          ruta se cuelga del permiso administrativo; la pantalla y
+          reporte_diario() exigen además el rol.
+        */}
+        <Route
+          path="/reports"
+          element={
+            <ProtectedRoute permission={PERMISSIONS.SETTINGS}>
+              <MainLayout>
+                <Reports />
               </MainLayout>
             </ProtectedRoute>
           }

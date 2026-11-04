@@ -29,6 +29,7 @@ export const config = {
     "/locations",
     "/settings",
     "/reconciliation",
+    "/reports",
   ],
 }
 

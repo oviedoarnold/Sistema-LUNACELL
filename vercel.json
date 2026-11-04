@@ -10,11 +10,11 @@
       "destination": "/index.html"
     },
     {
-      "source": "/(demo|dashboard|pos|products|inventory|clients|suppliers|sales-history|receivables|quotes|locations|settings|reconciliation)",
+      "source": "/(demo|dashboard|pos|products|inventory|clients|suppliers|sales-history|receivables|quotes|locations|settings|reconciliation|reports)",
       "destination": "/index.html"
     },
     {
-      "source": "/(demo|dashboard|pos|products|inventory|clients|suppliers|sales-history|receivables|quotes|locations|settings|reconciliation)/(.*)",
+      "source": "/(demo|dashboard|pos|products|inventory|clients|suppliers|sales-history|receivables|quotes|locations|settings|reconciliation|reports)/(.*)",
       "destination": "/index.html"
     }
   ],

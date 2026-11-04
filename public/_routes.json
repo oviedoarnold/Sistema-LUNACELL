@@ -15,7 +15,8 @@
     "/quotes",
     "/locations",
     "/settings",
-    "/reconciliation"
+    "/reconciliation",
+    "/reports"
   ],
   "exclude": []
 }
