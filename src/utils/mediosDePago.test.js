@@ -9,7 +9,8 @@ import {
   escribirReferencia,
   etiquetaDelMedio,
   faltaPorAsignar,
-  importeBloqueado,
+  importeCalculado,
+  importeDe,
   limpiarImporte,
   problemaDeCobros,
   problemaDelSelector,
@@ -19,11 +20,8 @@ import {
 
 const marcados = (...medios) => medios.reduce((v, m) => elegirMedio(v, m), selectorVacio(MIXTO))
 
-const conImportes = (total, montos) =>
-  Object.entries(montos).reduce(
-    (v, [medio, monto]) => escribirImporte(v, medio, monto, total).valor,
-    marcados(...Object.keys(montos))
-  )
+const conImporte = (total, medio, monto) =>
+  escribirImporte(marcados("efectivo", "tarjeta"), medio, monto, total).valor
 
 describe("pago único", () => {
   const unico = (medio) => elegirMedio(selectorVacio(), medio)
@@ -60,8 +58,12 @@ describe("pago único", () => {
 })
 
 describe("pago mixto", () => {
-  it("los importes nacen vacíos: se reparten a mano", () => {
-    expect(marcados("efectivo", "tarjeta").montos).toMatchObject({ efectivo: "", tarjeta: "" })
+  it("los importes nacen vacíos, y pide escribir uno", () => {
+    const valor = marcados("efectivo", "tarjeta")
+
+    expect(importeDe(valor, "efectivo", 391)).toBe("")
+    expect(importeDe(valor, "tarjeta", 391)).toBe("")
+    expect(problemaDelSelector(valor, 391)).toMatch(/el otro se calcula solo/i)
   })
 
   it("un tercer medio se rechaza, aunque la pantalla no lo hubiera impedido", () => {
@@ -70,43 +72,79 @@ describe("pago mixto", () => {
     expect(elegirMedio(dos, "enlace")).toBe(dos)
   })
 
-  it("soltar uno borra su importe y referencia, y deja lugar para otro", () => {
-    let valor = escribirReferencia(conImportes(391, { efectivo: "300", tarjeta: "91" }), "tarjeta", "AUT-1")
+  it("con un importe, el otro se calcula", () => {
+    const valor = escribirImporte(marcados("efectivo", "tarjeta"), "efectivo", "300", 391).valor
 
-    valor = elegirMedio(valor, "tarjeta")
+    expect(importeDe(valor, "tarjeta", 391)).toBe("91.00")
+    expect(importeCalculado(valor, "tarjeta")).toBe(true)
+    expect(importeCalculado(valor, "efectivo")).toBe(false)
+    expect(cobrosDelSelector(valor, 391).map((c) => c.monto)).toEqual([300, 91])
+  })
 
-    expect(valor.elegidos).toEqual(["efectivo"])
-    expect(valor.montos.tarjeta).toBe("")
-    expect(valor.referencias.tarjeta).toBe("")
-    expect(elegirMedio(valor, "enlace").elegidos).toEqual(["efectivo", "enlace"])
+  it("el que se escribe manda: el otro pasa a calcularse", () => {
+    let valor = escribirImporte(marcados("efectivo", "tarjeta"), "efectivo", "300", 391).valor
+
+    valor = escribirImporte(valor, "tarjeta", "100", 391).valor
+
+    expect(importeDe(valor, "efectivo", 391)).toBe("291.00")
+    expect(importeCalculado(valor, "efectivo")).toBe(true)
+  })
+
+  it("el calculado sigue al total", () => {
+    const valor = escribirImporte(marcados("efectivo", "tarjeta"), "efectivo", "100", 391).valor
+
+    expect(importeDe(valor, "tarjeta", 500)).toBe("400.00")
+    expect(importeDe(valor, "tarjeta", 150.25)).toBe("50.25")
+  })
+
+  it("cuenta en centavos: no deja residuo con decimales", () => {
+    const valor = escribirImporte(marcados("efectivo", "tarjeta"), "efectivo", "0.10", 0.3).valor
+
+    expect(importeDe(valor, "tarjeta", 0.3)).toBe("0.20")
+    expect(faltaPorAsignar(cobrosDelSelector(valor, 0.3), 0.3)).toBe(0)
+  })
+
+  it("borrar el importe escrito deja los dos vacíos", () => {
+    let valor = escribirImporte(marcados("efectivo", "tarjeta"), "efectivo", "100", 391).valor
+
+    valor = escribirImporte(valor, "efectivo", "", 391).valor
+
+    expect(valor.escrito).toBeNull()
+    expect(importeDe(valor, "tarjeta", 391)).toBe("")
+  })
+
+  it("soltar el escrito borra su importe, y soltar el calculado conserva el escrito", () => {
+    const base = escribirReferencia(escribirImporte(marcados("efectivo", "tarjeta"), "tarjeta", "91", 391).valor, "tarjeta", "AUT-1")
+    const sinEscrito = elegirMedio(base, "tarjeta")
+
+    expect(sinEscrito.elegidos).toEqual(["efectivo"])
+    expect(sinEscrito.montos.tarjeta).toBe("")
+    expect(sinEscrito.referencias.tarjeta).toBe("")
+    expect(sinEscrito.escrito).toBeNull()
+
+    const sinCalculado = elegirMedio(base, "efectivo")
+
+    expect(sinCalculado.escrito).toBe("tarjeta")
+    expect(importeDe(elegirMedio(sinCalculado, "enlace"), "enlace", 391)).toBe("300.00")
   })
 
   it("siempre en el mismo orden, sin importar cómo se marquen", () => {
     expect(marcados("enlace", "efectivo").elegidos).toEqual(["efectivo", "enlace"])
   })
 
-  it("sin saldo, el medio sin importe queda bloqueado; bajar el otro lo libera", () => {
-    const valor = conImportes(391, { efectivo: "391", tarjeta: "" })
-
-    expect(importeBloqueado(valor, "tarjeta", 391)).toBe(true)
-    expect(importeBloqueado(valor, "efectivo", 391)).toBe(false)
-    expect(importeBloqueado(escribirImporte(valor, "efectivo", "300", 391).valor, "tarjeta", 391)).toBe(false)
-  })
-
   it.each([
     ["sin medios", () => selectorVacio(MIXTO), /elige 2 medios/i],
     ["con uno que lleva todo", () => escribirImporte(marcados("efectivo"), "efectivo", "100", 100).valor, /elige 2 medios/i],
-    ["uno sin importe y sin saldo", () => conImportes(100, { efectivo: "100", tarjeta: "" }), /baja el otro importe/i],
-    ["uno sin importe y con saldo", () => conImportes(100, { efectivo: "40", tarjeta: "" }), /importe de tarjeta/i],
-    ["uno en cero", () => conImportes(100, { efectivo: "40", tarjeta: "0" }), /importe de tarjeta/i],
-    ["sin sumar el total", () => escribirReferencia(conImportes(100, { efectivo: "40", enlace: "50" }), "enlace", "L"), /deben sumar/i],
-    ["sin referencia", () => conImportes(100, { efectivo: "40", tarjeta: "60" }), /referencia de tarjeta/i],
+    ["sin importes", () => marcados("efectivo", "tarjeta"), /se calcula solo/i],
+    ["con el otro en cero", () => conImporte(100, "efectivo", "100"), /baja el otro importe/i],
+    ["con el escrito en cero", () => conImporte(100, "efectivo", "0"), /baja el otro importe/i],
+    ["sin referencia", () => conImporte(100, "efectivo", "40"), /referencia de tarjeta/i],
   ])("no se confirma %s", (_, valor, mensaje) => {
     expect(problemaDelSelector(valor(), 100)).toMatch(mensaje)
   })
 
-  it("con los dos importes y las referencias, se confirma", () => {
-    const valor = escribirReferencia(conImportes(100, { efectivo: "40", tarjeta: "60" }), "tarjeta", "AUT-1")
+  it("con un importe y las referencias, se confirma", () => {
+    const valor = escribirReferencia(conImporte(100, "efectivo", "40"), "tarjeta", "AUT-1")
 
     expect(problemaDelSelector(valor, 100)).toBeNull()
     expect(cobrosDelSelector(valor, 100)).toEqual([
@@ -118,7 +156,7 @@ describe("pago mixto", () => {
 
 describe("cambiar de modalidad", () => {
   it("empieza de cero: nada de la otra modalidad queda guardado", () => {
-    const antes = escribirReferencia(conImportes(100, { efectivo: "40", tarjeta: "60" }), "tarjeta", "AUT-1")
+    const antes = escribirReferencia(conImporte(100, "efectivo", "40"), "tarjeta", "AUT-1")
 
     expect(cambiarModalidad(antes, "unico")).toEqual(selectorVacio("unico"))
     expect(cambiarModalidad(elegirMedio(selectorVacio(), "tarjeta"), MIXTO)).toEqual(selectorVacio(MIXTO))
@@ -155,11 +193,10 @@ describe("limpiarImporte", () => {
 
 describe("escribirImporte", () => {
   it("el caso real: en una factura de 391 no se puede llegar a 1,125", () => {
-    const valor = escribirImporte(marcados("efectivo", "transferencia"), "efectivo", "125", 391).valor
-    const resultado = escribirImporte(valor, "transferencia", "1,000", 391)
+    const resultado = escribirImporte(marcados("efectivo", "transferencia"), "efectivo", "1,125.00", 391)
 
     expect(resultado.ajustado).toBe(true)
-    expect(resultado.valor.montos.transferencia).toBe("266.00")
+    expect(resultado.valor.montos.efectivo).toBe("391.00")
     expect(faltaPorAsignar(cobrosDelSelector(resultado.valor, 391), 391)).toBe(0)
   })
 
@@ -170,41 +207,25 @@ describe("escribirImporte", () => {
     expect(resultado.valor.montos.efectivo).toBe("100.")
   })
 
-  it("exactamente lo disponible no es un ajuste", () => {
-    const valor = escribirImporte(marcados("efectivo", "tarjeta"), "efectivo", "300", 391).valor
-
-    expect(escribirImporte(valor, "tarjeta", "91", 391)).toMatchObject({ ajustado: false })
+  it("exactamente el total no es un ajuste", () => {
+    expect(escribirImporte(marcados("efectivo", "tarjeta"), "tarjeta", "391", 391)).toMatchObject({ ajustado: false })
   })
 
-  it("borrar un importe libera su saldo", () => {
-    const valor = escribirImporte(conImportes(391, { efectivo: "300", tarjeta: "91" }), "tarjeta", "", 391).valor
+  it("si el total bajó, el importe escrito no se cambia solo, y al editarlo se limita", () => {
+    const valor = conImporte(391, "efectivo", "300")
 
-    expect(faltaPorAsignar(cobrosDelSelector(valor, 391), 391)).toBe(91)
-    expect(cobrosDelSelector(valor, 391).map((c) => c.medio)).toEqual(["efectivo"])
-  })
+    expect(faltaPorAsignar(cobrosDelSelector(valor, 200), 200)).toBe(-100)
 
-  it("cuenta en centavos: 0.10 + 0.20 de 0.30 no deja residuo", () => {
-    const valor = conImportes(0.3, { efectivo: "0.10", tarjeta: "0.20" })
+    const resultado = escribirImporte(valor, "efectivo", "250", 200)
 
-    expect(faltaPorAsignar(cobrosDelSelector(valor, 0.3), 0.3)).toBe(0)
-    expect(cobrosDelSelector(valor, 0.3).map((c) => c.monto)).toEqual([0.1, 0.2])
-  })
-
-  it("si el total bajó, un importe ya escrito no se cambia solo, y al editarlo se limita", () => {
-    const valor = conImportes(391, { efectivo: "300", tarjeta: "91" })
-
-    expect(faltaPorAsignar(cobrosDelSelector(valor, 200), 200)).toBe(-191)
-
-    const resultado = escribirImporte(valor, "efectivo", "150", 200)
-
-    expect(resultado.valor.montos.efectivo).toBe("109.00")
+    expect(resultado.valor.montos.efectivo).toBe("200.00")
     expect(resultado.ajustado).toBe(true)
   })
 })
 
 describe("cobrosDelSelector", () => {
-  it("un medio marcado sin importe o en cero no viaja", () => {
-    const valor = conImportes(100, { efectivo: "100", tarjeta: "0" })
+  it("un medio en cero no viaja", () => {
+    const valor = conImporte(100, "efectivo", "100")
 
     expect(cobrosDelSelector(valor, 100)).toEqual([{ medio: "efectivo", monto: 100, referencia: "" }])
   })

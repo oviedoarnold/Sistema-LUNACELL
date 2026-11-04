@@ -324,17 +324,18 @@ describe("medios de pago del abono", () => {
 
     expect(screen.getByRole("checkbox", { name: "Transferencia" })).toBeDisabled()
 
-    fireEvent.change(screen.getByLabelText("Importe de Efectivo"), { target: { value: "40" } })
-    fireEvent.change(screen.getByLabelText("Importe de Tarjeta"), { target: { value: "50" } })
-    fireEvent.change(screen.getByLabelText("Referencia de Tarjeta"), { target: { value: "AUT-1" } })
+    fireEvent.change(screen.getByLabelText("Importe de Efectivo"), { target: { value: "999" } })
 
-    expect(screen.getByText("Pendiente").nextSibling).toHaveTextContent("10.00")
+    expect(screen.getByLabelText("Importe de Efectivo")).toHaveValue("100.00")
     expect(botonConfirmar()).toBeDisabled()
 
-    fireEvent.change(screen.getByLabelText("Importe de Tarjeta"), { target: { value: "999" } })
+    fireEvent.change(screen.getByLabelText("Importe de Efectivo"), { target: { value: "40" } })
 
     expect(screen.getByLabelText("Importe de Tarjeta")).toHaveValue("60.00")
+    expect(screen.getByText("Pendiente").nextSibling).toHaveTextContent("0.00")
+    expect(botonConfirmar()).toBeDisabled()
 
+    fireEvent.change(screen.getByLabelText("Referencia de Tarjeta"), { target: { value: "AUT-1" } })
     clicConfirmar()
 
     await waitFor(() => expect(rpc).toHaveBeenCalled())
