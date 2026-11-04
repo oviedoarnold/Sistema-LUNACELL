@@ -100,61 +100,77 @@
 /* ── VENTA ACTUAL ────────────────────────────────────────── */
 
 /*
-  Se queda a la vista al desplazar el catálogo: el total es lo que el
-  cajero mira mientras agrega, y perderlo obliga a subir cada vez.
-
-  El panel nunca pasa del alto de la ventana. El pie (resumen y facturar) queda
-  fijo y lo que se desplaza es el cuerpo; con muchos productos, solo la lista.
+  El panel sigue el flujo de la página: si no cabe en la ventana, se desplaza la
+  página. Nada en él es fijo ni tiene barra propia, salvo la lista de artículos.
+  Un panel con alto limitado y una lista pegada encima tapaba los medios de pago.
 */
 .pos .cart-card {
-  /* Debajo de .topbar-panel, que mide 60px más la zona segura. */
-  --pos-panel-arriba: calc(60px + env(safe-area-inset-top) + var(--space-3));
-
-  top: var(--pos-panel-arriba);
-  display: flex;
-  flex-direction: column;
-  max-height: calc(100dvh - var(--pos-panel-arriba) - var(--space-3));
+  position: static;
 }
 
 .pos .pos-panel {
-  display: flex;
-  flex: 1 1 auto;
-  flex-direction: column;
-  min-height: 0;
-  padding: var(--space-4);
-}
-
-.pos .pos-panel-cuerpo {
   container-type: inline-size;
-  display: flex;
-  flex: 1 1 auto;
-  flex-direction: column;
-  min-height: 0;
-  overflow-y: auto;
+  padding: var(--space-3) var(--space-4);
 }
 
-/* Campos más bajos que en un formulario: aquí compiten con el carrito. */
+/*
+  Los títulos que repiten lo que ya dicen los controles siguen para el lector de
+  pantalla, sin ocupar alto.
+*/
+.pos .pos-panel #pos-titulo-venta,
+.pos .pos-panel .rotulo-de-grupo,
+.pos .medios-de-pago legend {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
 .pos .pos-panel-cuerpo .field {
   margin-bottom: var(--space-2);
 }
 
-.pos .pos-panel-cuerpo .field label,
-.pos .pos-panel-cuerpo .rotulo-de-grupo {
+.pos .pos-panel-cuerpo .field label {
   margin-bottom: 2px;
   font-size: 12.5px;
 }
 
-.pos .pos-panel-cuerpo .pos-titulo {
-  margin-bottom: var(--space-1);
-}
-
-.pos .pos-panel-cuerpo input:not([type="radio"], [type="checkbox"]) {
-  min-height: 36px;
-  padding-block: 6px;
+.pos .pay-toggle {
+  margin-bottom: 0;
 }
 
 .pos .pay-toggle button {
   padding-block: 6px;
+}
+
+.pos .medios-de-pago {
+  margin-bottom: var(--space-2);
+  padding: 0;
+  border: none;
+}
+
+.pos .medios-de-pago-opciones {
+  margin-bottom: 2px;
+}
+
+.pos .medios-de-pago-fila .field {
+  margin-bottom: 4px;
+}
+
+/* Con ratón caben controles más bajos; en pantalla táctil conservan su altura. */
+@media (pointer: fine) {
+  .pos .medios-de-pago-opcion {
+    min-height: 26px;
+  }
+
+  .pos .pos-panel-cuerpo input:not([type="radio"], [type="checkbox"]) {
+    min-height: 34px;
+    padding-block: 5px;
+  }
 }
 
 /*
@@ -174,57 +190,16 @@
   }
 }
 
-.pos .pos-panel-cuerpo > * {
-  flex: none;
-}
-
-/* Por encima de la lista, que también se queda fija. */
-.pos .pos-panel-pie {
-  position: relative;
-  z-index: 2;
-  flex: none;
-  background: var(--paper);
-}
-
-.pos .pay-toggle {
-  margin-bottom: 0;
-}
-
-.pos .medios-de-pago {
-  margin-bottom: var(--space-2);
-  padding: 4px 10px 6px;
-}
-
-.pos .medios-de-pago-opciones {
-  margin-bottom: 2px;
-}
-
-.pos .medios-de-pago-fila .field {
-  margin-bottom: 4px;
-}
-
-/*
-  La lista toma el alto que queda y se desplaza sola. Con varios productos
-  conserva un mínimo, y si los campos no dejan sitio se queda pegada al fondo
-  del cuerpo y ellos pasan por debajo: el carrito no sale nunca de la vista.
-*/
-.pos .pos-panel-cuerpo > .pos-articulos {
-  position: sticky;
-  bottom: 0;
-  z-index: 1;
-  display: flex;
-  flex: 1 1 auto;
-  flex-direction: column;
-  background: var(--paper);
-}
-
-.pos .pos-panel-cuerpo > .pos-articulos:has(.cart-row:nth-child(3)) {
-  min-height: 150px;
+/* Los cuatro medios en una sola fila, si caben. */
+@container (min-width: 410px) {
+  .pos .medios-de-pago-opciones:has(> :nth-child(3)) {
+    grid-template-columns: repeat(4, auto);
+    justify-content: space-between;
+  }
 }
 
 .pos .pos-articulos-cabecera {
   display: flex;
-  flex: none;
   flex-wrap: wrap;
   align-items: baseline;
   justify-content: space-between;
@@ -232,7 +207,7 @@
 }
 
 .pos .pos-articulos-cabecera .pos-titulo {
-  margin-bottom: var(--space-1);
+  margin-bottom: 2px;
 }
 
 .pos .pos-articulos-cuenta {
@@ -251,9 +226,12 @@
   color: var(--primary-text);
 }
 
+/*
+  Lo único del panel con barra propia, y solo cuando hace falta: el tope sigue a
+  la ventana para que muchos productos no alejen el total.
+*/
 .pos .cart-items {
-  flex: 1 1 auto;
-  min-height: 0;
+  max-height: clamp(132px, 26dvh, 300px);
   overflow-y: auto;
 }
 
@@ -321,9 +299,21 @@
 /* ── RESUMEN ─────────────────────────────────────────────── */
 
 .pos .totals {
-  margin-top: var(--space-2);
-  padding-top: var(--space-2);
+  margin-top: var(--space-1);
+  padding-top: var(--space-1);
   border-top-color: var(--border);
+}
+
+@container (min-width: 360px) {
+  .pos .totals {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    column-gap: var(--space-4);
+  }
+
+  .pos .totals-row.grand {
+    grid-column: 1 / -1;
+  }
 }
 
 .pos .totals-row {
@@ -332,8 +322,8 @@
 }
 
 .pos .medios-de-pago-cuadre {
-  margin-top: var(--space-2);
-  padding-top: var(--space-2);
+  margin-top: var(--space-1);
+  padding-top: var(--space-1);
   border-top: 1px solid var(--border);
 }
 
@@ -356,8 +346,8 @@
 /* ── ACCIONES ────────────────────────────────────────────── */
 
 /*
-  «Generar factura» cobra y va sola, a todo el ancho. Las otras dos no cobran y
-  comparten una fila, para no alargar el panel.
+  «Generar factura» cobra y se lleva casi todo el ancho. Las otras dos no cobran
+  y van a su lado si caben, para no alargar el panel.
 */
 .pos .pos-acciones {
   display: flex;
@@ -375,7 +365,8 @@
 .pos .pos-acciones-secundarias .btn {
   justify-content: center;
   min-height: 36px;
-  padding-block: 4px;
+  padding: 4px 10px;
+  white-space: nowrap;
 }
 
 .pos .pos-acciones .btn-lg {
@@ -383,26 +374,23 @@
   padding-block: 8px;
 }
 
-/*
-  En una ventana muy baja el pie fijo taparía casi todo: el panel vuelve a ser
-  una columna normal, y resumen y botón se alcanzan desplazando la página.
-*/
-@media (max-height: 520px) {
-  .pos .cart-card {
-    position: static;
-    max-height: none;
+@container (min-width: 360px) {
+  .pos .pos-acciones {
+    flex-direction: row;
   }
 
-  .pos .pos-panel-cuerpo {
-    overflow-y: visible;
+  .pos .pos-acciones .btn-lg {
+    flex: 1 1 0;
+    min-width: 0;
   }
 
-  .pos .pos-panel-cuerpo > .pos-articulos {
-    position: static;
+  .pos .pos-acciones-secundarias {
+    flex: none;
+    grid-template-columns: repeat(2, auto);
   }
 
-  .pos .cart-items {
-    max-height: 220px;
+  .pos .pos-acciones-secundarias .btn {
+    min-height: 44px;
   }
 }
 
@@ -419,8 +407,31 @@
   border-radius: var(--radius-md);
 }
 
+/* Una sola línea: sin productos, el panel no reserva sitio para el carrito. */
 .pos .cart-items .empty-state {
-  padding: var(--space-3);
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 6px var(--space-3);
+  font-size: 13px;
+  text-align: left;
+}
+
+.pos .cart-items .empty-state svg {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  margin: 0;
+}
+
+.pos .cart-items .empty-state strong {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.pos .cart-items .empty-state-texto {
+  display: none;
 }
 
 /* ── TABLET ──────────────────────────────────────────────── */
@@ -444,46 +455,19 @@
     grid-template-columns: 1fr;
   }
 
-  /*
-    Apilado, el panel sigue el flujo de la página y solo la lista de productos
-    tiene tope. El pie se queda abajo mientras el panel está en pantalla, si la
-    ventana tiene altura para que no tape lo que se está llenando.
-  */
-  .pos .cart-card {
-    position: static;
-    max-height: none;
-  }
-
-  .pos .pos-panel-cuerpo {
-    overflow-y: visible;
-  }
-
-  .pos .pos-panel-cuerpo > .pos-articulos {
-    position: static;
-  }
-
-  .pos .cart-items {
-    max-height: 35dvh;
-  }
-
   .pos .picker-list {
     max-height: none;
   }
+
+  .pos .cart-items {
+    max-height: clamp(200px, 38dvh, 360px);
+  }
 }
 
-@media (max-width: 1080px) and (min-height: 640px) {
-  .pos .pos-panel-pie {
-    position: sticky;
-    bottom: 0;
-    margin: 0 calc(-1 * var(--space-4)) calc(-1 * var(--space-4));
-    padding: 0 var(--space-4) calc(var(--space-3) + env(safe-area-inset-bottom));
-    border-top: 1px solid var(--border);
-    border-radius: 0 0 var(--radius-lg) var(--radius-lg);
-    box-shadow: 0 -4px 12px rgb(0 0 0 / 6%);
-  }
-
-  .pos .pos-panel-pie .totals {
-    border-top: none;
+/* En una ventana baja, ese alto hace más falta en el panel que la frase de arriba. */
+@media (max-height: 820px) {
+  .pos .crud-encabezado {
+    display: none;
   }
 }
 
