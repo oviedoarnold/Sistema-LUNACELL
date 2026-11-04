@@ -25,6 +25,7 @@ function DocumentPreviewModal({
   onClose,
   onConfirm,
   confirmLabel = "Confirmar",
+  confirmDisabled = false,
   canExport = true,
 }) {
   const documentRef =
@@ -287,6 +288,7 @@ function DocumentPreviewModal({
               type="button"
               className="btn btn-success"
               onClick={onConfirm}
+              disabled={confirmDisabled}
             >
               ✓ {confirmLabel}
             </button>

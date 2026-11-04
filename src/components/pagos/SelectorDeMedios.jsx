@@ -1,12 +1,16 @@
-import { useId } from "react"
+import { useId, useState } from "react"
 
 import { formatMoney } from "../../utils/format"
 import {
   MEDIOS_DE_PAGO,
-  MIXTO,
+  alternarMedio,
   cobrosDelSelector,
+  escribirImporte,
+  escribirReferencia,
   faltaPorAsignar,
-  llevaReferencia,
+  importeBloqueado,
+  importeVisible,
+  problemaDeCobros,
 } from "../../utils/mediosDePago"
 
 /*
@@ -15,88 +19,110 @@ import {
   No sabe qué pantalla lo usa: recibe el total y entrega el estado. La comisión
   del proveedor no aparece aquí porque el vendedor no la ve y no le cambia nada
   al cliente: lo que se cobra es el total, con cualquier medio.
+
+  El campo de importe es de texto y no numérico: un campo numérico vacía lo que
+  se pega con comas, y así el tope no llegaría a verlo. Al entrar se selecciona
+  lo escrito: lo que se teclea lo reemplaza, en vez de agregarse al final y
+  chocar con el tope.
 */
 function SelectorDeMedios({ valor, total, moneda, onCambiar }) {
   const id = useId()
+  const [ajustado, setAjustado] = useState(false)
 
-  const elegir = (medio) => onCambiar({ ...valor, medio })
+  const cobros = cobrosDelSelector(valor, total)
+  const pendiente = faltaPorAsignar(cobros, total)
+  const problema = valor.elegidos.length > 0 && total > 0 ? problemaDeCobros(cobros, total) : null
 
-  const escribir = (campo, medio, texto) =>
-    onCambiar({ ...valor, [campo]: { ...valor[campo], [medio]: texto } })
+  const alternar = (medio) => {
+    setAjustado(false)
+    onCambiar(alternarMedio(valor, medio, total))
+  }
 
-  const falta = valor.medio === MIXTO ? faltaPorAsignar(cobrosDelSelector(valor, total), total) : 0
+  const escribir = (medio, texto) => {
+    const resultado = escribirImporte(valor, medio, texto, total)
+
+    setAjustado(resultado.ajustado)
+    onCambiar(resultado.valor)
+  }
 
   return (
-    <div className="medios-de-pago">
-      <div className="field pos-campo">
-        <label htmlFor={`${id}-medio`}>Medio de pago</label>
+    <fieldset className="medios-de-pago">
+      <legend>Medio de pago</legend>
 
-        <select id={`${id}-medio`} value={valor.medio} onChange={(e) => elegir(e.target.value)}>
-          <option value="">Elige el medio…</option>
-          {MEDIOS_DE_PAGO.map((m) => <option key={m.id} value={m.id}>{m.etiqueta}</option>)}
-          <option value={MIXTO}>Pago mixto</option>
-        </select>
+      <div className="medios-de-pago-casillas">
+        {MEDIOS_DE_PAGO.map((m) => (
+          <label key={m.id} className="medios-de-pago-casilla">
+            <input type="checkbox" checked={valor.elegidos.includes(m.id)} onChange={() => alternar(m.id)} />
+            {m.etiqueta}
+          </label>
+        ))}
       </div>
 
-      {llevaReferencia(valor.medio) && (
-        <div className="field pos-campo">
-          <label htmlFor={`${id}-referencia`}>Referencia</label>
+      {MEDIOS_DE_PAGO.filter((m) => valor.elegidos.includes(m.id)).map((m) => {
+        const importe = importeVisible(valor, m.id, total)
+        const unico = valor.elegidos.length === 1
 
-          <input
-            id={`${id}-referencia`}
-            type="text"
-            maxLength="120"
-            placeholder="Número de autorización o comprobante"
-            value={valor.referencias[valor.medio]}
-            onChange={(e) => escribir("referencias", valor.medio, e.target.value)}
-          />
-        </div>
-      )}
+        return (
+          <div key={m.id} className="medios-de-pago-fila">
+            <div className="field">
+              <label htmlFor={`${id}-monto-${m.id}`}>Importe de {m.etiqueta}</label>
 
-      {valor.medio === MIXTO && (
-        <fieldset className="medios-de-pago-mixto">
-          <legend>Importe por medio</legend>
+              <input
+                id={`${id}-monto-${m.id}`}
+                type="text"
+                inputMode="decimal"
+                autoComplete="off"
+                placeholder="0.00"
+                value={importe}
+                readOnly={unico}
+                disabled={importeBloqueado(valor, m.id, total)}
+                onFocus={(e) => e.target.select()}
+                onChange={(e) => escribir(m.id, e.target.value)}
+              />
+            </div>
 
-          {MEDIOS_DE_PAGO.map((m) => (
-            <div key={m.id} className="medios-de-pago-fila">
+            {m.conReferencia && Number(importe) > 0 && (
               <div className="field">
-                <label htmlFor={`${id}-monto-${m.id}`}>{m.etiqueta}</label>
+                <label htmlFor={`${id}-referencia-${m.id}`}>Referencia de {m.etiqueta}</label>
 
                 <input
-                  id={`${id}-monto-${m.id}`}
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  placeholder="0.00"
-                  value={valor.montos[m.id]}
-                  onChange={(e) => escribir("montos", m.id, e.target.value)}
+                  id={`${id}-referencia-${m.id}`}
+                  type="text"
+                  maxLength="120"
+                  autoComplete="off"
+                  placeholder="Autorización o comprobante"
+                  value={valor.referencias[m.id]}
+                  onChange={(e) => onCambiar(escribirReferencia(valor, m.id, e.target.value))}
                 />
               </div>
+            )}
+          </div>
+        )
+      })}
 
-              {m.conReferencia && valor.montos[m.id] !== "" && (
-                <div className="field">
-                  <label htmlFor={`${id}-referencia-${m.id}`}>Referencia de {m.etiqueta}</label>
+      <dl className="medios-de-pago-resumen">
+        <div>
+          <dt>Total</dt>
+          <dd>{formatMoney(total, moneda)}</dd>
+        </div>
 
-                  <input
-                    id={`${id}-referencia-${m.id}`}
-                    type="text"
-                    maxLength="120"
-                    value={valor.referencias[m.id]}
-                    onChange={(e) => escribir("referencias", m.id, e.target.value)}
-                  />
-                </div>
-              )}
-            </div>
-          ))}
+        <div>
+          <dt>Importe asignado</dt>
+          <dd>{formatMoney(total - pendiente, moneda)}</dd>
+        </div>
 
-          <p className="medios-de-pago-resto" role="status">
-            {falta === 0 && "Los importes suman el total."}
-            {falta > 0 && `Falta asignar ${formatMoney(falta, moneda)}.`}
-            {falta < 0 && `Sobran ${formatMoney(-falta, moneda)}.`}
-          </p>
-        </fieldset>
-      )}
-    </div>
+        <div>
+          <dt>{pendiente < 0 ? "Excedente" : "Pendiente"}</dt>
+          <dd>{formatMoney(Math.abs(pendiente), moneda)}</dd>
+        </div>
+      </dl>
+
+      <p className="medios-de-pago-aviso" role="status">
+        {ajustado && "El importe se ajustó a lo que quedaba pendiente. "}
+        {pendiente < 0 && "El total bajó: reduce un importe. "}
+        {pendiente >= 0 && problema}
+      </p>
+    </fieldset>
   )
 }
 

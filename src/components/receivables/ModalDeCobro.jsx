@@ -91,6 +91,13 @@ function ModalDeCobro({
 
   const aviso = avisoLocal || error
 
+  /*
+    Con un monto que no vale, el botón sigue activo para que el aviso diga cuánto
+    debe el cliente. Con uno válido, se espera a que los medios lo sumen.
+  */
+  const montoValido = Number.isFinite(montoNumero) && montoNumero > 0 && montoNumero <= cuenta.deudaTotal
+  const mediosSinCuadrar = montoValido && problemaDeCobros(cobrosDelSelector(medios, montoNumero), montoNumero) !== null
+
   return (
     <ModalShell
       titulo={`Abonar · ${cuenta.nombre}`}
@@ -105,7 +112,7 @@ function ModalDeCobro({
             type="submit"
             form="form-cobro"
             className="btn btn-primary"
-            disabled={cobrando}
+            disabled={cobrando || mediosSinCuadrar}
           >
             {cobrando ? "Registrando…" : "Confirmar abono"}
           </button>

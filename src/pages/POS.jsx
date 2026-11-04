@@ -278,6 +278,10 @@ function POS() {
 
   const cobrosDeLaVenta = () => (paymentType === "contado" ? cobrosDelSelector(medios, totalACobrar) : [])
 
+  // Mientras los medios no sumen el total, la venta no se puede confirmar.
+  const mediosSinCuadrar =
+    paymentType === "contado" && problemaDeCobros(cobrosDeLaVenta(), totalACobrar) !== null
+
   const handlePaymentTypeChange = (
     type
   ) => {
@@ -1107,7 +1111,7 @@ function POS() {
               <button
                 type="button"
                 className="btn btn-primary btn-lg btn-block"
-                disabled={cart.length === 0 || facturando || !existenciaLista || bloqueadoSinConexion}
+                disabled={cart.length === 0 || facturando || !existenciaLista || bloqueadoSinConexion || mediosSinCuadrar}
                 onClick={generateSale}
               >
                 {textoDelBotonDeVenta(facturando, modoSinConexion)}
@@ -1159,6 +1163,7 @@ function POS() {
         canExport={previewMode === "saved"}
         onConfirm={previewMode === "preview" ? confirmPreviewSale : undefined}
         confirmLabel={modoSinConexion ? "Guardar venta sin conexión" : "Generar factura"}
+        confirmDisabled={mediosSinCuadrar}
         onClose={() => {
           setPreviewOpen(false)
           setPreviewSale(null)

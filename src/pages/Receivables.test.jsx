@@ -106,9 +106,9 @@ const escribirMonto = (valor) => {
 }
 
 const confirmar = () => {
-  const medio = screen.getByLabelText("Medio de pago")
+  const efectivo = screen.getByRole("checkbox", { name: "Efectivo" })
 
-  if (!medio.value) fireEvent.change(medio, { target: { value: "efectivo" } })
+  if (!efectivo.checked) fireEvent.click(efectivo)
 
   fireEvent.click(screen.getByRole("button", { name: /confirmar abono/i }))
 }
@@ -277,20 +277,19 @@ describe("validación del monto en la pantalla", () => {
 })
 
 describe("medios de pago del abono", () => {
-  const elegir = (valor) => fireEvent.change(screen.getByLabelText("Medio de pago"), { target: { value: valor } })
+  const marcar = (nombre) => fireEvent.click(screen.getByRole("checkbox", { name: nombre }))
+
+  const botonConfirmar = () => screen.getByRole("button", { name: /confirmar abono/i })
 
   const clicConfirmar = () => fireEvent.click(screen.getByRole("button", { name: /confirmar abono/i }))
 
-  it("sin elegir el medio no cobra", async () => {
+  it("sin elegir el medio no se puede confirmar", async () => {
     await renderCxC()
-    const rpc = responderRpc(pagoDelServidor())
 
     abrirCobro()
     escribirMonto(100)
-    clicConfirmar()
 
-    expect(await screen.findByRole("alert")).toHaveTextContent(/elige el medio/i)
-    expect(rpc).not.toHaveBeenCalled()
+    expect(botonConfirmar()).toBeDisabled()
   })
 
   it("una transferencia pide su referencia", async () => {
@@ -299,38 +298,37 @@ describe("medios de pago del abono", () => {
 
     abrirCobro()
     escribirMonto(100)
-    elegir("transferencia")
-    clicConfirmar()
+    marcar("Transferencia")
 
-    expect(await screen.findByRole("alert")).toHaveTextContent(/referencia de transferencia/i)
-    expect(rpc).not.toHaveBeenCalled()
+    expect(screen.getByText("Escribe la referencia de Transferencia.")).toBeInTheDocument()
+    expect(botonConfirmar()).toBeDisabled()
 
-    fireEvent.change(screen.getByLabelText("Referencia"), { target: { value: "TRF-77" } })
+    fireEvent.change(screen.getByLabelText("Referencia de Transferencia"), { target: { value: "TRF-77" } })
     clicConfirmar()
 
     await waitFor(() => expect(rpc).toHaveBeenCalled())
     expect(rpc.mock.calls[0][1].p_cobros).toEqual([{ medio: "transferencia", monto: 100, referencia: "TRF-77" }])
   })
 
-  it("un pago mixto manda cada importe, y no sale si no suman el monto", async () => {
+  it("un pago mixto manda cada importe, no supera el monto y no sale hasta sumarlo", async () => {
     await renderCxC()
     const rpc = responderRpc(pagoDelServidor())
 
     abrirCobro()
     escribirMonto(100)
-    elegir("mixto")
-    fireEvent.change(screen.getByLabelText("Efectivo"), { target: { value: "40" } })
-    fireEvent.change(screen.getByLabelText("Tarjeta"), { target: { value: "50" } })
+    marcar("Efectivo")
+    marcar("Tarjeta")
+    fireEvent.change(screen.getByLabelText("Importe de Efectivo"), { target: { value: "40" } })
+    fireEvent.change(screen.getByLabelText("Importe de Tarjeta"), { target: { value: "50" } })
     fireEvent.change(screen.getByLabelText("Referencia de Tarjeta"), { target: { value: "AUT-1" } })
 
-    expect(screen.getByText(/falta asignar/i)).toHaveTextContent("10.00")
+    expect(screen.getByText("Pendiente").nextSibling).toHaveTextContent("10.00")
+    expect(botonConfirmar()).toBeDisabled()
 
-    clicConfirmar()
+    fireEvent.change(screen.getByLabelText("Importe de Tarjeta"), { target: { value: "999" } })
 
-    expect(await screen.findByRole("alert")).toHaveTextContent(/deben sumar el total/i)
-    expect(rpc).not.toHaveBeenCalled()
+    expect(screen.getByLabelText("Importe de Tarjeta")).toHaveValue("60.00")
 
-    fireEvent.change(screen.getByLabelText("Tarjeta"), { target: { value: "60" } })
     clicConfirmar()
 
     await waitFor(() => expect(rpc).toHaveBeenCalled())
@@ -338,6 +336,28 @@ describe("medios de pago del abono", () => {
       { medio: "efectivo", monto: 40, referencia: "" },
       { medio: "tarjeta", monto: 60, referencia: "AUT-1" },
     ])
+  })
+})
+
+describe("el monto y los medios juntos", () => {
+  it("un único medio sigue al monto si este cambia", async () => {
+    await renderCxC()
+
+    abrirCobro()
+    escribirMonto(100)
+    fireEvent.click(screen.getByRole("checkbox", { name: "Efectivo" }))
+    escribirMonto(250.5)
+
+    expect(screen.getByLabelText("Importe de Efectivo")).toHaveValue("250.50")
+  })
+
+  it("si el monto no vale, el botón sigue activo para explicar por qué", async () => {
+    await renderCxC()
+
+    abrirCobro()
+    escribirMonto(9000)
+
+    expect(screen.getByRole("button", { name: /confirmar abono/i })).toBeEnabled()
   })
 })
 

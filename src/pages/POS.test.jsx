@@ -116,13 +116,13 @@ const borradorDeCotizacion = (cantidad) => ({
   ],
 })
 
-const totales = () => screen.getByText("Total").closest("div").parentElement
+const totales = () => document.querySelector(".totals")
 
 // A crédito no hay selector: se cobra con los abonos.
 const elegirEfectivo = () => {
-  const selector = screen.queryByLabelText("Medio de pago")
+  const casilla = screen.queryByRole("checkbox", { name: "Efectivo" })
 
-  if (selector) fireEvent.change(selector, { target: { value: "efectivo" } })
+  if (casilla) fireEvent.click(casilla)
 }
 
 const buscar = (texto) =>
@@ -472,59 +472,63 @@ describe("POS: venta registrada por el servidor", () => {
 
   const rpcDeVenta = (falso) => falso.rpc.mock.calls.find(([nombre]) => nombre === "registrar_venta_con_medios")
 
-  const elegirMedio = (valor) => fireEvent.change(screen.getByLabelText("Medio de pago"), { target: { value: valor } })
+  const marcar = (nombre) => fireEvent.click(screen.getByRole("checkbox", { name: nombre }))
+
+  const importe = (nombre, valor) => fireEvent.change(screen.getByLabelText(`Importe de ${nombre}`), { target: { value: valor } })
 
   const clicFacturar = () => fireEvent.click(screen.getByRole("button", { name: /generar factura/i }))
 
-  it("sin elegir el medio de pago no vende: nada viene preseleccionado", async () => {
-    const { falso } = await renderPOS()
+  it("sin elegir el medio de pago no se puede confirmar: nada viene preseleccionado", async () => {
+    await renderPOS()
 
     agregar("Martillo de uña")
 
-    expect(screen.getByLabelText("Medio de pago")).toHaveValue("")
-
-    clicFacturar()
-
-    await waitFor(() => expect(Swal.fire).toHaveBeenCalledWith(expect.objectContaining({ title: "Revisa el medio de pago" })))
-    expect(falso.datos.ventas).toHaveLength(0)
+    expect(screen.getAllByRole("checkbox").filter((c) => c.checked)).toEqual([])
+    expect(screen.getByRole("button", { name: /generar factura/i })).toBeDisabled()
   })
 
   it("con un medio manda el total y su referencia", async () => {
     const { falso } = await renderPOS()
 
     agregar("Martillo de uña")
-    elegirMedio("tarjeta")
-    clicFacturar()
+    marcar("Tarjeta")
 
-    await waitFor(() => expect(Swal.fire).toHaveBeenCalledWith(expect.objectContaining({ text: "Escribe la referencia de Tarjeta." })))
-    expect(falso.datos.ventas).toHaveLength(0)
+    expect(screen.getByLabelText("Importe de Tarjeta")).toHaveValue("207.00")
+    expect(screen.getByLabelText("Importe de Tarjeta")).toHaveAttribute("readonly")
+    expect(screen.getByRole("button", { name: /generar factura/i })).toBeDisabled()
+    expect(screen.getByText("Escribe la referencia de Tarjeta.")).toBeInTheDocument()
 
-    fireEvent.change(screen.getByLabelText("Referencia"), { target: { value: "AUT-1" } })
+    fireEvent.change(screen.getByLabelText("Referencia de Tarjeta"), { target: { value: "AUT-1" } })
     clicFacturar()
 
     await waitFor(() => expect(falso.datos.ventas).toHaveLength(1))
     expect(rpcDeVenta(falso)[1].p_cobros).toEqual([{ medio: "tarjeta", monto: 207, referencia: "AUT-1" }])
   })
 
-  it("un pago mixto no sale hasta que los importes suman el total", async () => {
+  it("un pago mixto no se puede confirmar hasta que los importes suman el total", async () => {
     const { falso } = await renderPOS()
 
     agregar("Martillo de uña")
-    elegirMedio("mixto")
-    fireEvent.change(screen.getByLabelText("Efectivo"), { target: { value: "100" } })
-    fireEvent.change(screen.getByLabelText("Transferencia"), { target: { value: "100" } })
+    marcar("Efectivo")
+    marcar("Transferencia")
+
+    // Efectivo conserva el total: sin saldo, Transferencia no admite importe.
+    expect(screen.getByLabelText("Importe de Efectivo")).toHaveValue("207.00")
+    expect(screen.getByLabelText("Importe de Transferencia")).toBeDisabled()
+
+    importe("Efectivo", "100")
+    importe("Transferencia", "100")
     fireEvent.change(screen.getByLabelText("Referencia de Transferencia"), { target: { value: "TRF-1" } })
 
-    expect(screen.getByText(/falta asignar/i)).toHaveTextContent("7.00")
+    const resumen = screen.getByText("Pendiente").closest("dl")
 
-    clicFacturar()
+    expect(within(resumen).getByText("Pendiente").nextSibling).toHaveTextContent("7.00")
+    expect(within(resumen).getByText("Importe asignado").nextSibling).toHaveTextContent("200.00")
+    expect(screen.getByRole("button", { name: /generar factura/i })).toBeDisabled()
 
-    await waitFor(() => expect(Swal.fire).toHaveBeenCalledWith(expect.objectContaining({ title: "Revisa el medio de pago" })))
-    expect(falso.datos.ventas).toHaveLength(0)
+    importe("Transferencia", "107")
 
-    fireEvent.change(screen.getByLabelText("Transferencia"), { target: { value: "107" } })
-
-    expect(screen.getByText(/los importes suman el total/i)).toBeInTheDocument()
+    expect(within(resumen).getByText("Pendiente").nextSibling).toHaveTextContent("0.00")
 
     clicFacturar()
 
@@ -535,12 +539,134 @@ describe("POS: venta registrada por el servidor", () => {
     ])
   })
 
+  it("no deja superar el total, ni pegando: el importe se ajusta y lo dice", async () => {
+    await renderPOS()
+
+    agregar("Martillo de uña")
+    marcar("Efectivo")
+    marcar("Tarjeta")
+    importe("Efectivo", "100")
+    importe("Tarjeta", "1,125.00")
+
+    expect(screen.getByLabelText("Importe de Tarjeta")).toHaveValue("107.00")
+    expect(screen.getByText(/se ajustó a lo que quedaba pendiente/i)).toBeInTheDocument()
+  })
+
+  /*
+    Sin esto, tocar un importe y teclear agrega los dígitos al final, el tope
+    los corta y parece que el campo no responde. Se vio en un navegador real.
+  */
+  it("al entrar a un importe selecciona lo escrito, para que teclear lo reemplace", async () => {
+    await renderPOS()
+
+    agregar("Martillo de uña")
+    marcar("Efectivo")
+    marcar("Tarjeta")
+
+    const campo = screen.getByLabelText("Importe de Efectivo")
+
+    fireEvent.focus(campo)
+
+    expect(campo.selectionStart).toBe(0)
+    expect(campo.selectionEnd).toBe("207.00".length)
+  })
+
+  it("al cambiar el total: con un medio lo sigue, y con varios bloquea hasta corregir", async () => {
+    await renderPOS()
+
+    agregar("Martillo de uña")
+    marcar("Efectivo")
+    agregar("Martillo de uña")
+
+    // Dos martillos: 414.00. El único medio sigue al total.
+    expect(screen.getByLabelText("Importe de Efectivo")).toHaveValue("414.00")
+
+    marcar("Transferencia")
+    importe("Efectivo", "300")
+    importe("Transferencia", "114")
+    fireEvent.change(screen.getByLabelText("Referencia de Transferencia"), { target: { value: "TRF-1" } })
+    fireEvent.click(screen.getByRole("button", { name: /quitar una unidad de martillo/i }))
+
+    // Bajó a 207.00: los importes no se cambian solos, y no se puede confirmar.
+    expect(screen.getByText("Excedente").nextSibling).toHaveTextContent("207.00")
+    expect(screen.getByText(/el total bajó/i)).toBeInTheDocument()
+    expect(screen.getByRole("button", { name: /generar factura/i })).toBeDisabled()
+
+    importe("Efectivo", "93")
+
+    expect(screen.getByText("Pendiente").nextSibling).toHaveTextContent("0.00")
+    expect(screen.getByRole("button", { name: /generar factura/i })).toBeEnabled()
+  })
+
+  it("desmarcar borra importe y referencia, y el que queda solo vuelve a llevar el total", async () => {
+    const { falso } = await renderPOS()
+
+    agregar("Martillo de uña")
+    marcar("Efectivo")
+    marcar("Tarjeta")
+    importe("Efectivo", "100")
+    importe("Tarjeta", "107")
+    fireEvent.change(screen.getByLabelText("Referencia de Tarjeta"), { target: { value: "AUT-9" } })
+
+    marcar("Tarjeta")
+
+    expect(screen.queryByLabelText("Importe de Tarjeta")).not.toBeInTheDocument()
+    expect(screen.getByLabelText("Importe de Efectivo")).toHaveValue("207.00")
+
+    marcar("Tarjeta")
+
+    expect(screen.getByLabelText("Importe de Tarjeta")).toHaveValue("")
+
+    marcar("Tarjeta")
+    clicFacturar()
+
+    await waitFor(() => expect(falso.datos.ventas).toHaveLength(1))
+    expect(rpcDeVenta(falso)[1].p_cobros).toEqual([{ medio: "efectivo", monto: 207, referencia: "" }])
+  })
+
+  it("con los cuatro medios manda cada importe con decimales exactos", async () => {
+    const { falso } = await renderPOS()
+
+    agregar("Martillo de uña")
+    marcar("Efectivo")
+    marcar("Transferencia")
+    marcar("Tarjeta")
+    marcar("Enlace de pago")
+    importe("Efectivo", "100.10")
+    importe("Transferencia", "100.20")
+    importe("Tarjeta", "6.60")
+    importe("Enlace de pago", "0.10")
+    fireEvent.change(screen.getByLabelText("Referencia de Transferencia"), { target: { value: "T" } })
+    fireEvent.change(screen.getByLabelText("Referencia de Tarjeta"), { target: { value: "A" } })
+    fireEvent.change(screen.getByLabelText("Referencia de Enlace de pago"), { target: { value: "L" } })
+    clicFacturar()
+
+    await waitFor(() => expect(falso.datos.ventas).toHaveLength(1))
+    expect(rpcDeVenta(falso)[1].p_cobros).toEqual([
+      { medio: "efectivo", monto: 100.1, referencia: "" },
+      { medio: "transferencia", monto: 100.2, referencia: "T" },
+      { medio: "tarjeta", monto: 6.6, referencia: "A" },
+      { medio: "enlace", monto: 0.1, referencia: "L" },
+    ])
+  })
+
+  it("la vista previa tampoco confirma mientras los medios no cuadran", async () => {
+    await renderPOS()
+
+    agregar("Martillo de uña")
+    fireEvent.click(screen.getByRole("button", { name: /vista previa/i }))
+
+    const confirmar = await screen.findAllByRole("button", { name: /generar factura/i })
+
+    for (const boton of confirmar) expect(boton).toBeDisabled()
+  })
+
   it("a crédito no pide medio de pago y sigue por el camino de siempre", async () => {
     const { falso } = await renderPOS()
 
     fireEvent.click(screen.getByRole("button", { name: /crédito/i }))
 
-    expect(screen.queryByLabelText("Medio de pago")).not.toBeInTheDocument()
+    expect(screen.queryByRole("checkbox", { name: "Efectivo" })).not.toBeInTheDocument()
     expect(rpcDeVenta(falso)).toBeUndefined()
   })
 
@@ -666,6 +792,7 @@ describe("POS: existencias de la ubicación operativa", () => {
     })
     Swal.fire.mockClear()
 
+    elegirEfectivo()
     fireEvent.click(botonFacturar())
 
     await waitFor(() => expect(Swal.fire).toHaveBeenCalled())

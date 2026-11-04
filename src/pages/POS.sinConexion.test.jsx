@@ -128,7 +128,7 @@ async function devolverConexion() {
   })
 }
 
-const elegirEfectivo = () => fireEvent.change(screen.getByLabelText("Medio de pago"), { target: { value: "efectivo" } })
+const elegirEfectivo = () => fireEvent.click(screen.getByRole("checkbox", { name: "Efectivo" }))
 
 const botonGuardarSinConexion = () => screen.getByRole("button", { name: /guardar venta sin conexión/i })
 
@@ -200,16 +200,37 @@ describe("POS sin conexión en una ubicación habilitada", () => {
     await waitFor(() => expect(screen.getByText(/1 venta pendiente de sincronizar/i)).toBeInTheDocument())
   })
 
-  it("sin elegir el medio de pago no guarda la venta", async () => {
+  it("sin elegir el medio de pago no se puede guardar la venta", async () => {
     await renderPOS()
     await esperarCopia()
     await quitarConexion()
 
     agregar("Martillo de uña")
-    fireEvent.click(botonGuardarSinConexion())
 
-    await waitFor(() => expect(Swal.fire).toHaveBeenCalledWith(expect.objectContaining({ title: "Revisa el medio de pago" })))
-    expect(screen.queryByText("COMPROBANTE PROVISIONAL")).not.toBeInTheDocument()
+    expect(botonGuardarSinConexion()).toBeDisabled()
+  })
+
+  it("guarda y envía un pago mixto con el mismo contrato de siempre", async () => {
+    await renderPOS()
+    await esperarCopia()
+    await quitarConexion()
+
+    agregar("Martillo de uña")
+    fireEvent.click(screen.getByRole("checkbox", { name: "Efectivo" }))
+    fireEvent.click(screen.getByRole("checkbox", { name: "Tarjeta" }))
+    fireEvent.change(screen.getByLabelText("Importe de Efectivo"), { target: { value: "107" } })
+    fireEvent.change(screen.getByLabelText("Importe de Tarjeta"), { target: { value: "100" } })
+    fireEvent.change(screen.getByLabelText("Referencia de Tarjeta"), { target: { value: "AUT-1" } })
+    fireEvent.click(botonGuardarSinConexion())
+    await waitFor(() => expect(screen.getByText(/1 venta pendiente de sincronizar/i)).toBeInTheDocument())
+
+    await devolverConexion()
+
+    await waitFor(() => expect(servidor.recibidas).toHaveLength(1))
+    expect(servidor.recibidas[0].p_cobros).toEqual([
+      { medio: "efectivo", monto: 107, referencia: "" },
+      { medio: "tarjeta", monto: 100, referencia: "AUT-1" },
+    ])
   })
 
   it("descuenta del disponible lo que ya vendió el teléfono y no deja vender de más", async () => {
