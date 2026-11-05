@@ -67,9 +67,12 @@ function sinComentariosDeBloque(texto) {
 // Sin comentarios ni espacios de más: lo que se compara es el código.
 export const soloCodigo = (cuerpo) =>
   sinComentariosDeBloque(cuerpo)
-    .replace(/--.*$/gm, "")
-    .replace(/\s+/g, " ")
-    .trim()
+    .split("\n")
+    .map((linea) => (linea.includes("--") ? linea.slice(0, linea.indexOf("--")) : linea))
+    .join(" ")
+    .split(/\s+/)
+    .filter(Boolean)
+    .join(" ")
 
 // Un reintento de la venta guardada antes de migrar, y una nueva: las dos como siempre.
 export async function siguenVendiendoIgual(contexto, clave) {
