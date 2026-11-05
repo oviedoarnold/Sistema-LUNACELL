@@ -337,8 +337,6 @@
 
 .pos .medios-de-pago-cuadre {
   margin-top: var(--space-1);
-  padding-top: var(--space-1);
-  border-top: 1px solid var(--border);
 }
 
 /*

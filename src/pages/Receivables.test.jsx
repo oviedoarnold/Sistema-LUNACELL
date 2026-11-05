@@ -331,7 +331,6 @@ describe("medios de pago del abono", () => {
     fireEvent.change(screen.getByLabelText("Importe de Efectivo"), { target: { value: "40" } })
 
     expect(screen.getByLabelText("Importe de Tarjeta")).toHaveValue("60.00")
-    expect(screen.getByText("Pendiente").nextSibling).toHaveTextContent("0.00")
     expect(botonConfirmar()).toBeEnabled()
 
     fireEvent.change(screen.getByLabelText(/^Referencia de Tarjeta/), { target: { value: "AUT-1" } })
@@ -364,15 +363,17 @@ describe("medios de pago del abono", () => {
     })
   })
 
-  it("un pago mixto con un solo medio no se confirma, aunque lleve todo el monto", async () => {
+  it("un pago mixto con un solo medio no se confirma, pero ya muestra su cargo", async () => {
     await renderCxC()
 
     abrirCobro()
     escribirMonto(100)
     unico("Pago mixto")
-    marcar("Efectivo")
-    fireEvent.change(screen.getByLabelText("Importe de Efectivo"), { target: { value: "100" } })
+    marcar("Tarjeta")
 
+    expect(screen.queryByLabelText("Importe de Tarjeta")).not.toBeInTheDocument()
+    expect(screen.getByText("Total a cobrar").nextSibling).toHaveTextContent("L 107.00")
+    expect(screen.queryByText(/importe asignado/i)).not.toBeInTheDocument()
     expect(screen.getByText("Elige 2 medios de pago.")).toBeInTheDocument()
     expect(botonConfirmar()).toBeDisabled()
   })
@@ -403,10 +404,10 @@ describe("el monto y los medios juntos", () => {
 
     abrirCobro()
     escribirMonto(100)
-    fireEvent.click(screen.getByRole("radio", { name: "Efectivo" }))
+    fireEvent.click(screen.getByRole("radio", { name: "Tarjeta" }))
     escribirMonto(250.5)
 
-    expect(screen.getByText("Importe asignado").nextSibling).toHaveTextContent("250.50")
+    expect(screen.getByText("Total a cobrar").nextSibling).toHaveTextContent("L 268.04")
   })
 
   it("si el monto no vale, el botón sigue activo para explicar por qué", async () => {

@@ -17,7 +17,8 @@ venta a crédito no lleva medios: se cobra con sus abonos.
   cambió no quede como efectivo.
 - **Pago único o pago mixto.** El único lleva un medio y el total, sin escribir
   importe. El mixto lleva exactamente dos medios distintos, con importe positivo en
-  los dos: se escribe uno y el otro se calcula con lo que falta. Cambiar de
+  los dos: el primero lleva el total y su cargo sin escribir nada; al elegir el segundo
+  se escribe un importe y el otro se calcula con lo que falta. Cambiar de
   modalidad borra lo escrito, para que nada viaje oculto.
 - **La pantalla no deja superar el total**, ni pegando: el importe se ajusta al
   total y lo avisa. Si el total cambia en un pago mixto, el importe calculado lo

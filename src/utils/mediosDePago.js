@@ -63,16 +63,27 @@ export const selectorVacio = (modalidad = UNICO) => ({
   referencias: vacios(),
   // El medio cuyo importe escribió el cajero en pago mixto; el otro se calcula.
   escrito: null,
+  // En pago mixto, el primero que se eligió: lleva el total hasta que se escriba un importe.
+  primero: null,
 })
 
-const esCalculado = ({ elegidos, escrito }, medio) =>
-  elegidos.length === MEDIOS_EN_MIXTO && escrito !== null && escrito !== medio
+const esCalculado = ({ elegidos, escrito, primero }, medio) => {
+  if (!elegidos.includes(medio)) return false
 
-/* Sale de la resta y no del estado: así sigue al total si este cambia. */
-export const importeDe = (valor, medio, total) =>
-  esCalculado(valor, medio)
-    ? aTexto(Math.max(0, centavos(total) - centavos(valor.montos[valor.escrito])))
-    : valor.montos[medio]
+  return escrito === null ? medio === primero : escrito !== medio
+}
+
+/*
+  Sale de la resta y no del estado: así sigue al total si este cambia. Como en
+  pago único, el primer medio lleva el total y su cargo sin escribir nada.
+*/
+export function importeDe(valor, medio, total) {
+  if (!esCalculado(valor, medio)) return valor.montos[medio]
+
+  const escrito = valor.escrito === null ? 0 : centavos(valor.montos[valor.escrito])
+
+  return aTexto(Math.max(0, centavos(total) - escrito))
+}
 
 export { esCalculado as importeCalculado }
 
@@ -95,15 +106,26 @@ export function elegirMedio(valor, medio) {
 
   if (marcado && valor.elegidos.length >= MEDIOS_EN_MIXTO) return valor
 
-  return {
-    ...valor,
-    elegidos: MEDIOS_DE_PAGO
-      .map((m) => m.id)
-      .filter((id) => (id === medio ? marcado : valor.elegidos.includes(id))),
-    montos: { ...valor.montos, [medio]: "" },
-    referencias: { ...valor.referencias, [medio]: "" },
-    escrito: valor.escrito === medio ? null : valor.escrito,
+  const elegidos = MEDIOS_DE_PAGO
+    .map((m) => m.id)
+    .filter((id) => (id === medio ? marcado : valor.elegidos.includes(id)))
+
+  /*
+    Al soltar uno, el que queda vuelve a llevar el total: lo escrito era para
+    repartir entre dos, y ya no hay entre quiénes.
+  */
+  if (!marcado) {
+    return {
+      ...valor,
+      elegidos,
+      montos: vacios(),
+      referencias: { ...valor.referencias, [medio]: "" },
+      escrito: null,
+      primero: elegidos[0] ?? null,
+    }
   }
+
+  return { ...valor, elegidos, primero: valor.primero ?? medio }
 }
 
 /*

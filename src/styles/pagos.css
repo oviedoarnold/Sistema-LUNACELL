@@ -83,38 +83,12 @@
   background: var(--background);
 }
 
-.medios-de-pago-resumen {
-  display: grid;
-  gap: 10px;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  margin: 0;
-}
-
-.medios-de-pago-resumen dt {
-  font-size: 12px;
-  font-weight: 400;
-}
-
-.medios-de-pago-resumen dd {
-  font-size: 14px;
-  font-weight: 600;
-  margin: 0;
-}
-
-.medios-de-pago-falta dd {
-  color: var(--danger);
-}
-
 .medios-de-pago-aviso {
   font-size: 13px;
   margin: 4px 0 0;
 }
 
-.medios-de-pago-aviso:empty {
-  display: none;
-}
-
-/* El cuadre en los abonos, donde va suelto debajo del selector. */
+/* El aviso en los abonos, donde va suelto debajo del selector. */
 form > .medios-de-pago-cuadre {
   margin-bottom: 14px;
 }
