@@ -486,6 +486,14 @@ export function crearSupabaseFalso({
     La numeración vive en la base, así que el doble la imita: entrega el
     número guardado y aparta el siguiente.
   */
+  const precioDeVenta = (producto, clienteId) => {
+    const especial = (datos.precios_por_cliente || []).find(
+      (e) => e.cliente_id === clienteId && e.producto_id === producto.id
+    )
+
+    return Number(especial?.precio ?? producto.precio)
+  }
+
   const siguienteCorrelativo = (tipo) => {
     const columna =
       tipo === "factura"
@@ -664,7 +672,7 @@ export function crearSupabaseFalso({
       }
 
       renglon.producto = producto
-      subtotal += redondear(Number(producto.precio) * renglon.cantidad)
+      subtotal += redondear(precioDeVenta(producto, p_cliente_id) * renglon.cantidad)
     }
 
     const tasa = empresa.tasa_isv ?? 15
@@ -737,8 +745,8 @@ export function crearSupabaseFalso({
           nombre: producto.nombre,
           codigo: producto.codigo || "",
           cantidad,
-          precio: Number(producto.precio),
-          subtotal: redondear(Number(producto.precio) * cantidad),
+          precio: precioDeVenta(producto, p_cliente_id),
+          subtotal: redondear(precioDeVenta(producto, p_cliente_id) * cantidad),
         },
       ]
 
@@ -1228,6 +1236,21 @@ export function crearSupabaseFalso({
         }
 
         return Promise.resolve(respuesta)
+      }
+
+      if (nombre === "guardar_precios_de_cliente") {
+        const falla = fallaDe(nombre, "rpc")
+
+        if (falla) return Promise.resolve({ data: null, error: falla })
+
+        const { p_cliente, p_precios } = argumentos
+
+        datos.precios_por_cliente = [
+          ...(datos.precios_por_cliente || []).filter((e) => e.cliente_id !== p_cliente),
+          ...p_precios.map((e, i) => ({ id: `pc-${p_cliente}-${i}`, cliente_id: p_cliente, ...e })),
+        ]
+
+        return Promise.resolve({ data: p_precios.length, error: null })
       }
 
       if (nombre === "registrar_traslado") {

@@ -296,6 +296,28 @@
   }
 }
 
+/* Discreto: informa, sin competir con el precio. */
+.pos .pos-precio-especial {
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 400;
+}
+
+.pos .price .pos-precio-especial {
+  display: block;
+  text-align: right;
+}
+
+.pos .pos-aviso-precios {
+  margin: 0 0 var(--space-1);
+  font-size: 12.5px;
+  color: var(--text-muted);
+}
+
+.pos .pos-aviso-precios.is-error {
+  color: var(--danger);
+}
+
 /* ── RESUMEN ─────────────────────────────────────────────── */
 
 .pos .totals {

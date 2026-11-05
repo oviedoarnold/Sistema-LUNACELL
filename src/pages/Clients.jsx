@@ -1,7 +1,7 @@
 import { useContext, useMemo, useState } from "react"
 import { FaPen, FaPlus, FaSearch, FaUsers } from "react-icons/fa"
 import Swal from "sweetalert2"
-import { ClientsContext } from "../context/contexts"
+import { ClientsContext, ProductContext } from "../context/contexts"
 import { useAuth } from "../hooks/useAuth"
 import EmptyState from "../components/crud/EmptyState"
 import PageHeader from "../components/crud/PageHeader"
@@ -9,6 +9,9 @@ import SearchInput from "../components/crud/SearchInput"
 import { coincideBusqueda } from "../utils/texto"
 import FormField from "../components/forms/FormField"
 import ModalShell from "../components/forms/ModalShell"
+import PreciosEspeciales from "../components/clients/PreciosEspeciales"
+import { problemaDePrecios } from "../utils/preciosPorCliente"
+import { guardarPreciosDeCliente, traerPreciosDeCliente } from "../lib/api/preciosPorCliente"
 
 const emptyForm = { id: null, name: "", rtn: "", phone: "", address: "", email: "" }
 
@@ -16,18 +19,58 @@ function Clients() {
   const { clients = [], cargando, addClient, updateClient } = useContext(ClientsContext)
 
   // El contador consulta: sin alta ni edición (0036).
-  const { soloLectura } = useAuth()
+  const { soloLectura, isAdmin } = useAuth()
+  const { products = [], company } = useContext(ProductContext) || {}
   const [search, setSearch] = useState("")
   const [modalOpen, setModalOpen] = useState(false)
   const [form, setForm] = useState(emptyForm)
   const [guardando, setGuardando] = useState(false)
 
+  /*
+    Lo que se leyó, para enviar la lista solo si cambió. Si no se pudo leer, no se
+    envía: guardar una lista vacía borraría los precios que el cliente ya tiene.
+  */
+  const [precios, setPrecios] = useState({ filas: [], leidas: [], cargando: false, fallo: false })
+
   const filteredClients = useMemo(() => {
     return clients.filter((c) => [c.name, c.rtn, c.phone, c.email].some((v) => coincideBusqueda(v, search)))
   }, [clients, search])
 
-  const openNew = () => { setForm(emptyForm); setModalOpen(true) }
-  const openEdit = (client) => { setForm({ ...emptyForm, ...client }); setModalOpen(true) }
+  const aFilas = (porProducto) =>
+    Object.entries(porProducto).map(([productoId, precio]) => {
+      const producto = products.find((p) => p.id === productoId)
+
+      return {
+        productoId,
+        nombre: producto?.name || "Producto inactivo",
+        codigo: producto?.code || "",
+        precioGeneral: producto?.price ?? 0,
+        precio: String(precio),
+      }
+    })
+
+  const openNew = () => {
+    setForm(emptyForm)
+    setPrecios({ filas: [], leidas: [], cargando: false, fallo: false })
+    setModalOpen(true)
+  }
+
+  const openEdit = async (client) => {
+    setForm({ ...emptyForm, ...client })
+    setPrecios({ filas: [], leidas: [], cargando: true, fallo: false })
+    setModalOpen(true)
+
+    try {
+      const filas = aFilas(await traerPreciosDeCliente(client.id))
+
+      setPrecios({ filas, leidas: filas, cargando: false, fallo: false })
+    } catch {
+      setPrecios({ filas: [], leidas: [], cargando: false, fallo: true })
+    }
+  }
+
+  const huella = (filas) =>
+    JSON.stringify(filas.map((f) => [f.productoId, Number(f.precio)]).sort(([a], [b]) => String(a).localeCompare(String(b))))
 
   const save = async () => {
     if (!form.name.trim() || !form.phone.trim() || !form.address.trim()) {
@@ -35,10 +78,27 @@ function Clients() {
       return
     }
 
+    const conPrecios = isAdmin && !precios.cargando && !precios.fallo
+    const problema = conPrecios ? problemaDePrecios(precios.filas) : null
+
+    if (problema) {
+      Swal.fire({ icon: "warning", title: "Revisa los precios", text: problema })
+      return
+    }
+
     setGuardando(true)
     try {
+      let clienteId = form.id
+
       if (form.id) await updateClient(form.id, form)
-      else await addClient(form)
+      else clienteId = (await addClient(form))?.id
+
+      // Si los precios fallan, el cliente ya existe: el siguiente intento lo edita.
+      setForm((actual) => ({ ...actual, id: clienteId }))
+
+      if (conPrecios && clienteId && huella(precios.filas) !== huella(precios.leidas)) {
+        await guardarPreciosDeCliente(clienteId, precios.filas)
+      }
 
       setModalOpen(false)
       setForm(emptyForm)
@@ -144,6 +204,18 @@ function Clients() {
               <input id="clients-direccion" value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} />
             </FormField>
           </div>
+
+          {(isAdmin || form.id) && (
+            <PreciosEspeciales
+              filas={precios.filas}
+              onCambiar={(filas) => setPrecios((actual) => ({ ...actual, filas }))}
+              productos={products}
+              editable={isAdmin}
+              cargando={precios.cargando}
+              fallo={precios.fallo}
+              moneda={company?.currency}
+            />
+          )}
         </ModalShell>
       )}
     </div>

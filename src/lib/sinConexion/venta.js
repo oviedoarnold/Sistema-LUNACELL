@@ -89,7 +89,7 @@ export function construirVentaLocal({
       codigo: producto.codigo || "",
       nombre: producto.nombre,
       cantidad: linea.cantidad,
-      precio_unitario: Number(producto.precio),
+      precio_unitario: Number(copia.preciosPorCliente?.[cliente?.id]?.[producto.id] ?? producto.precio),
     }
   })
 

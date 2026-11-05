@@ -346,3 +346,73 @@
     text-align: left;
   }
 }
+
+/* Productos y precios especiales de un cliente. */
+.precios-especiales {
+  display: grid;
+  gap: var(--space-2);
+  margin-top: var(--space-4);
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--border);
+}
+
+.precios-especiales-titulo {
+  margin: 0;
+  font-size: 15px;
+}
+
+.precios-especiales .search-box {
+  max-width: none;
+}
+
+.precios-especiales-nota {
+  margin: 0;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.precios-especiales-aviso {
+  margin: 0;
+  font-size: 13px;
+  color: var(--danger);
+}
+
+.precios-especiales-resultados,
+.precios-especiales-lista {
+  display: grid;
+  gap: var(--space-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.precios-especiales-resultados li,
+.precios-especiales-lista li {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-1) 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.precios-especiales-resultados li > span {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.precios-especiales-resultados small,
+.precios-especiales-producto small {
+  color: var(--text-muted);
+}
+
+.precios-especiales-producto {
+  display: grid;
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.precios-especiales-lista input {
+  width: 110px;
+}

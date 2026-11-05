@@ -27,6 +27,7 @@ import { useExistenciaDeMiUbicacion } from "../hooks/useExistenciaDeMiUbicacion"
 import SelectorDeMedios, { AvisoDeMedios } from "../components/pagos/SelectorDeMedios"
 import { TASA_DE_CARGO, cargoDeCobros, cobrosDelSelector, problemaDelSelector, selectorVacio } from "../utils/mediosDePago"
 import { tipoDeUbicacion } from "../lib/api/ubicaciones"
+import { usePreciosDeCliente } from "../hooks/usePreciosDeCliente"
 import { totalesDe } from "../lib/sinConexion/venta"
 import { useClienteDelDocumento } from "../hooks/useClienteDelDocumento"
 import DocumentPreviewModal from "../components/documents/DocumentPreviewModal"
@@ -211,7 +212,7 @@ function POS() {
     esta pantalla para no reescribir el resto del archivo.
   */
   const {
-    lineas: cart,
+    lineas: lineasDelCarrito,
     cantidadPedida: qtyMap,
     setCantidadPedida: setQtyMap,
     agregar: addToCartWithQty,
@@ -273,13 +274,75 @@ function POS() {
     })
   }, [saleDraft, navigate])
 
+  /*
+    El precio de cada producto para este cliente, y primero sus habituales. Las
+    líneas del carrito también lo toman de aquí: cambiar de cliente las actualiza
+    sin tocar lo que se pidió. Quien decide al facturar es el servidor (0042).
+  */
+  const {
+    precios: preciosDelCliente,
+    cargando: preciosCargando,
+    fallo: preciosFallo,
+  } = usePreciosDeCliente({
+    clienteId: selectedClient?.id || null,
+    sinConexion: modoSinConexion,
+    copia: copiaLocal,
+  })
+
+  const catalogoDelCliente = useMemo(() => {
+    const conPrecio = productosEnVenta.map((producto) => {
+      const especial = preciosDelCliente[producto.id]
+
+      return especial === undefined ? producto : { ...producto, price: especial, precioEspecial: true }
+    })
+
+    return [
+      ...conPrecio.filter((p) => p.precioEspecial),
+      ...conPrecio.filter((p) => !p.precioEspecial),
+    ]
+  }, [productosEnVenta, preciosDelCliente])
+
+  const cart = useMemo(
+    () =>
+      lineasDelCarrito.map((linea) => {
+        const producto = catalogoDelCliente.find((p) => String(p.id) === String(linea.id))
+
+        return producto ? { ...linea, price: producto.price, precioEspecial: Boolean(producto.precioEspecial) } : linea
+      }),
+    [lineasDelCarrito, catalogoDelCliente]
+  )
+
+  /*
+    Avisa si un producto que ya estaba en el carrito cambió de precio. Se compara
+    al terminar de cargar: mientras carga, el precio general es solo de paso.
+  */
+  const [preciosVistos, setPreciosVistos] = useState({})
+  const [avisoDePrecios, setAvisoDePrecios] = useState("")
+  const firmaDePrecios = cart.map((l) => `${l.id}:${l.price}`).join("|")
+  const [firmaVista, setFirmaVista] = useState("")
+
+  if (!preciosCargando && firmaDePrecios !== firmaVista) {
+    const cambio = cart.some((l) => preciosVistos[l.id] !== undefined && preciosVistos[l.id] !== l.price)
+
+    setFirmaVista(firmaDePrecios)
+    setPreciosVistos(Object.fromEntries(cart.map((l) => [l.id, l.price])))
+
+    if (cambio) {
+      setAvisoDePrecios(
+        selectedClient
+          ? `Precios actualizados para ${selectedClient.name}.`
+          : "Precios actualizados: se usan los precios generales."
+      )
+    }
+  }
+
   const filteredProducts = useMemo(
     () =>
       filterProductsBySearchText(
-        productosEnVenta,
+        catalogoDelCliente,
         search
       ),
-    [productosEnVenta, search]
+    [catalogoDelCliente, search]
   )
 
   const {
@@ -577,6 +640,7 @@ function POS() {
     setPaymentType("contado")
     setMedios(selectorVacio())
     setIsvElegido(null)
+    setAvisoDePrecios("")
     handleClearClient()
     setDueDate(toISODateInDays(30))
   }
@@ -836,6 +900,7 @@ function POS() {
             Las ventas se guardan en este teléfono con un comprobante provisional y se envían solas cuando vuelva la
             conexión. Precios y existencias son los de la última copia descargada.
             {!copiaLocal?.clientesDisponibles && " La copia no tiene clientes: solo se puede vender al contado."}
+            {copiaLocal?.preciosDisponibles === false && " La copia no tiene los precios especiales: se usan los generales."}
           </span>
         </div>
       )}
@@ -923,6 +988,7 @@ function POS() {
                     <div className="picker-actions">
                       <span className="price">
                         {formatMoney(product.price)}
+                        {product.precioEspecial && <small className="pos-precio-especial">Precio especial</small>}
                       </span>
 
                       <input
@@ -1083,6 +1149,16 @@ function POS() {
                   </span>
                 </div>
 
+                {avisoDePrecios && cart.length > 0 && (
+                  <p className="pos-aviso-precios" role="status">{avisoDePrecios}</p>
+                )}
+
+                {preciosFallo && (
+                  <p className="pos-aviso-precios is-error" role="alert">
+                    No se pudieron cargar los precios de este cliente. Vuelve a elegirlo para facturar.
+                  </p>
+                )}
+
                 <div className="cart-items">
                   {cart.length === 0 ? (
                     <EmptyState
@@ -1099,7 +1175,10 @@ function POS() {
                         <div className="name">
                           {item.name}
 
-                          <small>{formatMoney(item.price)} c/u</small>
+                          <small>
+                            {formatMoney(item.price)} c/u
+                            {item.precioEspecial && <span className="pos-precio-especial"> · Precio especial</span>}
+                          </small>
                         </div>
 
                         <div className="stepper">
@@ -1186,7 +1265,7 @@ function POS() {
                 <button
                   type="button"
                   className="btn btn-primary btn-lg btn-block"
-                  disabled={cart.length === 0 || facturando || !existenciaLista || bloqueadoSinConexion || mediosSinCuadrar || tipoPendiente}
+                  disabled={cart.length === 0 || facturando || !existenciaLista || bloqueadoSinConexion || mediosSinCuadrar || tipoPendiente || preciosCargando || preciosFallo}
                   onClick={generateSale}
                 >
                   {textoDelBotonDeVenta(facturando, modoSinConexion)}
