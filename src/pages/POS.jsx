@@ -33,6 +33,7 @@ import { useClienteDelDocumento } from "../hooks/useClienteDelDocumento"
 import DocumentPreviewModal from "../components/documents/DocumentPreviewModal"
 import ComprobanteProvisional from "../components/sinConexion/ComprobanteProvisional"
 import EstadoSinConexion from "../components/sinConexion/EstadoSinConexion"
+import EditorDePrecio from "../components/pos/EditorDePrecio"
 import PanelDeVentasLocales from "../components/sinConexion/PanelDeVentasLocales"
 import { useAuth } from "../hooks/useAuth"
 import { useSinConexion } from "../hooks/useSinConexion"
@@ -113,7 +114,8 @@ function POS() {
     comprobante provisional; nunca se presenta como factura.
   */
   const sinConexion = useSinConexion()
-  const { user } = useAuth()
+  const { user, hasPermission, permissions } = useAuth()
+  const puedeNegociar = hasPermission(permissions.POS)
   const sinServidor =
     Boolean(sinConexion) &&
     (Boolean(user?.sinConexion) || sinConexion.conexion === "sin_red" || sinConexion.conexion === "sin_servidor")
@@ -302,15 +304,50 @@ function POS() {
     ]
   }, [productosEnVenta, preciosDelCliente])
 
+  /*
+    El precio negociado vale solo para esta venta y manda sobre los demás. Igual al
+    de referencia no es una negociación: pasa si al cambiar de cliente coinciden.
+  */
+  const [negociaciones, setNegociaciones] = useState({})
+  const [precioEnEdicion, setPrecioEnEdicion] = useState(null)
+
   const cart = useMemo(
     () =>
       lineasDelCarrito.map((linea) => {
         const producto = catalogoDelCliente.find((p) => String(p.id) === String(linea.id))
+        const base = producto ? { ...linea, price: producto.price, precioEspecial: Boolean(producto.precioEspecial) } : linea
+        const referencia = Number(base.price)
+        const negociacion = negociaciones[linea.id]
 
-        return producto ? { ...linea, price: producto.price, precioEspecial: Boolean(producto.precioEspecial) } : linea
+        if (!negociacion || negociacion.precio === referencia) return { ...base, precioReferencia: referencia }
+
+        return {
+          ...base,
+          price: negociacion.precio,
+          precioReferencia: referencia,
+          negociado: true,
+          motivoNegociacion: negociacion.motivo || null,
+        }
       }),
-    [lineasDelCarrito, catalogoDelCliente]
+    [lineasDelCarrito, catalogoDelCliente, negociaciones]
   )
+
+  // Un producto que sale del carrito pierde su negociación: al volver, usa su precio.
+  const negociacionesSobrantes = Object.keys(negociaciones).filter(
+    (id) => !lineasDelCarrito.some((linea) => String(linea.id) === id)
+  )
+
+  if (negociacionesSobrantes.length > 0) {
+    setNegociaciones(
+      Object.fromEntries(Object.entries(negociaciones).filter(([id]) => !negociacionesSobrantes.includes(id)))
+    )
+  }
+
+  const editandoPrecio = cart.some((linea) => linea.id === precioEnEdicion)
+
+  const restaurarPrecio = (id) => {
+    setNegociaciones(Object.fromEntries(Object.entries(negociaciones).filter(([clave]) => clave !== String(id))))
+  }
 
   /*
     Avisa si un producto que ya estaba en el carrito cambió de precio. Se compara
@@ -318,20 +355,22 @@ function POS() {
   */
   const [preciosVistos, setPreciosVistos] = useState({})
   const [avisoDePrecios, setAvisoDePrecios] = useState("")
-  const firmaDePrecios = cart.map((l) => `${l.id}:${l.price}`).join("|")
+  const firmaDePrecios = cart.map((l) => `${l.id}:${l.precioReferencia}`).join("|")
   const [firmaVista, setFirmaVista] = useState("")
 
   if (!preciosCargando && firmaDePrecios !== firmaVista) {
-    const cambio = cart.some((l) => preciosVistos[l.id] !== undefined && preciosVistos[l.id] !== l.price)
+    const cambio = cart.some((l) => preciosVistos[l.id] !== undefined && preciosVistos[l.id] !== l.precioReferencia)
 
     setFirmaVista(firmaDePrecios)
-    setPreciosVistos(Object.fromEntries(cart.map((l) => [l.id, l.price])))
+    setPreciosVistos(Object.fromEntries(cart.map((l) => [l.id, l.precioReferencia])))
 
     if (cambio) {
+      const conservados = cart.some((l) => l.negociado) ? " Se conservan los precios negociados." : ""
+
       setAvisoDePrecios(
         selectedClient
-          ? `Precios actualizados para ${selectedClient.name}.`
-          : "Precios actualizados: se usan los precios generales."
+          ? `Precios actualizados para ${selectedClient.name}.${conservados}`
+          : `Precios actualizados: se usan los precios generales.${conservados}`
       )
     }
   }
@@ -567,6 +606,7 @@ function POS() {
       productId: item.id,
       qty: item.quantity,
       price: item.price,
+      ...(item.negociado ? { precioNegociado: item.price, motivoNegociacion: item.motivoNegociacion } : {}),
     })),
 
     type: paymentType,
@@ -641,6 +681,8 @@ function POS() {
     setMedios(selectorVacio())
     setIsvElegido(null)
     setAvisoDePrecios("")
+    setNegociaciones({})
+    setPrecioEnEdicion(null)
     handleClearClient()
     setDueDate(toISODateInDays(30))
   }
@@ -653,7 +695,11 @@ function POS() {
   const guardarSinConexion = async ({ claveEnLinea = null } = {}) => {
     try {
       const venta = await sinConexion.guardarVentaSinConexion({
-        carrito: cart.map((item) => ({ productoId: item.id, cantidad: Number(item.quantity) })),
+        carrito: cart.map((item) => ({
+          productoId: item.id,
+          cantidad: Number(item.quantity),
+          ...(item.negociado ? { precioNegociado: item.price, motivoNegociacion: item.motivoNegociacion } : {}),
+        })),
         formaPago: paymentType,
         clienteId: selectedClient?.id || null,
         nombreCliente: getCustomerName(),
@@ -1177,8 +1223,37 @@ function POS() {
 
                           <small>
                             {formatMoney(item.price)} c/u
-                            {item.precioEspecial && <span className="pos-precio-especial"> · Precio especial</span>}
+                            {item.negociado && <span className="pos-precio-especial"> · Precio negociado</span>}
+                            {!item.negociado && item.precioEspecial && (
+                              <span className="pos-precio-especial"> · Precio especial</span>
+                            )}
                           </small>
+
+                          {item.negociado && <small>Referencia: {formatMoney(item.precioReferencia)}</small>}
+
+                          {puedeNegociar && precioEnEdicion !== item.id && (
+                            <span className="pos-precio-acciones">
+                              <button
+                                type="button"
+                                className="pos-precio-enlace"
+                                aria-label={`Modificar precio de ${item.name}`}
+                                onClick={() => setPrecioEnEdicion(item.id)}
+                              >
+                                Modificar precio
+                              </button>
+
+                              {item.negociado && (
+                                <button
+                                  type="button"
+                                  className="pos-precio-enlace"
+                                  aria-label={`Restaurar el precio de ${item.name}`}
+                                  onClick={() => restaurarPrecio(item.id)}
+                                >
+                                  Restaurar
+                                </button>
+                              )}
+                            </span>
+                          )}
                         </div>
 
                         <div className="stepper">
@@ -1214,6 +1289,20 @@ function POS() {
                         >
                           <FaTrash aria-hidden="true" />
                         </button>
+
+                        {precioEnEdicion === item.id && (
+                          <EditorDePrecio
+                            nombre={item.name}
+                            referencia={item.precioReferencia}
+                            precioActual={item.price}
+                            motivoActual={item.motivoNegociacion}
+                            onCancelar={() => setPrecioEnEdicion(null)}
+                            onAplicar={(negociacion) => {
+                              setNegociaciones((actuales) => ({ ...actuales, [item.id]: negociacion }))
+                              setPrecioEnEdicion(null)
+                            }}
+                          />
+                        )}
                       </div>
                     ))
                   )}
@@ -1265,7 +1354,7 @@ function POS() {
                 <button
                   type="button"
                   className="btn btn-primary btn-lg btn-block"
-                  disabled={cart.length === 0 || facturando || !existenciaLista || bloqueadoSinConexion || mediosSinCuadrar || tipoPendiente || preciosCargando || preciosFallo}
+                  disabled={cart.length === 0 || facturando || !existenciaLista || bloqueadoSinConexion || mediosSinCuadrar || tipoPendiente || preciosCargando || preciosFallo || editandoPrecio}
                   onClick={generateSale}
                 >
                   {textoDelBotonDeVenta(facturando, modoSinConexion)}
@@ -1275,7 +1364,7 @@ function POS() {
                   <button
                     type="button"
                     className="btn btn-secondary"
-                    disabled={cart.length === 0}
+                    disabled={cart.length === 0 || editandoPrecio}
                     onClick={openPreview}
                   >
                     Vista previa

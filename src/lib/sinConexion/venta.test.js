@@ -56,6 +56,58 @@ describe("construirVentaLocal", () => {
     expect(construirVentaLocal(base({ clienteId: CLIENTE.id })).renglones[0].precio_unitario).toBe(150)
   })
 
+  describe("precio negociado", () => {
+    const carrito = (extra) => [{ productoId: CARGADOR.id, cantidad: 2, ...extra }]
+
+    it("guarda lo cobrado, el precio de referencia y el motivo", () => {
+      const venta = construirVentaLocal(base({ carrito: carrito({ precioNegociado: 120, motivoNegociacion: "mayoreo" }) }))
+
+      expect(venta.renglones[0]).toMatchObject({
+        precio_unitario: 120,
+        negociado: true,
+        precio_referencia: 150,
+        motivo_negociacion: "mayoreo",
+      })
+      expect(venta.totalCobrado).toBe(276)
+    })
+
+    it("sobre un precio especial, la referencia es el especial", () => {
+      const copia = { ...copiaDePrueba(), preciosPorCliente: { [CLIENTE.id]: { [CARGADOR.id]: 130 } } }
+      const venta = construirVentaLocal(
+        base({ copia, clienteId: CLIENTE.id, carrito: carrito({ precioNegociado: 120, motivoNegociacion: "otro" }) })
+      )
+
+      expect(venta.renglones[0]).toMatchObject({ precio_unitario: 120, precio_referencia: 130 })
+    })
+
+    it("igual a la referencia no es una negociación", () => {
+      const venta = construirVentaLocal(base({ carrito: carrito({ precioNegociado: 150 }) }))
+
+      expect(venta.renglones[0]).toEqual({
+        producto_id: CARGADOR.id,
+        codigo: CARGADOR.codigo,
+        nombre: CARGADOR.nombre,
+        cantidad: 2,
+        precio_unitario: 150,
+      })
+    })
+
+    it.each([
+      ["cero", { precioNegociado: 0, motivoNegociacion: "otro" }],
+      ["negativo", { precioNegociado: -1, motivoNegociacion: "otro" }],
+      ["no numérico", { precioNegociado: "x", motivoNegociacion: "otro" }],
+      ["sin motivo al bajar", { precioNegociado: 120 }],
+    ])("rechaza un precio %s", (_, extra) => {
+      expect(() => construirVentaLocal(base({ carrito: carrito(extra) }))).toThrow(ErrorDeVentaLocal)
+    })
+
+    it("subir el precio no pide motivo", () => {
+      const venta = construirVentaLocal(base({ carrito: carrito({ precioNegociado: 200 }) }))
+
+      expect(venta.renglones[0]).toMatchObject({ precio_unitario: 200, negociado: true, motivo_negociacion: null })
+    })
+  })
+
   it("lleva una clave de idempotencia única con el dispositivo", () => {
     const a = construirVentaLocal(base())
     const b = construirVentaLocal(base())

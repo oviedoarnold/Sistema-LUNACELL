@@ -39,6 +39,16 @@ const aRenglonDeApp = (fila) => ({
   quantity: Number(fila.cantidad),
   price: Number(fila.precio),
   subtotal: Number(fila.subtotal),
+  ...(fila.negociado_en
+    ? {
+        negociacion: {
+          referencia: Number(fila.precio_referencia),
+          motivo: fila.motivo_negociacion || "",
+          por: fila.negociado_por_nombre || "",
+          en: fila.negociado_en,
+        },
+      }
+    : {}),
 })
 
 const aAbonoDeApp = (fila) => ({
@@ -206,6 +216,7 @@ const MOTIVOS_DE_VENTA = {
   LM002: "medios-no-suman",
   LM003: "credito-con-medios",
   LM005: "clave-reusada",
+  LN001: "precio-negociado-invalido",
   42501: "sin-permiso",
 }
 
@@ -229,9 +240,9 @@ export class ErrorDeVenta extends Error {
   no queda nada, y no hay cabecera que borrar a mano.
 
   Solo viaja lo que eligió el cajero: qué productos y cuántos, cómo paga y
-  a quién. Empresa, usuario, ubicación, precios, importes, número y si el
-  documento es fiscal los decide la base; mandarlos sería invitar a
-  manipularlos.
+  a quién, y el precio que negoció, si lo hizo. Empresa, usuario, ubicación,
+  los demás precios, importes, número y si el documento es fiscal los decide
+  la base; mandarlos sería invitar a manipularlos.
 
   La clave identifica el intento de cobro. Si la red se cae sin respuesta
   y el cajero reintenta con la misma, el servidor devuelve la venta que ya
@@ -244,6 +255,9 @@ export async function crearVenta(venta, { clave = null } = {}) {
     p_items: (venta.items || []).map((item) => ({
       producto_id: item.productId ?? item.id,
       cantidad: Number(item.qty ?? item.quantity),
+      ...(item.precioNegociado === undefined
+        ? {}
+        : { precio_negociado: item.precioNegociado, motivo_negociacion: item.motivoNegociacion || null }),
     })),
     p_forma_pago: venta.paymentType,
     p_cliente_id: venta.clientId || null,
@@ -255,12 +269,13 @@ export async function crearVenta(venta, { clave = null } = {}) {
   }
 
   /*
-    Con medios de pago o sin ISV va por registrar_venta_con_medios(), que hace
-    lo mismo y los guarda en la misma transacción. Una venta a crédito con ISV
-    sigue por el camino de siempre.
+    Con medios de pago, sin ISV o con un precio negociado va por
+    registrar_venta_con_medios(), que hace lo mismo y los guarda en la misma
+    transacción. Una venta a crédito con ISV sigue por el camino de siempre.
   */
   const sinIsv = venta.conIsv === false
-  const { data, error, status } = venta.cobros?.length || sinIsv
+  const conNegociacion = argumentos.p_items.some((item) => item.precio_negociado !== undefined)
+  const { data, error, status } = venta.cobros?.length || sinIsv || conNegociacion
     ? await supabase.rpc("registrar_venta_con_medios", {
         ...argumentos,
         p_cobros: venta.cobros || [],

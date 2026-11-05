@@ -149,6 +149,7 @@ function DetalleDeConciliacion({ venta, nombreDelVendedor, nombreDeUbicacion, on
                   <td>
                     {r.nombre}
                     {r.codigo ? ` · ${r.codigo}` : ""}
+                    {r.precioReferencia > 0 && ` · Precio negociado, referencia ${formatMoney(r.precioReferencia)}`}
                   </td>
                   <td className="r">{r.cantidad}</td>
                   <td className="r">{formatMoney(r.precio)}</td>

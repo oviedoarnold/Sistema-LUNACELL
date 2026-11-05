@@ -308,6 +308,59 @@
   text-align: right;
 }
 
+.pos .pos-precio-acciones {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px var(--space-2);
+}
+
+.pos .pos-precio-enlace {
+  padding: 2px 0;
+  border: 0;
+  background: none;
+  color: var(--text-muted);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 400;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.pos .pos-precio-enlace:hover {
+  color: var(--text-primary);
+}
+
+/* Debajo de la línea, a todo su ancho: nunca tapa la cantidad ni el subtotal. */
+.pos .pos-editor-precio {
+  grid-column: 1 / -1;
+  display: grid;
+  gap: var(--space-1);
+  padding: var(--space-1) 0;
+}
+
+.pos .pos-editor-actual {
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--text-muted);
+}
+
+.pos .pos-editor-campos {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: var(--space-1) var(--space-2);
+}
+
+.pos .pos-editor-acciones {
+  display: flex;
+  gap: var(--space-2);
+}
+
+@media (pointer: coarse) {
+  .pos .pos-precio-enlace {
+    min-height: 32px;
+  }
+}
+
 .pos .pos-aviso-precios {
   margin: 0 0 var(--space-1);
   font-size: 12.5px;
