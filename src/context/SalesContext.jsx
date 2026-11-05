@@ -164,6 +164,9 @@ function SalesProvider({ children }) {
       items.map((item) => ({
         productId: item.productId ?? item.id,
         qty: Number(item.qty ?? item.quantity ?? 1),
+        ...(item.precioNegociado === undefined
+          ? {}
+          : { precioNegociado: item.precioNegociado, motivoNegociacion: item.motivoNegociacion }),
       })),
     []
   )

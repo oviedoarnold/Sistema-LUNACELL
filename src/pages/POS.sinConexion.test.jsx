@@ -313,6 +313,35 @@ describe("POS sin conexión en una ubicación habilitada", () => {
     expect(servidor.recibidas[0].p_renglones[0]).toMatchObject({ precio_unitario: 100 })
   })
 
+  it("conserva el precio negociado en la venta local y lo envía al sincronizar", async () => {
+    await renderPOS()
+    await esperarCopia()
+    await quitarConexion()
+
+    agregar("Martillo de uña")
+    fireEvent.click(screen.getByRole("button", { name: "Modificar precio de Martillo de uña" }))
+    fireEvent.change(screen.getByLabelText("Nuevo precio de Martillo de uña"), { target: { value: "150" } })
+    fireEvent.change(screen.getByLabelText("Motivo del precio de Martillo de uña"), { target: { value: "mayoreo" } })
+    fireEvent.click(screen.getByRole("button", { name: "Aplicar" }))
+
+    expect(filaDelCarrito("Martillo de uña")).toHaveTextContent("Precio negociado")
+
+    elegirEfectivo()
+    fireEvent.click(botonGuardarSinConexion())
+    await waitFor(() => expect(screen.getByText(/1 venta pendiente de sincronizar/i)).toBeInTheDocument())
+
+    await devolverConexion()
+
+    await waitFor(() => expect(servidor.recibidas).toHaveLength(1))
+    expect(servidor.recibidas[0]).toMatchObject({ p_total_cobrado: 150 })
+    expect(servidor.recibidas[0].p_renglones[0]).toMatchObject({
+      precio_unitario: 150,
+      negociado: true,
+      precio_referencia: 180,
+      motivo_negociacion: "mayoreo",
+    })
+  })
+
   it("un pago mixto sin los dos importes no se puede guardar", async () => {
     await renderPOS()
     await esperarCopia()

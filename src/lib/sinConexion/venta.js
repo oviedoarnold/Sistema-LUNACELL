@@ -3,7 +3,7 @@
   envía a sincronizar_venta_sin_conexion().
 
   Los precios, la tasa y los clientes salen de la copia local, nunca de lo
-  que mande la pantalla. Los totales se calculan con la misma fórmula que el
+  que mande la pantalla, salvo el precio que el vendedor negocie. Los totales se calculan con la misma fórmula que el
   servidor (redondeo por línea, ISV sobre el subtotal): si no coinciden con
   lo vigente al sincronizar, la venta va a conciliación, nunca se cambia lo
   cobrado.
@@ -12,6 +12,7 @@
   al registrarla. Nunca se inventa numeración fiscal.
 */
 import { problemaDeCobros } from "../../utils/mediosDePago"
+import { problemaDelPrecioNegociado } from "../../utils/preciosNegociados"
 
 import { mismoDueno } from "./copiaLocal"
 
@@ -84,12 +85,28 @@ export function construirVentaLocal({
       throw new ErrorDeVentaLocal(`La cantidad de «${producto.nombre}» no es válida.`)
     }
 
-    return {
+    const referencia = Number(copia.preciosPorCliente?.[cliente?.id]?.[producto.id] ?? producto.precio)
+    const renglon = {
       producto_id: producto.id,
       codigo: producto.codigo || "",
       nombre: producto.nombre,
       cantidad: linea.cantidad,
-      precio_unitario: Number(copia.preciosPorCliente?.[cliente?.id]?.[producto.id] ?? producto.precio),
+      precio_unitario: referencia,
+    }
+
+    if (linea.precioNegociado === undefined || Number(linea.precioNegociado) === referencia) return renglon
+
+    const problema = problemaDelPrecioNegociado(linea.precioNegociado, referencia, linea.motivoNegociacion)
+
+    if (problema) throw new ErrorDeVentaLocal(`${producto.nombre}: ${problema}`)
+
+    // El precio cobrado y el que vio el vendedor quedan en la venta: un cambio posterior no los toca.
+    return {
+      ...renglon,
+      precio_unitario: Number(linea.precioNegociado),
+      negociado: true,
+      precio_referencia: referencia,
+      motivo_negociacion: linea.motivoNegociacion || null,
     }
   })
 

@@ -1225,6 +1225,31 @@ export function crearSupabaseFalso({
         const respuesta = venderEnUbicacion(argumentos)
         const venta = respuesta.data && datos.ventas.find((v) => v.id === respuesta.data.venta_id)
 
+        if (venta && !respuesta.data.repetida && nombre === "registrar_venta_con_medios") {
+          // El precio negociado, como aplicar_precios_negociados() desde la 0043.
+          for (const item of argumentos.p_items.filter((i) => i.precio_negociado !== undefined)) {
+            const precio = Number(item.precio_negociado)
+
+            if (!(precio > 0)) return Promise.resolve(rechazo("LN001", "El precio negociado no es válido"))
+
+            const renglon = datos.detalle_venta.find((d) => d.venta_id === venta.id && d.producto_id === item.producto_id)
+
+            Object.assign(renglon, {
+              precio_referencia: renglon.precio,
+              precio,
+              subtotal: redondear(precio * renglon.cantidad),
+              motivo_negociacion: item.motivo_negociacion ?? null,
+              negociado_en: "2026-11-05T12:00:00.000Z",
+            })
+          }
+
+          const renglones = datos.detalle_venta.filter((d) => d.venta_id === venta.id)
+
+          venta.subtotal = redondear(renglones.reduce((suma, d) => suma + d.subtotal, 0))
+          venta.isv = redondear((venta.subtotal * venta.tasa_isv) / 100)
+          venta.total = redondear(venta.subtotal + venta.isv)
+        }
+
         if (venta) {
           venta.cargo_por_medio = (argumentos.p_cobros || []).reduce((suma, c) => suma + (c.cargo || 0), 0)
 

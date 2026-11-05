@@ -34,6 +34,12 @@ import StatusBadge from "../components/crud/StatusBadge"
 import { FaFileInvoiceDollar, FaSearch } from "react-icons/fa"
 
 import { formatMoney } from "../utils/format"
+import { textoDelMotivo } from "../utils/preciosNegociados"
+
+const renglonesNegociados = (sale) => (sale.items || []).filter((item) => item.negociacion)
+
+const fechaYHora = (iso) =>
+  new Date(iso).toLocaleString("es-HN", { dateStyle: "short", timeStyle: "short" })
 
 
 function isOverdue(sale) {
@@ -184,6 +190,10 @@ function SalesHistory() {
 
           if (filter === "anuladas") {
             return esVentaAnulada(sale)
+          }
+
+          if (filter === "negociadas") {
+            return renglonesNegociados(sale).length > 0
           }
 
           if (
@@ -413,6 +423,12 @@ function SalesHistory() {
           <option value="anuladas">
             Anuladas
           </option>
+
+          {isAdmin && (
+            <option value="negociadas">
+              Con precio negociado
+            </option>
+          )}
         </select>
 
       </div>
@@ -500,6 +516,16 @@ function SalesHistory() {
                           {!isCreditSale(sale) && ` · ${textoDelTratamiento(sale.anulacion.tratamientoDinero)}`}
                         </span>
                       )}
+
+                      {isAdmin && renglonesNegociados(sale).map((item) => (
+                        <span className="sale-anulacion" key={item.productId}>
+                          Precio negociado: {item.name} a {formatMoney(item.price, currency)}, referencia{" "}
+                          {formatMoney(item.negociacion.referencia, currency)}
+                          {item.negociacion.motivo && ` · ${textoDelMotivo(item.negociacion.motivo)}`}
+                          {" · "}
+                          {item.negociacion.por} · {fechaYHora(item.negociacion.en)}
+                        </span>
+                      ))}
 
                     </div>
 

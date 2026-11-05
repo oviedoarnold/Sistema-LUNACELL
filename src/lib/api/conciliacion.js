@@ -38,6 +38,7 @@ const aRenglon = (r) => ({
   nombre: r.nombre || "",
   cantidad: Number(r.cantidad),
   precio: Number(r.precio_unitario),
+  ...(r.negociado === true ? { precioReferencia: Number(r.precio_referencia) } : {}),
 })
 
 export const aVentaPorConciliar = (f) => ({
