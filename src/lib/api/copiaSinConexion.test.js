@@ -59,6 +59,32 @@ describe("descargar la copia local", () => {
     expect(copia.clientes).toEqual([{ id: "c1", nombre: "Ferremax", rtn: "0801", telefono: "9999", direccion: "SPS" }])
   })
 
+  it("trae los precios especiales por cliente, sin costos", async () => {
+    montar({
+      tablasExtra: {
+        precios_por_cliente: [
+          { id: "e1", cliente_id: "c1", producto_id: "p1", precio: 150, costo: 90 },
+          { id: "e2", cliente_id: "c2", producto_id: "p1", precio: "160.50" },
+        ],
+      },
+    })
+
+    const copia = await descargarCopia({ perfil: PERFIL, ahora })
+
+    expect(copia.preciosDisponibles).toBe(true)
+    expect(copia.preciosPorCliente).toEqual({ c1: { p1: 150 }, c2: { p1: 160.5 } })
+    expect(JSON.stringify(copia)).not.toMatch(/costo/)
+  })
+
+  it("si no se pudieron leer los precios, lo deja dicho y la copia sigue sirviendo", async () => {
+    montar({ fallarEn: { precios_por_cliente: { select: { code: "XX000", message: "fallo" } } } })
+
+    const copia = await descargarCopia({ perfil: PERFIL, ahora })
+
+    expect(copia).toMatchObject({ preciosDisponibles: false, preciosPorCliente: {} })
+    expect(copia.productos).toHaveLength(2)
+  })
+
   it("si la ubicación no vende sin conexión, no baja catálogo, existencias ni clientes", async () => {
     const falso = montar({ ubicaciones: [{ ...CAMION, offline: false }, BODEGA] })
 

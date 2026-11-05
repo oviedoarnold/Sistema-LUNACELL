@@ -11,7 +11,7 @@ import SalesProvider from "../context/SalesContext"
 import { SinConexionProvider } from "../context/SinConexionContext"
 import { abrirAlmacen } from "../lib/sinConexion/almacen"
 import { renderizarPantalla, EMPRESA } from "../test/pantallas"
-import { agregarProducto as agregar } from "../test/carrito"
+import { agregarProducto as agregar, filaDelCarrito } from "../test/carrito"
 import POS from "./POS"
 
 vi.mock("../lib/supabase", () => ({
@@ -71,7 +71,7 @@ function servidorDeSincronizacion() {
   return estado
 }
 
-async function renderPOS({ ubicacion = CAMION, rpcsExtra = {}, fallarEn = {} } = {}) {
+async function renderPOS({ ubicacion = CAMION, rpcsExtra = {}, fallarEn = {}, tablasExtra = {} } = {}) {
   const resultado = await renderizarPantalla(
     <AuthProvider>
       <SinConexionProvider
@@ -98,6 +98,7 @@ async function renderPOS({ ubicacion = CAMION, rpcsExtra = {}, fallarEn = {} } =
       rolDelUsuario: "vendedor",
       permisosDelUsuario: ["pos", "clients", "inventory-own", "sales-history"],
       fallarEn,
+      tablasExtra,
       rpcsExtra: {
         sincronizar_venta_sin_conexion: (a) => servidor.rpc(a),
         sincronizar_venta_con_medios: (a) => servidor.rpc(a),
@@ -287,6 +288,29 @@ describe("POS sin conexión en una ubicación habilitada", () => {
       p_total_cobrado: 207,
       p_cobros: [{ medio: "tarjeta", monto: 207, referencia: "", cargo: 14.49 }],
     })
+  })
+
+  it("usa el precio especial de la copia local y lo guarda con la venta", async () => {
+    await renderPOS({ tablasExtra: { precios_por_cliente: [{ id: "e1", cliente_id: "c1", producto_id: "p1", precio: 100 }] } })
+    await esperarCopia()
+    await quitarConexion()
+
+    fireEvent.focus(screen.getByPlaceholderText(/nombre/i))
+    fireEvent.click(screen.getByText(CLIENTES[0].name))
+    agregar("Martillo de uña")
+
+    expect(filaDelCarrito("Martillo de uña")).toHaveTextContent(/L 100.00 c\/u/)
+    expect(filaDelCarrito("Martillo de uña")).toHaveTextContent(/precio especial/i)
+
+    elegirEfectivo()
+    fireEvent.click(botonGuardarSinConexion())
+    await waitFor(() => expect(screen.getByText(/1 venta pendiente de sincronizar/i)).toBeInTheDocument())
+
+    await devolverConexion()
+
+    await waitFor(() => expect(servidor.recibidas).toHaveLength(1))
+    expect(servidor.recibidas[0]).toMatchObject({ p_cliente_id: "c1", p_total_cobrado: 100, p_tasa_isv: 0 })
+    expect(servidor.recibidas[0].p_renglones[0]).toMatchObject({ precio_unitario: 100 })
   })
 
   it("un pago mixto sin los dos importes no se puede guardar", async () => {

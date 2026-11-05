@@ -2,6 +2,7 @@ import { supabase } from "../supabase"
 
 import { traerClientes, traerProductos } from "./catalogos"
 import { traerExistenciasPorUbicacion } from "./existencias"
+import { traerTodosLosPrecios } from "./preciosPorCliente"
 
 /*
   La copia local con la que el POS vende sin conexión (ver
@@ -83,16 +84,22 @@ export async function descargarCopia({ perfil, ahora = () => new Date() }) {
     existencias: {},
     clientes: [],
     clientesDisponibles: false,
+    preciosPorCliente: {},
+    preciosDisponibles: false,
     tomadaEn,
   }
 
   if (!vendeSinConexion) return copia
 
-  const [productos, existencias, clientes] = await Promise.all([
+  const [productos, existencias, clientes, precios] = await Promise.all([
     traerProductos(),
     traerExistenciasPorUbicacion(),
     traerClientes().then(
       (lista) => ({ lista }),
+      () => ({ fallo: true })
+    ),
+    traerTodosLosPrecios().then(
+      (porCliente) => ({ porCliente }),
       () => ({ fallo: true })
     ),
   ])
@@ -109,6 +116,10 @@ export async function descargarCopia({ perfil, ahora = () => new Date() }) {
   // Sin clientes no hay crédito sin conexión; el contado sigue funcionando.
   copia.clientesDisponibles = !clientes.fallo
   copia.clientes = clientes.fallo ? [] : clientes.lista.map(aClienteDeCopia)
+
+  // Sin ellos se vende al precio general, y si no era el que valía va a conciliación.
+  copia.preciosDisponibles = !precios.fallo
+  copia.preciosPorCliente = precios.fallo ? {} : precios.porCliente
 
   return copia
 }

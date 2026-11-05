@@ -37,6 +37,25 @@ describe("construirVentaLocal", () => {
     expect(venta.tasaIsv).toBe(15)
   })
 
+  it("usa el precio especial del cliente que trae la copia", () => {
+    const copia = { ...copiaDePrueba(), preciosPorCliente: { [CLIENTE.id]: { [CARGADOR.id]: 120 } } }
+    const venta = construirVentaLocal(base({ copia, clienteId: CLIENTE.id }))
+
+    expect(venta.renglones[0].precio_unitario).toBe(120)
+    expect(venta.totalCobrado).toBe(276)
+  })
+
+  it("sin cliente, o con un producto fuera de su lista, usa el precio general", () => {
+    const copia = { ...copiaDePrueba(), preciosPorCliente: { [CLIENTE.id]: { [CUBO.id]: 1 } } }
+
+    expect(construirVentaLocal(base({ copia })).renglones[0].precio_unitario).toBe(150)
+    expect(construirVentaLocal(base({ copia, clienteId: CLIENTE.id })).renglones[0].precio_unitario).toBe(150)
+  })
+
+  it("una copia anterior, sin precios especiales, sigue vendiendo al general", () => {
+    expect(construirVentaLocal(base({ clienteId: CLIENTE.id })).renglones[0].precio_unitario).toBe(150)
+  })
+
   it("lleva una clave de idempotencia única con el dispositivo", () => {
     const a = construirVentaLocal(base())
     const b = construirVentaLocal(base())

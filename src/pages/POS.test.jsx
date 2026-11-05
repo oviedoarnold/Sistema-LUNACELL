@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest"
-import { screen, fireEvent, waitFor, within, cleanup } from "@testing-library/react"
+import { act, screen, fireEvent, waitFor, within, cleanup } from "@testing-library/react"
 import { MemoryRouter } from "react-router-dom"
 import Swal from "sweetalert2"
 
@@ -306,6 +306,136 @@ describe("POS: carrito", () => {
   })
 })
 
+describe("POS: precios por cliente", () => {
+  const PRECIOS = [
+    { id: "e1", empresa_id: "e-1", cliente_id: "c1", producto_id: "p2", precio: 200 },
+    { id: "e2", empresa_id: "e-1", cliente_id: "c2", producto_id: "p2", precio: 225 },
+  ]
+
+  const OTRO_CLIENTE = { id: "c2", name: "Taller Díaz", rtn: "", phone: "8888-1111", address: "Choloma", email: "" }
+
+  const elegirCliente = async (nombre) => {
+    fireEvent.focus(screen.getByPlaceholderText(/nombre/i))
+    fireEvent.click(screen.getByText(nombre))
+    await waitFor(() => expect(document.querySelector(".pos-aviso-precios.is-error")).toBeNull())
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0))
+    })
+  }
+
+  const renderConPrecios = async () => {
+    const r = await renderPOS({ clientes: [...CLIENTES, OTRO_CLIENTE] })
+
+    r.falso.datos.precios_por_cliente = PRECIOS.map((p) => ({ ...p }))
+
+    return r
+  }
+
+  const filaDeCatalogo = (nombre) => screen.getAllByText(nombre)[0].closest(".picker-item")
+  const nombresDelCatalogo = () => [...document.querySelectorAll(".picker-item strong")].map((n) => n.textContent)
+  const facturar = () => screen.getByRole("button", { name: /generar factura/i })
+
+  it("sin cliente registrado usa los precios generales, sin marcas", async () => {
+    await renderConPrecios()
+
+    expect(within(filaDeCatalogo("Cemento gris")).getByText("L 250.00")).toBeInTheDocument()
+    expect(screen.queryByText(/precio especial/i)).not.toBeInTheDocument()
+  })
+
+  it("al elegir un cliente, sus habituales van primero con su precio, sin agregar nada al carrito", async () => {
+    await renderConPrecios()
+    await elegirCliente("Ferremax")
+
+    expect(nombresDelCatalogo()[0]).toBe("Cemento gris")
+    expect(filaDeCatalogo("Cemento gris")).toHaveTextContent("L 200.00")
+    expect(filaDeCatalogo("Cemento gris")).toHaveTextContent(/precio especial/i)
+    expect(filaDeCatalogo("Martillo de uña")).toHaveTextContent("L 180.00")
+    expect(filaDeCatalogo("Martillo de uña")).not.toHaveTextContent(/precio especial/i)
+    expect(filasDelCarrito()).toHaveLength(0)
+  })
+
+  it("aplica el precio al agregar, y la venta sale con ese precio", async () => {
+    const { falso } = await renderConPrecios()
+
+    await elegirCliente("Ferremax")
+    agregar("Cemento gris")
+
+    expect(filasDelCarrito()[0]).toHaveTextContent(/L 200.00 c\/u/)
+    expect(filasDelCarrito()[0]).toHaveTextContent(/precio especial/i)
+    expect(totales()).toHaveTextContent("L 230.00")
+
+    elegirEfectivo()
+    fireEvent.click(facturar())
+
+    await waitFor(() => expect(falso.datos.ventas).toHaveLength(1))
+    expect(falso.datos.ventas[0]).toMatchObject({ subtotal: 200, total: 230, cliente_id: "c1" })
+    expect(falso.datos.detalle_venta[0]).toMatchObject({ precio: 200 })
+  })
+
+  it("un cliente sin precios usa el general, y un producto fuera de la lista también", async () => {
+    await renderConPrecios()
+    await elegirCliente("Ferremax")
+    agregar("Martillo de uña")
+
+    expect(filasDelCarrito()[0]).toHaveTextContent(/L 180.00 c\/u/)
+    expect(filasDelCarrito()[0]).not.toHaveTextContent(/precio especial/i)
+  })
+
+  it("al cambiar de cliente recalcula, avisa y actualiza totales", async () => {
+    await renderConPrecios()
+
+    agregar("Cemento gris")
+    expect(totales()).toHaveTextContent("L 287.50")
+    expect(screen.queryByText(/precios actualizados/i)).not.toBeInTheDocument()
+
+    await elegirCliente("Ferremax")
+
+    expect(totales()).toHaveTextContent("L 230.00")
+    expect(screen.getByText("Precios actualizados para Ferremax.")).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole("button", { name: "Quitar a Ferremax" }))
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0))
+    })
+
+    expect(totales()).toHaveTextContent("L 287.50")
+    expect(screen.getByText(/se usan los precios generales/i)).toBeInTheDocument()
+    expect(filasDelCarrito()).toHaveLength(1)
+  })
+
+  it("el cargo del 7 % y el ISV se calculan sobre el precio especial", async () => {
+    await renderConPrecios()
+    await elegirCliente("Ferremax")
+    agregar("Cemento gris")
+    fireEvent.click(screen.getByRole("radio", { name: "Tarjeta" }))
+
+    expect(totales().querySelector(".grand")).toHaveTextContent("L 246.10")
+
+    fireEvent.click(screen.getByRole("checkbox", { name: /isv/i }))
+
+    expect(totales().querySelector(".grand")).toHaveTextContent("L 214.00")
+  })
+
+  it("si no se pudieron leer los precios, no deja facturar y lo dice", async () => {
+    const { falso } = await renderConPrecios()
+
+    falso.datos.precios_por_cliente = null
+    falso.from.mockImplementationOnce(() => {
+      throw new Error("sin red")
+    })
+
+    fireEvent.focus(screen.getByPlaceholderText(/nombre/i))
+    fireEvent.click(screen.getByText("Ferremax"))
+
+    expect(await screen.findByText(/no se pudieron cargar los precios/i)).toBeInTheDocument()
+
+    agregar("Cemento gris")
+    elegirEfectivo()
+
+    expect(facturar()).toBeDisabled()
+  })
+})
+
 describe("POS: alta de cliente", () => {
   it("abre el formulario de cliente nuevo", async () => {
     await renderPOS()
@@ -415,6 +545,9 @@ describe("POS: venta a crédito con un cliente recién creado", () => {
     )
 
     agregar("Martillo de uña")
+
+    // Facturar espera a que lleguen los precios del cliente recién creado.
+    await waitFor(() => expect(screen.getByRole("button", { name: /generar factura/i })).toBeEnabled())
 
     // Act
     fireEvent.click(screen.getByRole("button", { name: /generar factura/i }))
