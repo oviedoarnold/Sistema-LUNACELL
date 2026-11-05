@@ -42,12 +42,13 @@ const filaPorConciliar = async (id) =>
 const segundos = (a, b) => Math.abs(new Date(a).getTime() - new Date(b).getTime()) / 1000
 
 describe("compatibilidad con la venta en línea", () => {
-  it("1. registrar_venta_ubicacion queda idéntica a la de producción", async () => {
+  // La 0042 solo le cambia de dónde sale el precio: lo comprueba precios-por-cliente-migracion.test.mjs.
+  it("1. registrar_venta_ubicacion queda idéntica a la de la 0042", async () => {
     const r = await db.query(
       "select md5(replace(prosrc, chr(13), '')) as m from pg_proc where oid = 'public.registrar_venta_ubicacion'::regproc"
     )
 
-    expect(r.rows[0].m).toBe("bb3b1346598e079a21a9064f289a7a4e")
+    expect(r.rows[0].m).toBe("a79faa64fc6ca1f9d2598bb428ef4738")
   })
 
   it("2. una venta en línea queda con origen en_linea y sin datos del modo sin conexión", async () => {
