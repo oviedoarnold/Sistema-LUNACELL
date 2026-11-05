@@ -163,7 +163,7 @@ function POS() {
 
     let vigente = true
 
-    tipoDeUbicacion(ubicacionId).then((tipo) => {
+    void tipoDeUbicacion(ubicacionId).then((tipo) => {
       if (vigente) setTipoEnLinea(tipo)
     })
 
