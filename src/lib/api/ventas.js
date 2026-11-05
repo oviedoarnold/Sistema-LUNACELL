@@ -98,6 +98,8 @@ export function aVentaDeApp(fila, empresa) {
     tax: Number(fila.isv),
     taxRate: Number(fila.tasa_isv),
     total: Number(fila.total),
+    // Lo que paga el comprador es el total más este cargo, y va aparte en el documento.
+    cargo: Number(fila.cargo_por_medio || 0),
 
     paymentType: fila.forma_pago,
     type: fila.forma_pago,
@@ -253,12 +255,17 @@ export async function crearVenta(venta, { clave = null } = {}) {
   }
 
   /*
-    Con medios de pago va por registrar_venta_con_medios() (0039), que hace lo
-    mismo y los guarda en la misma transacción. Una venta a crédito no se cobra
-    al venderla y sigue por el camino de siempre.
+    Con medios de pago o sin ISV va por registrar_venta_con_medios(), que hace
+    lo mismo y los guarda en la misma transacción. Una venta a crédito con ISV
+    sigue por el camino de siempre.
   */
-  const { data, error, status } = venta.cobros?.length
-    ? await supabase.rpc("registrar_venta_con_medios", { ...argumentos, p_cobros: venta.cobros })
+  const sinIsv = venta.conIsv === false
+  const { data, error, status } = venta.cobros?.length || sinIsv
+    ? await supabase.rpc("registrar_venta_con_medios", {
+        ...argumentos,
+        p_cobros: venta.cobros || [],
+        ...(sinIsv ? { p_con_isv: false } : {}),
+      })
     : await supabase.rpc("registrar_venta_ubicacion", argumentos)
 
   if (error) {

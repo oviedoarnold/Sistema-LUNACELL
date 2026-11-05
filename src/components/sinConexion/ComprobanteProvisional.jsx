@@ -1,5 +1,6 @@
 import { formatMoney } from "../../utils/format"
 import { totalesDe } from "../../lib/sinConexion/venta"
+import { TASA_DE_CARGO, cargoDeCobros } from "../../utils/mediosDePago"
 
 /*
   El comprobante de una venta hecha sin conexión.
@@ -26,6 +27,7 @@ function ComprobanteProvisional({ venta, empresa = {}, vistaPrevia = false }) {
 
   const moneda = empresa.moneda || "L"
   const { subtotal, isv, total } = totalesDe(venta.renglones || [], venta.tasaIsv)
+  const cargo = cargoDeCobros(venta.cobros)
   const numero = vistaPrevia ? "VISTA PREVIA" : venta.numeroProvisional
   const fecha = venta.registradaEn ? new Date(venta.registradaEn).toLocaleString("es-HN") : ""
 
@@ -150,9 +152,16 @@ function ComprobanteProvisional({ venta, empresa = {}, vistaPrevia = false }) {
           <b>{formatMoney(isv, moneda)}</b>
         </div>
 
+        {cargo > 0 && (
+          <div className="inv-totals-row">
+            <span>Cargo por medio de pago ({TASA_DE_CARGO}%)</span>
+            <b>{formatMoney(cargo, moneda)}</b>
+          </div>
+        )}
+
         <div className="inv-grand">
           <span>TOTAL COBRADO</span>
-          <b>{formatMoney(total, moneda)}</b>
+          <b>{formatMoney(total + cargo, moneda)}</b>
         </div>
       </div>
 

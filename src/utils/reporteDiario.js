@@ -85,8 +85,8 @@ export function indicadoresDelReporte({ indicadores: i, moneda, medios }) {
     { id: "credito", etiqueta: "Ventas al crédito", valor: i.credito_total, tipo: "dinero", detalle: cuantas(i.credito_cantidad, "venta", "ventas") },
     { id: "cobros", etiqueta: "Cobros recibidos", valor: i.cobros_total, tipo: "dinero", detalle: "Contado válido más abonos del día" },
     { id: "sin-registrar", etiqueta: "Cobros sin medio registrado", valor: t.sin_registrar, tipo: "dinero", detalle: "Registrados antes de los medios de pago" },
-    { id: "comision", etiqueta: "Comisión estimada del proveedor", valor: t.comision, tipo: "dinero", detalle: `Interna: no se cobra al cliente. ${formatMoney(t.comision_de_anuladas, moneda)} de ventas anuladas este día` },
-    { id: "neto", etiqueta: "Cobros menos comisión", valor: t.neto, tipo: "dinero" },
+    { id: "cargos", etiqueta: "Cargos por medio de pago", valor: t.cargos, tipo: "dinero", detalle: `Tarjeta y enlace, sumados al comprador. A devolver por anulaciones: ${formatMoney(t.cargos_a_devolver, moneda)}` },
+    { id: "total-cobrado", etiqueta: "Total cobrado con cargos", valor: t.total_cobrado, tipo: "dinero" },
     { id: "abonos", etiqueta: "Abonos cobrados", valor: i.abonos_total, tipo: "dinero", detalle: `${cuantas(i.abonos_cantidad, "abono", "abonos")}, por la fecha del abono` },
     { id: "anuladas", etiqueta: "Anulaciones del día", valor: i.anuladas_total, tipo: "dinero", detalle: `${cuantas(i.anuladas_cantidad, "anulación", "anulaciones")}, fuera de las ventas; ${formatMoney(i.reembolsos_pendientes, moneda)} por reembolsar` },
   ]
@@ -105,20 +105,20 @@ export function seccionesDelReporte(reporte) {
       id: "medios",
       titulo: "Cobros por medio de pago",
       vacio: "No hubo cobros este día.",
-      columnas: [texto("Medio"), numero("Operaciones"), dinero("Cobrado"), dinero("Comisión estimada"), dinero("Neto")],
+      columnas: [texto("Medio"), numero("Operaciones"), dinero("Cobrado"), dinero("Cargo"), dinero("Total cobrado")],
       filas: medios.por_medio.map((m) => ({
         clave: m.medio,
-        celdas: [etiquetaDelMedio(m.medio), m.operaciones, m.monto, m.comision, m.neto],
+        celdas: [etiquetaDelMedio(m.medio), m.operaciones, m.monto, m.cargo, m.total_cobrado],
       })),
     },
     {
       id: "medios-por-ubicacion",
       titulo: "Cobros por ubicación y medio de pago",
       vacio: "No hubo cobros este día.",
-      columnas: [texto("Ubicación"), dinero("Efectivo"), dinero("Transferencia"), dinero("Tarjeta"), dinero("Enlace de pago"), dinero("Sin registrar"), dinero("Total"), dinero("Comisión estimada")],
+      columnas: [texto("Ubicación"), dinero("Efectivo"), dinero("Transferencia"), dinero("Tarjeta"), dinero("Enlace de pago"), dinero("Sin registrar"), dinero("Total"), dinero("Cargo")],
       filas: medios.por_ubicacion.map((u) => ({
         clave: u.ubicacion_id || "sin-ubicacion",
-        celdas: [u.ubicacion, u.efectivo, u.transferencia, u.tarjeta, u.enlace, u.sin_registrar, u.total, u.comision],
+        celdas: [u.ubicacion, u.efectivo, u.transferencia, u.tarjeta, u.enlace, u.sin_registrar, u.total, u.cargo],
       })),
     },
     {

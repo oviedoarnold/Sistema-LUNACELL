@@ -9,6 +9,8 @@ import {
   cobrosDelSelector,
   problemaDelSelector,
   selectorVacio,
+  cargoDeCobros,
+  TASA_DE_CARGO,
 } from "../../utils/mediosDePago"
 
 /*
@@ -90,6 +92,7 @@ function ModalDeCobro({
   }
 
   const aviso = avisoLocal || error
+  const cargo = Number.isFinite(montoNumero) ? cargoDeCobros(cobrosDelSelector(medios, montoNumero)) : 0
 
   /*
     Con un monto que no vale, el botón sigue activo para que el aviso diga cuánto
@@ -210,6 +213,20 @@ function ModalDeCobro({
           total={Number.isFinite(montoNumero) ? montoNumero : 0}
           moneda={moneda}
         />
+
+        {cargo > 0 && (
+          <dl className="cobro-con-cargo">
+            <div>
+              <dt>Cargo por medio de pago ({TASA_DE_CARGO}%)</dt>
+              <dd>{formatMoney(cargo, moneda)}</dd>
+            </div>
+
+            <div>
+              <dt>Total a cobrar</dt>
+              <dd>{formatMoney(montoNumero + cargo, moneda)}</dd>
+            </div>
+          </dl>
+        )}
 
         {previa.length > 0 && (
           <div className="cxc-previa">

@@ -6,6 +6,7 @@ import {
 import { formatDocumentNumber } from "../utils/fiscal"
 
 import { formatMoney } from "../utils/format"
+import { TASA_DE_CARGO } from "../utils/mediosDePago"
 
 /*
   Sin datos de la empresa el encabezado sale vacío, y así debe ser: el
@@ -343,6 +344,21 @@ function InvoiceTemplate({
           </b>
         </div>
 
+        {Number(sale.cargo) > 0 && (
+          <div className="inv-totals-row">
+            <span>
+              Cargo por medio de pago ({TASA_DE_CARGO}%)
+            </span>
+
+            <b>
+              {formatMoney(
+                sale.cargo,
+                company.currency
+              )}
+            </b>
+          </div>
+        )}
+
         <div className="inv-grand">
           <span>
             TOTAL A PAGAR
@@ -350,7 +366,7 @@ function InvoiceTemplate({
 
           <b>
             {formatMoney(
-              sale.total,
+              Number(sale.total) + Number(sale.cargo || 0),
               company.currency
             )}
           </b>

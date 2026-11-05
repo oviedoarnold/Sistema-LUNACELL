@@ -340,8 +340,28 @@ describe("medios de pago del abono", () => {
     await waitFor(() => expect(rpc).toHaveBeenCalled())
     expect(rpc.mock.calls[0][1].p_cobros).toEqual([
       { medio: "efectivo", monto: 40, referencia: "" },
-      { medio: "tarjeta", monto: 60, referencia: "AUT-1" },
+      { medio: "tarjeta", monto: 60, referencia: "AUT-1", cargo: 4.2 },
     ])
+  })
+
+  it("con tarjeta muestra el cargo y lo que paga el comprador, y el abono sigue siendo el monto", async () => {
+    await renderCxC()
+    const rpc = responderRpc(pagoDelServidor())
+
+    abrirCobro()
+    escribirMonto(400)
+    unico("Tarjeta")
+
+    expect(screen.getByText(/cargo por medio de pago/i).nextSibling).toHaveTextContent("L 28.00")
+    expect(screen.getByText("Total a cobrar").nextSibling).toHaveTextContent("L 428.00")
+
+    clicConfirmar()
+
+    await waitFor(() => expect(rpc).toHaveBeenCalled())
+    expect(rpc.mock.calls[0][1]).toMatchObject({
+      p_monto: 400,
+      p_cobros: [{ medio: "tarjeta", monto: 400, referencia: "", cargo: 28 }],
+    })
   })
 
   it("un pago mixto con un solo medio no se confirma, aunque lleve todo el monto", async () => {

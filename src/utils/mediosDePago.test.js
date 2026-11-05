@@ -3,6 +3,8 @@ import { describe, it, expect } from "vitest"
 import {
   MIXTO,
   cambiarModalidad,
+  cargoDe,
+  cargoDeCobros,
   cobrosDelSelector,
   elegirMedio,
   escribirImporte,
@@ -150,7 +152,7 @@ describe("pago mixto", () => {
     expect(problemaDelSelector(valor, 100)).toBeNull()
     expect(cobrosDelSelector(valor, 100)).toEqual([
       { medio: "efectivo", monto: 40, referencia: "" },
-      { medio: "tarjeta", monto: 60, referencia: "" },
+      { medio: "tarjeta", monto: 60, referencia: "", cargo: 4.2 },
     ])
   })
 
@@ -160,8 +162,49 @@ describe("pago mixto", () => {
     expect(problemaDelSelector(valor, 100)).toBeNull()
     expect(cobrosDelSelector(valor, 100)).toEqual([
       { medio: "efectivo", monto: 40, referencia: "" },
-      { medio: "tarjeta", monto: 60, referencia: "AUT-1" },
+      { medio: "tarjeta", monto: 60, referencia: "AUT-1", cargo: 4.2 },
     ])
+  })
+})
+
+describe("el cargo del 7 %", () => {
+  const unico = (medio) => elegirMedio(selectorVacio(), medio)
+  const totalDe = (cobros) => cobros.reduce((s, c) => s + c.monto, 0) + cargoDeCobros(cobros)
+
+  it.each([
+    ["efectivo", 1000],
+    ["transferencia", 1000],
+    ["tarjeta", 1070],
+    ["enlace", 1070],
+  ])("una venta de 1,000 con %s da %d en total", (medio, total) => {
+    expect(totalDe(cobrosDelSelector(unico(medio), 1000))).toBe(total)
+  })
+
+  it("600 en efectivo y 400 con tarjeta dan 1,028", () => {
+    const cobros = cobrosDelSelector(conImporte(1000, "efectivo", "600"), 1000)
+
+    expect(cobros).toEqual([
+      { medio: "efectivo", monto: 600, referencia: "" },
+      { medio: "tarjeta", monto: 400, referencia: "", cargo: 28 },
+    ])
+    expect(cargoDeCobros(cobros)).toBe(28)
+    expect(totalDe(cobros)).toBe(1028)
+  })
+
+  it("se suma y nunca se resta, y lo que no lleva cargo no manda el campo", () => {
+    expect(cargoDe("tarjeta", 100)).toBe(7)
+    expect(cobrosDelSelector(unico("efectivo"), 100)[0]).not.toHaveProperty("cargo")
+    expect(cobrosDelSelector(unico("transferencia"), 100)[0]).not.toHaveProperty("cargo")
+  })
+
+  it.each([
+    [207, 14.49],
+    [0.5, 0.04],
+    [100.1, 7.01],
+    [1150, 80.5],
+    [0.05, 0],
+  ])("redondea a centavos como la base: %d lleva %d", (monto, cargo) => {
+    expect(cargoDe("enlace", monto)).toBe(cargo)
   })
 })
 

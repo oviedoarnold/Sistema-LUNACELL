@@ -17,7 +17,7 @@ import { traerExistenciasPorUbicacion } from "./existencias"
   mientras se descargaba se descuenta de más, nunca de menos.
 */
 
-const COLUMNAS_UBICACION = "id, nombre, activa, vende, emite_fiscal, vende_sin_conexion"
+const COLUMNAS_UBICACION = "id, nombre, tipo, activa, vende, emite_fiscal, vende_sin_conexion"
 const COLUMNAS_EMPRESA = "id, nombre, direccion, telefono, moneda, tasa_isv"
 
 async function leerUna(consulta, queHacia) {
@@ -71,7 +71,7 @@ export async function descargarCopia({ perfil, ahora = () => new Date() }) {
     empresaId: perfil.empresa_id,
     usuarioAuth: perfil.authId,
     ubicacionId,
-    ubicacion: { id: fila.id, nombre: fila.nombre, vendeSinConexion, emiteFiscal },
+    ubicacion: { id: fila.id, nombre: fila.nombre, tipo: fila.tipo, vendeSinConexion, emiteFiscal },
     empresa: {
       nombre: empresa?.nombre || "",
       direccion: empresa?.direccion || "",

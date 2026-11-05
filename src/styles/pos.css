@@ -311,7 +311,8 @@
     column-gap: var(--space-4);
   }
 
-  .pos .totals-row.grand {
+  .pos .totals-row.grand,
+  .pos .totals-row.pos-cargo {
     grid-column: 1 / -1;
   }
 }
@@ -319,6 +320,19 @@
 .pos .totals-row {
   padding: 0;
   font-size: 13.5px;
+}
+
+.pos .pos-isv {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+}
+
+.pos .pos-isv input {
+  width: 16px;
+  height: 16px;
+  margin: 0;
 }
 
 .pos .medios-de-pago-cuadre {

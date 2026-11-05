@@ -229,7 +229,7 @@ describe("POS sin conexión en una ubicación habilitada", () => {
     await waitFor(() => expect(servidor.recibidas).toHaveLength(1))
     expect(servidor.recibidas[0].p_cobros).toEqual([
       { medio: "efectivo", monto: 107, referencia: "" },
-      { medio: "tarjeta", monto: 100, referencia: "AUT-1" },
+      { medio: "tarjeta", monto: 73, referencia: "AUT-1", cargo: 5.11 },
     ])
   })
 
@@ -246,7 +246,47 @@ describe("POS sin conexión en una ubicación habilitada", () => {
     await devolverConexion()
 
     await waitFor(() => expect(servidor.recibidas).toHaveLength(1))
-    expect(servidor.recibidas[0].p_cobros).toEqual([{ medio: "enlace", monto: 207, referencia: "" }])
+    expect(servidor.recibidas[0].p_cobros).toEqual([{ medio: "enlace", monto: 180, referencia: "", cargo: 12.6 }])
+  })
+
+  it("en un camión la casilla de ISV nace desmarcada, y sin ella sincroniza con tasa 0", async () => {
+    await renderPOS()
+    await esperarCopia()
+    await quitarConexion()
+
+    agregar("Martillo de uña")
+
+    expect(screen.getByRole("checkbox", { name: /isv/i })).not.toBeChecked()
+
+    elegirEfectivo()
+    fireEvent.click(botonGuardarSinConexion())
+    await waitFor(() => expect(screen.getByText(/1 venta pendiente de sincronizar/i)).toBeInTheDocument())
+
+    await devolverConexion()
+
+    await waitFor(() => expect(servidor.recibidas).toHaveLength(1))
+    expect(servidor.recibidas[0]).toMatchObject({ p_tasa_isv: 0, p_total_cobrado: 180 })
+  })
+
+  it("si el vendedor marca el ISV, la venta sale con la tasa de la empresa", async () => {
+    await renderPOS()
+    await esperarCopia()
+    await quitarConexion()
+
+    agregar("Martillo de uña")
+    fireEvent.click(screen.getByRole("checkbox", { name: /isv/i }))
+    fireEvent.click(screen.getByRole("radio", { name: "Tarjeta" }))
+    fireEvent.click(botonGuardarSinConexion())
+    await waitFor(() => expect(screen.getByText(/1 venta pendiente de sincronizar/i)).toBeInTheDocument())
+
+    await devolverConexion()
+
+    await waitFor(() => expect(servidor.recibidas).toHaveLength(1))
+    expect(servidor.recibidas[0]).toMatchObject({
+      p_tasa_isv: 15,
+      p_total_cobrado: 207,
+      p_cobros: [{ medio: "tarjeta", monto: 207, referencia: "", cargo: 14.49 }],
+    })
   })
 
   it("un pago mixto sin los dos importes no se puede guardar", async () => {
@@ -315,7 +355,7 @@ describe("POS sin conexión en una ubicación habilitada", () => {
     await waitFor(() => expect(servidor.recibidas).toHaveLength(1))
     expect(servidor.recibidas[0]).toMatchObject({ p_ubicacion_id: "camion-01", p_forma_pago: "contado" })
     expect(servidor.recibidas[0].p_clave_idempotencia).toMatch(/^off-/)
-    expect(servidor.recibidas[0].p_cobros).toEqual([{ medio: "efectivo", monto: 207, referencia: "" }])
+    expect(servidor.recibidas[0].p_cobros).toEqual([{ medio: "efectivo", monto: 180, referencia: "" }])
     await waitFor(() => expect(screen.getByText(/sin ventas pendientes/i)).toBeInTheDocument())
 
     fireEvent.click(screen.getByRole("button", { name: /ventas sin conexión/i }))
@@ -452,7 +492,8 @@ describe("venta en línea que se queda sin respuesta", () => {
 describe("POS sin conexión en una ubicación sin autorización", () => {
   it("no deja vender y explica por qué", async () => {
     const { falso } = await renderPOS({ ubicacion: { ...CAMION, offline: false } })
-    await waitFor(() => expect(falso.from).toHaveBeenCalledWith("ubicaciones"))
+    // La primera consulta es el tipo de la ubicación; la segunda, la copia.
+    await waitFor(() => expect(falso.from.mock.calls.filter(([tabla]) => tabla === "ubicaciones").length).toBeGreaterThan(1))
     await quitarConexion()
 
     expect(await screen.findByText(/no está habilitada para vender sin conexión/i)).toBeInTheDocument()
@@ -464,7 +505,8 @@ describe("POS sin conexión en una ubicación sin autorización", () => {
 
   it("una ubicación fiscal no vende sin conexión", async () => {
     const { falso } = await renderPOS({ ubicacion: { ...CAMION, offline: false, fiscal: true } })
-    await waitFor(() => expect(falso.from).toHaveBeenCalledWith("ubicaciones"))
+    // La primera consulta es el tipo de la ubicación; la segunda, la copia.
+    await waitFor(() => expect(falso.from.mock.calls.filter(([tabla]) => tabla === "ubicaciones").length).toBeGreaterThan(1))
     await quitarConexion()
 
     expect(await screen.findByText(/emite facturas fiscales y no vende sin conexión/i)).toBeInTheDocument()

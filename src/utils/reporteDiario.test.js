@@ -53,11 +53,11 @@ describe("las secciones del reporte", () => {
     expect(abonos.filas[0].celdas).toContain("Sin registrar")
   })
 
-  it("los cobros por medio llevan comisión y neto, y la sección no menciona costos", () => {
+  it("los cobros por medio llevan su cargo, y la sección no menciona costos", () => {
     const { columnas, filas } = seccion("medios")
 
-    expect(columnas.map((c) => c.titulo)).toEqual(["Medio", "Operaciones", "Cobrado", "Comisión estimada", "Neto"])
-    expect(filas[1].celdas).toEqual(["Tarjeta", 1, 100, 7, 93])
+    expect(columnas.map((c) => c.titulo)).toEqual(["Medio", "Operaciones", "Cobrado", "Cargo", "Total cobrado"])
+    expect(filas[1].celdas).toEqual(["Tarjeta", 1, 100, 7, 107])
     expect(filas[2].celdas[0]).toBe("Sin registrar")
     expect(JSON.stringify(REPORTE.medios)).not.toMatch(/costo|margen|utilidad/i)
   })

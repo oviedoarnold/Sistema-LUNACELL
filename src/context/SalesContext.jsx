@@ -207,6 +207,7 @@ function SalesProvider({ children }) {
           dueDate: venta.dueDate || null,
           note: venta.note || "",
           cobros: venta.cobros || [],
+          conIsv: venta.conIsv,
         },
         { clave }
       )

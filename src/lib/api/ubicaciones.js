@@ -22,6 +22,17 @@ export const aUbicacionDeApp = (fila) => ({
   createdAt: fila.creada_en || "",
 })
 
+/* El tipo de la ubicación desde la que se vende; null si no se puede saber. */
+export async function tipoDeUbicacion(id) {
+  try {
+    const { data, error } = await supabase.from("ubicaciones").select("tipo").eq("id", id).maybeSingle()
+
+    return error ? null : data?.tipo ?? null
+  } catch {
+    return null
+  }
+}
+
 const aUbicacionDeBase = (ubicacion, empresaId) => ({
   empresa_id: empresaId,
   nombre: String(ubicacion.name || "").trim(),
