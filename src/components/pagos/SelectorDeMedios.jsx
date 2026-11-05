@@ -25,9 +25,7 @@ const MODALIDADES = [
 /*
   Con qué se cobra una venta de contado o un abono.
 
-  No sabe qué pantalla lo usa: recibe el total y entrega el estado. La comisión
-  del proveedor no aparece aquí porque el vendedor no la ve y no le cambia nada
-  al cliente: lo que se cobra es el total, con cualquier medio.
+  No sabe qué pantalla lo usa: recibe el total y entrega el estado.
 
   El campo de importe es de texto y no numérico: un campo numérico vacía lo que
   se pega con comas, y así el tope no llegaría a verlo. Al entrar se selecciona

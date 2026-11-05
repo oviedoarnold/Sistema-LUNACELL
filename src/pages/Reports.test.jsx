@@ -91,8 +91,8 @@ describe("Reportes: el administrador", () => {
 
     const indicadores = screen.getByRole("region", { name: /indicadores del día/i })
 
-    expect(within(indicadores).getByText("Comisión estimada del proveedor").closest(".stat-card")).toHaveTextContent("L 7.00")
-    expect(within(indicadores).getByText("Cobros menos comisión").closest(".stat-card")).toHaveTextContent("L 158.00")
+    expect(within(indicadores).getByText("Cargos por medio de pago").closest(".stat-card")).toHaveTextContent("L 7.00")
+    expect(within(indicadores).getByText("Total cobrado con cargos").closest(".stat-card")).toHaveTextContent("L 172.00")
   })
 
   it("si fallan los medios no muestra un reporte a medias", async () => {

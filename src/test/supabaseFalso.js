@@ -1212,9 +1212,22 @@ export function crearSupabaseFalso({
       if (nombre === "registrar_venta_ubicacion" || nombre === "registrar_venta_con_medios") {
         const falla = fallaDe(nombre, "rpc")
 
-        return Promise.resolve(
-          falla ? { data: null, error: falla } : venderEnUbicacion(argumentos)
-        )
+        if (falla) return Promise.resolve({ data: null, error: falla })
+
+        const respuesta = venderEnUbicacion(argumentos)
+        const venta = respuesta.data && datos.ventas.find((v) => v.id === respuesta.data.venta_id)
+
+        if (venta) {
+          venta.cargo_por_medio = (argumentos.p_cobros || []).reduce((suma, c) => suma + (c.cargo || 0), 0)
+
+          if (argumentos.p_con_isv === false) {
+            venta.isv = 0
+            venta.tasa_isv = 0
+            venta.total = venta.subtotal
+          }
+        }
+
+        return Promise.resolve(respuesta)
       }
 
       if (nombre === "registrar_traslado") {

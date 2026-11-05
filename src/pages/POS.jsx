@@ -25,7 +25,8 @@ import ModalDeCliente from "../components/documents/ModalDeCliente"
 import { useCarrito } from "../hooks/useCarrito"
 import { useExistenciaDeMiUbicacion } from "../hooks/useExistenciaDeMiUbicacion"
 import SelectorDeMedios, { ResumenDeMedios } from "../components/pagos/SelectorDeMedios"
-import { cobrosDelSelector, problemaDelSelector, selectorVacio } from "../utils/mediosDePago"
+import { TASA_DE_CARGO, cargoDeCobros, cobrosDelSelector, problemaDelSelector, selectorVacio } from "../utils/mediosDePago"
+import { tipoDeUbicacion } from "../lib/api/ubicaciones"
 import { totalesDe } from "../lib/sinConexion/venta"
 import { useClienteDelDocumento } from "../hooks/useClienteDelDocumento"
 import DocumentPreviewModal from "../components/documents/DocumentPreviewModal"
@@ -144,9 +145,37 @@ function POS() {
     La tasa sale de la configuración de la empresa. Tenerla fija aquí
     hacía que cambiarla en Configuración no afectara lo que se cobra.
   */
-  const tasaISV = Number(
+  const tasaDeLaEmpresa = Number(
     modoSinConexion ? copiaLocal?.empresa?.tasaIsv ?? ISV_POR_OMISION : company?.taxRate ?? ISV_POR_OMISION
   )
+
+  /*
+    La casilla de ISV nace marcada solo en la tienda, y el vendedor la cambia si
+    hace falta. Hasta saber el tipo de la ubicación no se puede facturar: una venta
+    de la tienda no debe salir sin ISV por haber pulsado antes de tiempo.
+  */
+  const ubicacionId = user?.locationId || ""
+  const [tipoEnLinea, setTipoEnLinea] = useState()
+  const [isvElegido, setIsvElegido] = useState(null)
+
+  useEffect(() => {
+    if (!ubicacionId || modoSinConexion) return undefined
+
+    let vigente = true
+
+    tipoDeUbicacion(ubicacionId).then((tipo) => {
+      if (vigente) setTipoEnLinea(tipo)
+    })
+
+    return () => {
+      vigente = false
+    }
+  }, [ubicacionId, modoSinConexion])
+
+  const tipoDeMiUbicacion = modoSinConexion ? copiaLocal?.ubicacion?.tipo : tipoEnLinea
+  const tipoPendiente = !modoSinConexion && Boolean(ubicacionId) && tipoEnLinea === undefined
+  const conIsv = isvElegido ?? tipoDeMiUbicacion === "tienda"
+  const tasaISV = conIsv ? tasaDeLaEmpresa : 0
 
   /*
     Identifica al intento de cobro, no al clic. Se conserva mientras la
@@ -281,6 +310,9 @@ function POS() {
   // Mientras los medios no sumen el total, la venta no se puede confirmar.
   const mediosSinCuadrar =
     paymentType === "contado" && problemaDelSelector(medios, totalACobrar) !== null
+
+  // Lo que tarjeta y enlace suman a lo que paga el comprador.
+  const cargo = cargoDeCobros(cobrosDeLaVenta())
 
   // Productos distintos y unidades son cifras diferentes: dos cargadores son un producto.
   const unidades = cart.reduce((suma, item) => suma + Number(item.quantity), 0)
@@ -451,6 +483,7 @@ function POS() {
     tax,
     taxRate: tasaISV,
     total,
+    cargo,
 
     paymentType,
 
@@ -500,6 +533,7 @@ function POS() {
     total,
     note: "",
     cobros: cobrosDeLaVenta(),
+    conIsv,
   })
 
   /*
@@ -517,6 +551,7 @@ function POS() {
       precio_unitario: Number(item.price),
     })),
     tasaIsv: tasaISV,
+    cobros: cobrosDeLaVenta(),
     formaPago: paymentType,
     nombreCliente: getCustomerName(),
     rtnComprador: buyerRTN.trim() || selectedClient?.rtn || "",
@@ -541,6 +576,7 @@ function POS() {
     setSearch("")
     setPaymentType("contado")
     setMedios(selectorVacio())
+    setIsvElegido(null)
     handleClearClient()
     setDueDate(toISODateInDays(30))
   }
@@ -567,6 +603,7 @@ function POS() {
         nota: claveEnLinea ? `Intento en línea sin respuesta: ${claveEnLinea}` : "",
         claveEnLinea,
         cobros: cobrosDeLaVenta(),
+        conIsv,
       })
 
       setPreviewOpen(false)
@@ -1114,15 +1151,30 @@ function POS() {
                 </div>
 
                 <div className="totals-row">
-                  <span>ISV ({tasaISV}%)</span>
+                  <label className="pos-isv">
+                    <input
+                      type="checkbox"
+                      checked={conIsv}
+                      onChange={(event) => setIsvElegido(event.target.checked)}
+                    />
+                    ISV ({tasaDeLaEmpresa}%)
+                  </label>
 
                   <span className="v">{formatMoney(tax)}</span>
                 </div>
 
+                {cargo > 0 && (
+                  <div className="totals-row pos-cargo">
+                    <span>Cargo por medio de pago ({TASA_DE_CARGO}%)</span>
+
+                    <span className="v">{formatMoney(cargo)}</span>
+                  </div>
+                )}
+
                 <div className="totals-row grand">
                   <span>Total</span>
 
-                  <span className="v">{formatMoney(total)}</span>
+                  <span className="v">{formatMoney(total + cargo)}</span>
                 </div>
               </div>
 
@@ -1138,7 +1190,7 @@ function POS() {
                 <button
                   type="button"
                   className="btn btn-primary btn-lg btn-block"
-                  disabled={cart.length === 0 || facturando || !existenciaLista || bloqueadoSinConexion || mediosSinCuadrar}
+                  disabled={cart.length === 0 || facturando || !existenciaLista || bloqueadoSinConexion || mediosSinCuadrar || tipoPendiente}
                   onClick={generateSale}
                 >
                   {textoDelBotonDeVenta(facturando, modoSinConexion)}

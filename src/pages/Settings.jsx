@@ -15,7 +15,6 @@ import { FaPlus } from "react-icons/fa"
 
 import PageHeader from "../components/crud/PageHeader"
 import ModalShell from "../components/forms/ModalShell"
-import TasasDeComision from "../components/pagos/TasasDeComision"
 
 import {
   ADMIN_PERMISSIONS,
@@ -1087,8 +1086,6 @@ function Settings() {
         </div>
 
       </section>
-
-      <TasasDeComision />
 
       {/* =====================================
           USUARIOS

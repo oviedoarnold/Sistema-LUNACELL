@@ -515,7 +515,7 @@ function SalesHistory() {
                     >
                       <div className="sale-total">
                         {formatMoney(
-                          sale.total,
+                          Number(sale.total) + Number(sale.cargo || 0),
                           sale
                             .company
                             ?.currency ||

@@ -119,15 +119,23 @@ form > .medios-de-pago-cuadre {
   margin-bottom: 14px;
 }
 
-/* Las tasas de comisión, en Configuración. */
-.tasas-de-comision-fila {
-  align-items: flex-end;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-  margin-bottom: 10px;
+/* Lo que paga el comprador en un abono con tarjeta o enlace. */
+.cobro-con-cargo {
+  display: grid;
+  gap: 2px;
+  margin: 0 0 14px;
 }
 
-.tasas-de-comision-fila .field {
+.cobro-con-cargo > div {
+  display: flex;
+  justify-content: space-between;
+}
+
+.cobro-con-cargo dt {
+  font-weight: 400;
+}
+
+.cobro-con-cargo dd {
+  font-weight: 600;
   margin: 0;
 }

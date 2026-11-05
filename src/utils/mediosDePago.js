@@ -23,6 +23,7 @@ export const SIN_REGISTRAR = "sin_registrar"
 export const UNICO = "unico"
 export const MIXTO = "mixto"
 export const MEDIOS_EN_MIXTO = 2
+export const TASA_DE_CARGO = 7
 
 export const etiquetaDelMedio = (medio) =>
   medio === SIN_REGISTRAR ? "Sin registrar" : MEDIO_POR_ID[medio]?.etiqueta || medio
@@ -30,6 +31,23 @@ export const etiquetaDelMedio = (medio) =>
 const centavos = (valor) => Math.round(Number(valor) * 100)
 
 const aTexto = (cuantos) => (cuantos / 100).toFixed(2)
+
+/*
+  El 7 % que tarjeta y enlace suman a lo que paga el comprador, sobre el importe
+  de ese medio. El mismo cálculo que cargo_de_cobro() en la base, que lo comprueba.
+*/
+export const cargoDe = (medio, monto) =>
+  medio === "tarjeta" || medio === "enlace" ? Math.round((centavos(monto) * TASA_DE_CARGO) / 100) / 100 : 0
+
+export const cargoDeCobros = (cobros) =>
+  (cobros || []).reduce((suma, c) => suma + centavos(c.cargo || 0), 0) / 100
+
+/* Sin cargo el cobro no lleva el campo: es lo mismo que enviaba antes. */
+const conCargo = (cobro) => {
+  const cargo = cargoDe(cobro.medio, cobro.monto)
+
+  return cargo > 0 ? { ...cobro, cargo } : cobro
+}
 
 const vacios = () => Object.fromEntries(MEDIOS_DE_PAGO.map((m) => [m.id, ""]))
 
@@ -142,12 +160,12 @@ export function cobrosDelSelector(valor, total) {
   const { modalidad, elegidos, referencias } = valor
 
   if (modalidad !== MIXTO) {
-    return elegidos.map((medio) => ({ medio, monto: centavos(total) / 100, referencia: referencias[medio].trim() }))
+    return elegidos.map((medio) => conCargo({ medio, monto: centavos(total) / 100, referencia: referencias[medio].trim() }))
   }
 
   return elegidos
     .filter((medio) => centavos(importeDe(valor, medio, total)) > 0)
-    .map((medio) => ({ medio, monto: centavos(importeDe(valor, medio, total)) / 100, referencia: referencias[medio].trim() }))
+    .map((medio) => conCargo({ medio, monto: centavos(importeDe(valor, medio, total)) / 100, referencia: referencias[medio].trim() }))
 }
 
 /* Cuánto falta por asignar; negativo si sobra porque el total bajó. */

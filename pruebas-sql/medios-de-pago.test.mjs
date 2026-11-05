@@ -1,5 +1,5 @@
 /*
-  0039 contra PostgreSQL de verdad: medios de pago y comisiones.
+  0039 y 0041 contra PostgreSQL de verdad: medios de pago, cargo e ISV.
 
   Las ventas, los cobros, las anulaciones y las conciliaciones se hacen con las
   funciones que usa la aplicación. Solo se mueve la fecha de lo ya registrado,
@@ -113,16 +113,6 @@ const cobrosDeVenta = async (ventaId) =>
 const cobrosDePago = async (pagoId) =>
   (await db.query("select medio, monto::float8 as monto, referencia, ubicacion_id from cobros_por_medio where pago_id = $1 order by medio, monto", [pagoId])).rows
 
-const comisionesDe = async (ventaId) =>
-  (
-    await db.query(
-      `select k.medio, k.base::float8 as base, k.tasa::float8 as tasa, k.monto::float8 as monto
-         from comisiones_de_cobro k join cobros_por_medio c on c.id = k.cobro_id
-        where c.venta_id = $1 order by k.medio`,
-      [ventaId]
-    )
-  ).rows
-
 const medios = (authId, dia = null, ubicacion = null) =>
   unaFila(authId, "select public.reporte_medios_de_pago($1::date, $2::uuid) as r", [dia, ubicacion])
 
@@ -204,13 +194,6 @@ describe("sin referencia (0040)", () => {
     expect(await cobrosDeVenta(venta.venta_id)).toEqual([
       expect.objectContaining({ medio, monto: 115, referencia: "" }),
     ])
-  })
-
-  it("la comisión interna se calcula igual, y la tarjeta conserva su 7 %", async () => {
-    const e = await escenario()
-    const venta = await vender(e, e.vendedor.authId, [efectivo(15), { medio: "tarjeta", monto: 100 }])
-
-    expect(await comisionesDe(venta.venta_id)).toEqual([{ medio: "tarjeta", base: 100, tasa: 7, monto: 7 }])
   })
 
   it("sigue exigiendo que los importes sumen el total", async () => {
@@ -317,7 +300,7 @@ describe("venta a crédito", () => {
 })
 
 describe("reintentos", () => {
-  it("la misma venta con la misma clave devuelve la que existe, sin duplicar cobros ni comisiones", async () => {
+  it("la misma venta con la misma clave devuelve la que existe, sin duplicar cobros", async () => {
     const e = await escenario()
     const cobros = [efectivo(15), tarjeta(100)]
     const primera = await vender(e, e.vendedor.authId, cobros, { clave: "reintento-1" })
@@ -326,7 +309,6 @@ describe("reintentos", () => {
     expect(segunda.repetida).toBe(true)
     expect(segunda.venta_id).toBe(primera.venta_id)
     expect(await cobrosDeVenta(primera.venta_id)).toHaveLength(2)
-    expect(await comisionesDe(primera.venta_id)).toHaveLength(1)
   })
 
   it("la misma clave con otros medios se rechaza", async () => {
@@ -430,76 +412,298 @@ describe("abonos", () => {
   })
 })
 
-describe("comisiones", () => {
-  it("estima el 7 % solo en tarjeta y enlace, sin cambiar lo cobrado", async () => {
-    const e = await escenario()
-    const venta = await vender(e, e.vendedor.authId, [efectivo(15), tarjeta(50), enlace(50)])
+describe("el cargo del 7 %", () => {
+  const conCargo = (medio, monto, referencia = "") => ({ medio, monto, referencia, cargo: Math.round(monto * 7) / 100 })
+  const cargoDeVenta = async (id) =>
+    Number((await db.query("select cargo_por_medio from ventas where id = $1", [id])).rows[0].cargo_por_medio)
+  const cargos = async (id) =>
+    (await db.query("select medio, monto::float8 as monto, cargo::float8 as cargo from cobros_por_medio where venta_id = $1 order by medio", [id])).rows
 
-    expect(await comisionesDe(venta.venta_id)).toEqual([
-      { medio: "enlace", base: 50, tasa: 7, monto: 3.5 },
-      { medio: "tarjeta", base: 50, tasa: 7, monto: 3.5 },
+  it.each([["tarjeta"], ["enlace"]])("%s lleva 7 %% sobre su importe, y el total de la venta no cambia", async (medio) => {
+    const e = await escenario()
+    const venta = await vender(e, e.vendedor.authId, [conCargo(medio, 115)])
+    const { rows } = await db.query("select total::float8 as total from ventas where id = $1", [venta.venta_id])
+
+    expect(rows[0].total).toBe(115)
+    expect(await cargoDeVenta(venta.venta_id)).toBe(8.05)
+    expect(await cargos(venta.venta_id)).toEqual([{ medio, monto: 115, cargo: 8.05 }])
+  })
+
+  it("en pago mixto solo lleva cargo la parte de la tarjeta", async () => {
+    const e = await escenario()
+    const venta = await vender(e, e.vendedor.authId, [efectivo(15), conCargo("tarjeta", 100)])
+
+    expect(await cargoDeVenta(venta.venta_id)).toBe(7)
+    expect(await cargos(venta.venta_id)).toEqual([
+      { medio: "efectivo", monto: 15, cargo: 0 },
+      { medio: "tarjeta", monto: 100, cargo: 7 },
     ])
-
-    const { rows } = await db.query("select total::float8 as t from ventas where id = $1", [venta.venta_id])
-
-    expect(rows[0].t).toBe(115)
   })
 
-  it("transferencia y efectivo no llevan comisión", async () => {
+  it.each([
+    ["uno menor", 1],
+    ["uno mayor", 99],
+    ["cero", 0],
+  ])("rechaza %s al que da la cuenta, sin registrar la venta", async (_, cargo) => {
     const e = await escenario()
-    const venta = await vender(e, e.vendedor.authId, [efectivo(15), transferencia(100)])
+    const antes = await existencia(db, e.camion1, e.cargador.id)
+    const error = await fallo(vender(e, e.vendedor.authId, [{ medio: "tarjeta", monto: 115, cargo }]))
 
-    expect(await comisionesDe(venta.venta_id)).toEqual([])
+    expect(error.code).toBe("LM001")
+    expect(await existencia(db, e.camion1, e.cargador.id)).toBe(antes)
   })
 
-  it("cambiar la tasa vale de ahora en adelante y no toca lo anterior", async () => {
-    const e = await escenario()
-    const antes = await vender(e, e.vendedor.authId, [tarjeta(115)])
-
-    await como(e.admin.authId, "select public.configurar_tasa_de_comision('tarjeta', 5.5)")
-
-    const despues = await vender(e, e.vendedor.authId, [tarjeta(115)])
-
-    expect(await comisionesDe(antes.venta_id)).toEqual([{ medio: "tarjeta", base: 115, tasa: 7, monto: 8.05 }])
-    expect(await comisionesDe(despues.venta_id)).toEqual([{ medio: "tarjeta", base: 115, tasa: 5.5, monto: 6.33 }])
-  })
-
-  it("con tasa cero no se anota comisión", async () => {
+  it("efectivo y transferencia no admiten cargo", async () => {
     const e = await escenario()
 
-    await como(e.admin.authId, "select public.configurar_tasa_de_comision('enlace', 0)")
+    for (const medio of ["efectivo", "transferencia"]) {
+      const error = await fallo(vender(e, e.vendedor.authId, [{ medio, monto: 115, cargo: 8.05 }]))
 
-    const venta = await vender(e, e.vendedor.authId, [enlace(115)])
-
-    expect(await comisionesDe(venta.venta_id)).toEqual([])
+      expect(error.code).toBe("LM001")
+    }
   })
 
-  it("cada empresa nueva empieza con 7 % en tarjeta y enlace", async () => {
-    const { empresa } = await crearEmpresa(db, "Empresa recién creada")
-    const { rows } = await db.query("select medio, tasa::float8 as tasa from tasas_de_comision where empresa_id = $1 order by medio", [empresa])
-
-    expect(rows).toEqual([{ medio: "enlace", tasa: 7 }, { medio: "tarjeta", tasa: 7 }])
-  })
-
-  it.each([[-1], [100.01], [7.123]])("rechaza la tasa %s", async (tasa) => {
+  it("una versión anterior no manda cargo y queda con cargo 0", async () => {
     const e = await escenario()
-    const error = await fallo(como(e.admin.authId, "select public.configurar_tasa_de_comision('tarjeta', $1)", [tasa]))
+    const venta = await vender(e, e.vendedor.authId, [tarjeta(115)])
 
-    expect(error.code).toBe("LM006")
+    expect(await cargoDeVenta(venta.venta_id)).toBe(0)
   })
 
-  it("efectivo y transferencia no se configuran", async () => {
+  it("un reintento no duplica el cargo, y otro cargo con la misma clave se rechaza", async () => {
     const e = await escenario()
-    const error = await fallo(como(e.admin.authId, "select public.configurar_tasa_de_comision('efectivo', 1)"))
+    const cobros = [conCargo("tarjeta", 115)]
+    const primera = await vender(e, e.vendedor.authId, cobros, { clave: "cargo-1" })
+    const segunda = await vender(e, e.vendedor.authId, cobros, { clave: "cargo-1" })
 
-    expect(error.code).toBe("LM006")
+    expect(segunda.repetida).toBe(true)
+    expect(segunda.venta_id).toBe(primera.venta_id)
+    expect(await cargoDeVenta(primera.venta_id)).toBe(8.05)
+    expect(await cargos(primera.venta_id)).toHaveLength(1)
+
+    const error = await fallo(vender(e, e.vendedor.authId, [tarjeta(115)], { clave: "cargo-1" }))
+
+    expect(error.code).toBe("LM005")
   })
 
-  it("solo el administrador cambia la tasa", async () => {
+  it("en un abono la deuda baja el monto, y el cargo va aparte en el pago", async () => {
     const e = await escenario()
-    const error = await fallo(como(e.vendedor.authId, "select public.configurar_tasa_de_comision('tarjeta', 1)"))
 
-    expect(error.code).toBe("42501")
+    await ventaACredito(e)
+
+    const pago = await cobrar(e.vendedor.authId, e.clienteId, 100, [conCargo("tarjeta", 100)])
+    const { rows } = await db.query("select monto::float8 as monto, cargo_por_medio::float8 as cargo from pagos where id = $1", [pago.pago_id])
+    const { rows: abonos } = await db.query("select sum(monto)::float8 as suma from abonos where pago_id = $1", [pago.pago_id])
+
+    expect(rows[0]).toEqual({ monto: 100, cargo: 7 })
+    expect(abonos[0].suma).toBe(100)
+  })
+
+  it("un abono repartido entre ubicaciones suma exactamente el cargo del medio", async () => {
+    const e = await escenario()
+    const vendedor2 = await crearVendedor(db, { empresa: e.empresa, ubicacion: e.camion2, permisos: ["pos"] })
+
+    await db.query("update inventario_ubicacion set cantidad = 100 where ubicacion_id = $1", [e.camion2]).catch(() => {})
+    await db.query(
+      "insert into inventario_ubicacion (empresa_id, ubicacion_id, producto_id, cantidad) values ($1, $2, $3, 100) on conflict do nothing",
+      [e.empresa, e.camion2, e.cargador.id]
+    ).catch(() => {})
+
+    await ventaACredito(e, e.vendedor.authId, 1)
+    await ventaACredito(e, vendedor2.authId, 1)
+
+    const pago = await cobrar(e.admin.authId, e.clienteId, 200, [conCargo("enlace", 200)])
+    const { rows } = await db.query("select monto::float8 as monto, cargo::float8 as cargo from cobros_por_medio where pago_id = $1", [pago.pago_id])
+
+    expect(rows).toHaveLength(2)
+    expect(rows.reduce((s, r) => s + r.monto, 0)).toBe(200)
+    expect(Math.round(rows.reduce((s, r) => s + r.cargo, 0) * 100)).toBe(1400)
+  })
+
+  it("al anular con reembolso se guarda el cargo a devolver, y sale de los cobros", async () => {
+    const e = await escenario()
+    const venta = await vender(e, e.vendedor.authId, [conCargo("tarjeta", 115)])
+
+    await unaFila(
+      e.admin.authId,
+      "select public.anular_venta($1, 'Se equivocó de producto', $2, $3) as r",
+      [venta.venta_id, "reembolso_pendiente", "anular-cargo-1"]
+    )
+
+    const { rows } = await db.query("select total::float8 as total, cargo_a_devolver::float8 as cargo from anulaciones_venta where venta_id = $1", [venta.venta_id])
+    const r = await medios(e.admin.authId)
+    const d = await diario(e.admin.authId)
+
+    expect(rows[0]).toEqual({ total: 115, cargo: 8.05 })
+    expect(r.totales).toMatchObject({ total: 0, cargos: 0, cargos_a_devolver: 8.05 })
+    expect(d.indicadores.reembolsos_pendientes).toBe(123.05)
+    expect(d.indicadores.cargos_total).toBe(0)
+  })
+
+  it("los reportes cuentan el cargo aparte, y cobros_total sigue coincidiendo", async () => {
+    const e = await escenario()
+
+    await vender(e, e.vendedor.authId, [efectivo(15), conCargo("tarjeta", 100)])
+    await ventaACredito(e)
+    await cobrar(e.vendedor.authId, e.clienteId, 100, [conCargo("enlace", 100)])
+
+    const r = await medios(e.admin.authId)
+    const d = await diario(e.admin.authId)
+
+    expect(r.totales.total).toBe(d.indicadores.cobros_total)
+    expect(r.totales).toMatchObject({ total: 215, cargos: 14, total_cobrado: 229 })
+    expect(d.indicadores).toMatchObject({ cobros_total: 215, cargos_total: 14, total_cobrado: 229 })
+    expect(r.por_medio.map((m) => [m.medio, m.monto, m.cargo, m.total_cobrado])).toEqual([
+      ["efectivo", 15, 0, 15],
+      ["tarjeta", 100, 7, 107],
+      ["enlace", 100, 7, 107],
+    ])
+  })
+
+  it("la comisión interna ya no existe", async () => {
+    const { rows } = await db.query(`
+      select count(*)::int as n from pg_class c join pg_namespace n on n.oid = c.relnamespace
+       where n.nspname = 'public' and c.relname in ('comisiones_de_cobro', 'tasas_de_comision')`)
+    const { rows: funciones } = await db.query(`
+      select count(*)::int as n from pg_proc where proname in ('configurar_tasa_de_comision', 'anotar_comision_de_cobro', 'sembrar_tasas_de_comision')`)
+
+    expect(rows[0].n).toBe(0)
+    expect(funciones[0].n).toBe(0)
+  })
+})
+
+describe("el ISV de cada venta", () => {
+  const venderConIsv = (e, cobros, conIsv, { clave = null, forma = "contado", cliente = null, venc = null } = {}) =>
+    unaFila(
+      e.vendedor.authId,
+      `select public.registrar_venta_con_medios(
+         p_items => $1::jsonb, p_forma_pago => $2, p_cobros => $3::jsonb, p_cliente_id => $4,
+         p_fecha_vencimiento => $5, p_clave_idempotencia => $6, p_con_isv => $7) as r`,
+      [JSON.stringify([{ producto_id: e.cargador.id, cantidad: 1 }]), forma, JSON.stringify(cobros), cliente, venc, clave, conIsv]
+    )
+  const laVenta = async (id) =>
+    (await db.query("select subtotal::float8 as subtotal, isv::float8 as isv, tasa_isv::float8 as tasa, total::float8 as total, estado from ventas where id = $1", [id])).rows[0]
+
+  it("sin la casilla la venta queda con tasa 0, y los medios suman ese total", async () => {
+    const e = await escenario()
+    const venta = await venderConIsv(e, [efectivo(100)], false)
+
+    expect(venta).toMatchObject({ total: 100, isv: 0 })
+    expect(await laVenta(venta.venta_id)).toMatchObject({ subtotal: 100, isv: 0, tasa: 0, total: 100 })
+  })
+
+  it("con la casilla marcada todo sigue igual", async () => {
+    const e = await escenario()
+    const venta = await venderConIsv(e, [efectivo(115)], true)
+
+    expect(await laVenta(venta.venta_id)).toMatchObject({ isv: 15, tasa: 15, total: 115 })
+  })
+
+  it("sin ISV, si los medios suman el total con ISV se rechaza y no queda nada", async () => {
+    const e = await escenario()
+    const antes = await existencia(db, e.camion1, e.cargador.id)
+    const error = await fallo(venderConIsv(e, [efectivo(115)], false))
+
+    expect(error.code).toBe("LM002")
+    expect(await existencia(db, e.camion1, e.cargador.id)).toBe(antes)
+  })
+
+  it("el cargo se calcula sobre el importe sin ISV", async () => {
+    const e = await escenario()
+    const venta = await venderConIsv(e, [{ medio: "tarjeta", monto: 100, referencia: "", cargo: 7 }], false)
+
+    expect(await laVenta(venta.venta_id)).toMatchObject({ total: 100 })
+    expect((await db.query("select cargo_por_medio::float8 as c from ventas where id = $1", [venta.venta_id])).rows[0].c).toBe(7)
+  })
+
+  it("a crédito sin ISV la deuda es el total sin ISV", async () => {
+    const e = await escenario()
+    const venta = await venderConIsv(e, [], false, { forma: "credito", cliente: e.clienteId, venc: "2030-01-01" })
+
+    expect(await laVenta(venta.venta_id)).toMatchObject({ total: 100, estado: "pendiente" })
+
+    const error = await fallo(cobrar(e.vendedor.authId, e.clienteId, 115, [efectivo(115)]))
+
+    expect(error.message).toMatch(/deuda|supera/i)
+  })
+
+  it("un reintento con otra decisión de ISV se rechaza, y con la misma no duplica", async () => {
+    const e = await escenario()
+    const primera = await venderConIsv(e, [efectivo(100)], false, { clave: "isv-1" })
+    const segunda = await venderConIsv(e, [efectivo(100)], false, { clave: "isv-1" })
+
+    expect(segunda.repetida).toBe(true)
+    expect(segunda.venta_id).toBe(primera.venta_id)
+    expect((await fallo(venderConIsv(e, [efectivo(115)], true, { clave: "isv-1" }))).code).toBe("LM005")
+  })
+
+  it("una factura fiscal no se vende sin ISV, y no gasta su número", async () => {
+    const e = await escenario()
+
+    await db.query(
+      `update empresas set cai = 'A1B2C3', rango_desde = 1, rango_hasta = 1000, fecha_limite_emision = '2030-12-31' where id = $1`,
+      [e.empresa]
+    )
+    await db.query("update ubicaciones set vende_sin_conexion = false, emite_fiscal = true where id = $1", [e.camion1])
+
+    const antes = (await db.query("select proximo_correlativo_factura as n from empresas where id = $1", [e.empresa])).rows[0].n
+    const error = await fallo(venderConIsv(e, [efectivo(100)], false))
+    const despues = (await db.query("select proximo_correlativo_factura as n from empresas where id = $1", [e.empresa])).rows[0].n
+
+    expect(error.code).toBe("LV009")
+    expect(despues).toBe(antes)
+  })
+
+  it("sin conexión con tasa 0 entra sin ISV y sin conciliación, y un reintento no duplica", async () => {
+    const e = await escenario()
+    const venta = { ...ventaSinConexion(e), tasa_isv: 0, total_cobrado: 200 }
+    const cobros = [{ medio: "tarjeta", monto: 200, referencia: "", cargo: 14 }]
+    const primera = await sincronizar(e.vendedor.authId, venta, cobros)
+    const segunda = await sincronizar(e.vendedor.authId, venta, cobros)
+
+    expect(primera).toMatchObject({ estado: "registrada", total: 200 })
+    expect(segunda.estado).toBe("ya_registrada")
+    expect(segunda.venta_id).toBe(primera.venta_id)
+    expect(await laVenta(primera.venta_id)).toMatchObject({ subtotal: 200, isv: 0, tasa: 0, total: 200 })
+    expect((await db.query("select cargo_por_medio::float8 as c from ventas where id = $1", [primera.venta_id])).rows[0].c).toBe(14)
+  })
+
+  it("una venta sin ISV que va a conciliación se aplica sin ISV y con su cargo", async () => {
+    const e = await escenario()
+    const venta = { ...ventaSinConexion(e), tasa_isv: 0, total_cobrado: 200 }
+    const r = await rescatar(e.admin.authId, venta, [{ medio: "enlace", monto: 200, referencia: "", cargo: 14 }])
+
+    expect(r.estado).toBe("en_conciliacion")
+
+    const aplicada = await conciliar(db, e.admin.authId, r.conciliacion_id, "aplicar")
+
+    expect(await laVenta(aplicada.venta_id)).toMatchObject({ isv: 0, total: 200 })
+    expect((await db.query("select cargo_por_medio::float8 as c from ventas where id = $1", [aplicada.venta_id])).rows[0].c).toBe(14)
+  })
+
+  it("una tasa distinta de 0 y de la empresa sigue yendo a conciliación", async () => {
+    const e = await escenario()
+    const venta = { ...ventaSinConexion(e), tasa_isv: 10, total_cobrado: 220 }
+    const r = await sincronizar(e.vendedor.authId, venta, [efectivo(220)])
+
+    expect(r).toMatchObject({ estado: "en_conciliacion", motivo: "precio-distinto" })
+  })
+
+  it("una venta pendiente de una versión anterior, con ISV, sigue entrando igual", async () => {
+    const e = await escenario()
+    const r = await sincronizar(e.vendedor.authId, ventaSinConexion(e), [efectivo(230)])
+
+    expect(r.estado).toBe("registrada")
+    expect(await laVenta(r.venta_id)).toMatchObject({ tasa: 15, total: 230 })
+  })
+
+  it("quitar_isv_de_venta y cargo_de_cobro no son llamables desde la aplicación", async () => {
+    const { rows } = await db.query(`
+      select p.proname from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+       where n.nspname = 'public' and p.proname in ('quitar_isv_de_venta', 'cargo_de_cobro', 'anotar_cargo_a_devolver')
+         and has_function_privilege('authenticated', p.oid, 'execute')`)
+
+    expect(rows).toEqual([])
   })
 })
 
@@ -514,7 +718,6 @@ describe("ventas sin conexión", () => {
     const { rows } = await db.query("select fecha from cobros_por_medio where venta_id = $1", [r.venta_id])
 
     expect(rows.map((f) => f.fecha.toISOString())).toEqual([venta.registrada_en, venta.registrada_en])
-    expect(await comisionesDe(r.venta_id)).toEqual([{ medio: "tarjeta", base: 200, tasa: 7, monto: 14 }])
   })
 
   it("la venta pendiente de un teléfono con la versión anterior sigue entrando, sin medios", async () => {
@@ -598,7 +801,6 @@ describe("ventas sin conexión", () => {
     const { rows } = await db.query("select fecha from cobros_por_medio where venta_id = $1", [aplicada.venta_id])
 
     expect(rows.map((f) => f.fecha.toISOString())).toEqual([venta.registrada_en, venta.registrada_en])
-    expect(await comisionesDe(aplicada.venta_id)).toEqual([{ medio: "tarjeta", base: 100, tasa: 7, monto: 7 }])
 
     // Después de aplicada, el reintento del teléfono no duplica nada.
     const otraVez = await sincronizar(e.vendedor.authId, venta, cobros)
@@ -684,7 +886,7 @@ describe("anulaciones", () => {
   const anular = (authId, ventaId, tratamiento = "reembolso_pendiente") =>
     como(authId, "select public.anular_venta($1, 'Error al registrar la venta', $2)", [ventaId, tratamiento])
 
-  it("una venta anulada sale de los cobros, conserva sus registros y su comisión se ve aparte", async () => {
+  it("una venta anulada sale de los cobros y conserva sus registros", async () => {
     const e = await escenario()
 
     await vender(e, e.vendedor.authId, [efectivo(115)])
@@ -694,19 +896,18 @@ describe("anulaciones", () => {
     await anular(e.admin.authId, venta.venta_id)
 
     expect(await cobrosDeVenta(venta.venta_id)).toHaveLength(1)
-    expect(await comisionesDe(venta.venta_id)).toEqual([{ medio: "tarjeta", base: 115, tasa: 7, monto: 8.05 }])
 
     const r = await medios(e.admin.authId)
 
-    expect(r.totales).toMatchObject({ total: 115, registrado: 115, comision: 0, neto: 115, comision_de_anuladas: 8.05 })
+    expect(r.totales).toMatchObject({ total: 115, registrado: 115, cargos: 0, total_cobrado: 115, cargos_a_devolver: 0 })
     expect(r.por_medio.map((m) => m.medio)).toEqual(["efectivo"])
 
     // El detalle sigue diciendo con qué se había cobrado.
-    expect(r.por_venta[venta.venta_id]).toEqual([{ medio: "tarjeta", monto: 115, referencia: "AUT-1" }])
+    expect(r.por_venta[venta.venta_id]).toEqual([{ medio: "tarjeta", monto: 115, cargo: 0, referencia: "AUT-1" }])
 
     const { anulaciones } = await diario(e.admin.authId)
 
-    expect(r.por_anulacion[anulaciones[0].id]).toEqual([{ medio: "tarjeta", monto: 115, referencia: "AUT-1" }])
+    expect(r.por_anulacion[anulaciones[0].id]).toEqual([{ medio: "tarjeta", monto: 115, cargo: 0, referencia: "AUT-1" }])
   })
 
   it("los medios no impiden anular, y devolver la mercadería sigue funcionando", async () => {
@@ -738,11 +939,11 @@ describe("el reporte", () => {
     const d = await diario(e.admin.authId)
 
     expect(r.totales.total).toBe(d.indicadores.cobros_total)
-    expect(r.totales).toMatchObject({ total: 360, registrado: 215, sin_registrar: 145, comision: 14, neto: 346 })
-    expect(r.por_medio.map((m) => [m.medio, m.monto, m.comision, m.neto])).toEqual([
+    expect(r.totales).toMatchObject({ total: 360, registrado: 215, sin_registrar: 145, cargos: 0, total_cobrado: 360 })
+    expect(r.por_medio.map((m) => [m.medio, m.monto, m.cargo, m.total_cobrado])).toEqual([
       ["efectivo", 15, 0, 15],
-      ["tarjeta", 100, 7, 93],
-      ["enlace", 100, 7, 93],
+      ["tarjeta", 100, 0, 100],
+      ["enlace", 100, 0, 100],
       ["sin_registrar", 145, 0, 145],
     ])
   })
@@ -781,7 +982,7 @@ describe("el reporte", () => {
     const r = await medios(e.admin.authId, "2020-01-01")
 
     expect(r).toEqual({
-      totales: { total: 0, registrado: 0, sin_registrar: 0, comision: 0, neto: 0, comision_de_anuladas: 0 },
+      totales: { total: 0, registrado: 0, sin_registrar: 0, cargos: 0, total_cobrado: 0, cargos_a_devolver: 0 },
       por_medio: [], por_ubicacion: [], por_venta: {}, por_abono: {}, por_anulacion: {},
     })
   })
@@ -796,8 +997,8 @@ describe("el reporte", () => {
     const { abonos } = await diario(e.admin.authId)
 
     expect(r.por_abono[abonos[0].id]).toEqual([
-      { medio: "efectivo", monto: 40, referencia: "" },
-      { medio: "tarjeta", monto: 60, referencia: "AUT-1" },
+      { medio: "efectivo", monto: 40, cargo: 0, referencia: "" },
+      { medio: "tarjeta", monto: 60, cargo: 0, referencia: "AUT-1" },
     ])
   })
 })
@@ -813,9 +1014,9 @@ describe("seguridad", () => {
     return { e, venta, contador }
   }
 
-  const TABLAS = ["cobros_por_medio", "comisiones_de_cobro", "tasas_de_comision", "cobros_por_conciliar"]
+  const TABLAS = ["cobros_por_medio", "cobros_por_conciliar"]
 
-  it("el vendedor y el contador no leen cobros, comisiones ni tasas", async () => {
+  it("el vendedor y el contador no leen los cobros", async () => {
     const { e, contador } = await conUnaVentaConTarjeta()
 
     for (const authId of [e.vendedor.authId, contador.authId]) {
@@ -831,8 +1032,7 @@ describe("seguridad", () => {
     const { e } = await conUnaVentaConTarjeta()
     const otra = await crearEmpresa(db, "Otra empresa")
 
-    expect((await como(e.admin.authId, "select * from public.comisiones_de_cobro")).rows).toHaveLength(1)
-    expect((await como(otra.authId, "select * from public.comisiones_de_cobro")).rows).toEqual([])
+    expect((await como(e.admin.authId, "select * from public.cobros_por_medio")).rows).toHaveLength(1)
     expect((await como(otra.authId, "select * from public.cobros_por_medio")).rows).toEqual([])
     expect((await medios(otra.authId)).totales.total).toBe(0)
   })
@@ -884,8 +1084,6 @@ describe("seguridad", () => {
     expect((await fallo(db.query("update cobros_por_medio set monto = 1 where venta_id = $1", [venta.venta_id]))).code).toBe("42501")
     expect((await fallo(db.query("delete from cobros_por_medio where venta_id = $1", [venta.venta_id]))).code).toBe("42501")
     expect((await fallo(db.query("truncate cobros_por_medio cascade"))).code).toBe("42501")
-    expect((await fallo(db.query("update comisiones_de_cobro set monto = 0"))).code).toBe("42501")
-    expect((await fallo(db.query("delete from tasas_de_comision"))).code).toBe("42501")
   })
 
   it("las piezas internas no son llamables desde la aplicación", async () => {
@@ -894,7 +1092,7 @@ describe("seguridad", () => {
         from pg_proc p join pg_namespace n on n.oid = p.pronamespace
        where n.nspname = 'public'
          and p.proname in ('guardar_cobros_de_venta', 'guardar_cobros_de_pago', 'guardar_cobros_sin_conexion',
-                           'cobros_guardados', 'anotar_comision_de_cobro', 'aplicar_cobros_de_conciliacion')
+                           'cobros_guardados', 'aplicar_cobros_de_conciliacion')
          and has_function_privilege('authenticated', p.oid, 'execute')`)
 
     expect(rows).toEqual([])
@@ -906,7 +1104,7 @@ describe("seguridad", () => {
         from pg_proc p join pg_namespace n on n.oid = p.pronamespace
        where n.nspname = 'public'
          and p.proname in ('registrar_venta_con_medios', 'registrar_pago_con_medios', 'sincronizar_venta_con_medios',
-                           'rescatar_venta_con_medios', 'configurar_tasa_de_comision', 'reporte_medios_de_pago')
+                           'rescatar_venta_con_medios', 'reporte_medios_de_pago')
          and has_function_privilege('anon', p.oid, 'execute')`)
 
     expect(rows).toEqual([])
@@ -934,12 +1132,8 @@ describe("la migración", () => {
       "select public.registrar_venta_ubicacion(p_items => $1::jsonb, p_forma_pago => 'contado') as r",
       [JSON.stringify([{ producto_id: e.cargador.id, cantidad: 1 }])]
     )
-    const tasas = async () => Number((await db.query("select count(*) as n from tasas_de_comision")).rows[0].n)
-    const antes = await tasas()
+    await db.query(readFileSync(new URL("../supabase/migrations/0041_cargo_e_isv_por_venta.sql", import.meta.url), "utf8"))
 
-    await db.query(sql)
-
-    expect(await tasas()).toBe(antes)
     expect(await cobrosDeVenta(vieja.venta_id)).toEqual([])
   })
 })

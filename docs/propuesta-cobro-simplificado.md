@@ -74,20 +74,8 @@ Requiere su propia fase y migración.
 
 ## 4. El 7 % adicional al comprador
 
-**No está implementado, y no debe implementarse en tarjeta.**
-
-### Son dos cosas distintas
-
-| | Comisión interna (existe) | Cargo al comprador (solicitado) |
-|---|---|---|
-| Quién paga | El negocio, al proveedor | El comprador |
-| Dónde vive | `tasas_de_comision`, `comisiones_de_cobro` | No existe |
-| Cambia el total o la factura | No | Sí |
-| Lo ve el vendedor | No | Sí |
-
-Si algún cargo llegara a ser válido, no debe reutilizar esas tablas ni esa tasa: sería un
-concepto propio, visible en el documento y dentro del total. La comisión interna no
-cambia en ningún caso.
+Implementado por decisión del negocio en la 0041, que además retiró la comisión interna.
+Ver `medios-de-pago.md`. El negocio aceptó el riesgo legal descrito aquí, sin dictamen.
 
 ### Lo que dicen las normas revisadas
 
@@ -107,51 +95,8 @@ consolidado de la ley con sus reformas (decretos 33-2013, 57-2017, 141-2021 y 34
 
 ### Qué significa por caso
 
-| Caso | Lectura | Decisión |
-|---|---|---|
-| Tarjeta en terminal | Prohibido expresamente | No implementar |
-| Enlace pagado con tarjeta | El numeral 3 también aplica al comercio electrónico: muy probablemente prohibido | No implementar sin dictamen escrito |
-| Enlace pagado sin tarjeta (billetera, transferencia) | No se encontró norma ni contrato que lo resuelva | Revisar contrato del proveedor y dictamen |
-| Cargo oculto, o cobrar distinto de lo facturado | No se acepta, sea cual sea el medio | Nunca |
-| Descuento solo por pagar en efectivo | Riesgo por la no discriminación del art. 44 | Consultar antes de usarlo |
-| Mínimo de compra con tarjeta | Prohibido, numeral 5 | No implementar |
-
+| Caso | Lectura 
 No se pudo verificar la Ley de Protección al Consumidor (Decreto 24-2008) ni el
 tratamiento de un cargo así en el ISV: las búsquedas no dieron el texto.
 
-### Alternativas para absorber el costo
 
-Todas requieren revisión legal y comercial:
-
-1. Negociar la tasa con el proveedor. Un 7 % es alto.
-2. Considerar el costo al fijar los precios, iguales para todos los medios.
-3. Promover transferencia o efectivo sin penalizar la tarjeta.
-
-### Por qué «7 %» tampoco recupera el 7 %
-
-Si el proveedor cobra sobre lo que paga el comprador, un 7 % encima no cubre la comisión.
-Con un total de L 638.25:
-
-| | Comprador paga | Comisión del 7 % | Neto | Diferencia |
-|---|---|---|---|---|
-| Sin cargo | 638.25 | 44.68 | 593.57 | −44.68 |
-| Más 7 % | 682.93 | 47.81 | 635.12 | −3.13 |
-| Dividido entre 0.93 (equivale a 7.53 %) | 686.29 | 48.04 | 638.25 | 0.00 |
-
-### Preguntas pendientes
-
-**Para el abogado:**
-
-1. ¿Sigue vigente el art. 44 con ese texto y ese número tras las reformas?
-2. ¿Alcanza a un enlace pagado con tarjeta? ¿Y a uno pagado sin tarjeta?
-3. ¿Se puede ofrecer un descuento por efectivo?
-
-**Para el contador:**
-
-4. Si un cargo fuera válido, ¿integra la base del ISV? ¿Cómo va en factura y en documento
-   interno?
-
-**Para el proveedor de enlace y el de terminal:**
-
-5. ¿El contrato permite cobrarle un cargo al comprador?
-6. ¿Sobre qué base se calcula la comisión?

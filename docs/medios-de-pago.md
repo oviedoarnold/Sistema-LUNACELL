@@ -1,4 +1,4 @@
-# Medios de pago y comisiones
+# Medios de pago, cargo e ISV
 
 Registra con qué se cobró cada venta de contado y cada abono: efectivo,
 transferencia, tarjeta o enlace de pago, o dos de ellos con su importe.
@@ -33,18 +33,26 @@ venta a crédito no lleva medios: se cobra con sus abonos.
   ya existe; con otros medios se rechaza (`LM005`, u `OF003` sin conexión).
 - **Solo se agrega.** Ni el dueño de la base cambia, borra o vacía un cobro.
 
-## Comisiones
+## Cargo del 7 %
 
-La comisión del proveedor es una estimación interna, separada del cobro:
+Tarjeta y enlace suman un 7 % a lo que paga el comprador, sobre el importe de ese
+medio, y lo calcula el sistema: L 1,000 con tarjeta son L 1,070, y L 600 en efectivo
+más L 400 con tarjeta son L 1,028.
 
-- Se calcula en la base con la tasa vigente en la fecha del cobro: 7 % inicial en
-  tarjeta y enlace de pago. El administrador la cambia en Configuración, y vale de
-  ahora en adelante.
-- **No se le cobra al comprador:** no cambia el total ni aparece en la factura.
-- Solo la lee el administrador, igual que los cobros, que también van en una tabla
-  cerrada para vendedor y contador.
-- Una venta anulada conserva su comisión, porque el proveedor puede no devolverla.
-  Se ve aparte el día de la anulación.
+- `ventas.total` sigue siendo productos más ISV. El cargo va en `cobros_por_medio.cargo`,
+  y su suma en `ventas.cargo_por_medio` o `pagos.cargo_por_medio`.
+- Lo cobrado es el total más el cargo, y el documento muestra las dos cifras.
+- En un abono de L 400 con tarjeta el comprador paga L 428, y la deuda baja L 400.
+- Al anular con reembolso pendiente, `anulaciones_venta.cargo_a_devolver` guarda lo que
+  hay que devolver además del total.
+- La base comprueba el cargo. Una versión anterior no lo manda y queda con cargo 0, así
+  que esa vía sigue abierta hasta que no queden versiones anteriores.
+
+## ISV por venta
+
+La casilla de ISV del POS nace marcada solo en una ubicación de tipo `tienda`, y el
+vendedor la cambia. Sin ella, la venta queda con tasa 0. Una factura fiscal lleva siempre
+ISV (`LV009`). Un reintento con otra decisión se rechaza (`LM005`, u `OF003` sin conexión).
 
 ## Ventas sin conexión
 
@@ -75,13 +83,11 @@ un medio a una ubicación es una convención, no un dato del cobro.
 ## Limitaciones
 
 - **No se confirma el pago con el proveedor o el banco:** el medio y la referencia
-  son lo que declara quien cobra. La comisión es una estimación, sin conciliar
-  contra la liquidación real.
+  son lo que declara quien cobra.
 - **La vía anterior sigue abierta** para no romper teléfonos y pestañas con la
   versión previa: `registrar_venta_ubicacion` y `registrar_pago_cliente` aún
   registran sin medios, y esas operaciones quedan «Sin registrar».
-- **El medio no se imprime** en la factura ni se muestra en el historial, y un
-  administrador no lo ve al revisar una conciliación pendiente.
+- **Riesgo legal aceptado por el negocio:** ver `propuesta-cobro-simplificado.md`.
 
 ## Despliegue
 
@@ -98,35 +104,4 @@ Para revertir solo la 0040 no se quita lo ya guardado: se vuelve a poner la comp
 en `medios_de_cobro_invalidos()` y se recrea la restricción con `not valid`, para que
 no falle por los cobros sin referencia.
 
-Reversión, después de revertir el frontend. Borra los cobros y comisiones ya
-registrados, que no se pueden reconstruir; las ventas y los abonos no se tocan:
-
-```sql
-begin;
-drop trigger if exists aplicar_cobros_de_conciliacion on public.ventas_por_conciliar;
-drop trigger if exists sembrar_tasas_de_comision on public.empresas;
-drop function if exists public.reporte_medios_de_pago(date, uuid);
-drop function if exists public.rescatar_venta_con_medios(text, uuid, uuid, text, text, timestamptz, timestamptz, numeric, jsonb, numeric, text, jsonb, uuid, text, text, date, text, text);
-drop function if exists public.sincronizar_venta_con_medios(text, uuid, uuid, text, text, timestamptz, timestamptz, numeric, jsonb, numeric, text, jsonb, uuid, text, text, date, text);
-drop function if exists public.registrar_pago_con_medios(uuid, numeric, jsonb, text, text);
-drop function if exists public.registrar_venta_con_medios(jsonb, text, jsonb, uuid, text, text, date, text, text);
-drop function if exists public.configurar_tasa_de_comision(text, numeric);
-drop function if exists public.aplicar_cobros_de_conciliacion();
-drop function if exists public.guardar_cobros_sin_conexion(uuid, jsonb, jsonb);
-drop function if exists public.medios_sin_conexion_invalidos(text, jsonb, numeric);
-drop function if exists public.guardar_cobros_de_pago(uuid, jsonb);
-drop function if exists public.guardar_cobros_de_venta(uuid, jsonb);
-drop function if exists public.cobros_guardados(uuid, uuid);
-drop function if exists public.cobros_normalizados(jsonb);
-drop function if exists public.suma_de_cobros(jsonb);
-drop function if exists public.medios_de_cobro_invalidos(jsonb);
-drop function if exists public.sembrar_tasas_de_comision();
-drop table if exists public.comisiones_de_cobro;
-drop table if exists public.cobros_por_conciliar;
-drop table if exists public.cobros_por_medio;
-drop table if exists public.tasas_de_comision;
-drop function if exists public.anotar_comision_de_cobro();
-drop function if exists public.registro_de_cobro_inmutable();
-delete from supabase_migrations.schema_migrations where name = '0039_medios_de_pago';
-commit;
-```
+**Primero la 0041, después el frontend del cargo y el ISV.** Las versiones anteriores siguen funcionando con ella.

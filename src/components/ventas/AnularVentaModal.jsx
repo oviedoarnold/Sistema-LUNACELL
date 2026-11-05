@@ -78,6 +78,12 @@ function AnularVentaModal({ venta, ubicacion, moneda = "L", razon = null, onCerr
         <dd>{credito ? "Crédito" : "Contado"}</dd>
         <dt>Total</dt>
         <dd>{formatMoney(venta.total, moneda)}</dd>
+        {Number(venta.cargo) > 0 && (
+          <>
+            <dt>Cargo por medio de pago</dt>
+            <dd>{formatMoney(venta.cargo, moneda)} (se devuelve con el reembolso)</dd>
+          </>
+        )}
       </dl>
 
       <ul className="anular-productos" aria-label="Productos de la venta">

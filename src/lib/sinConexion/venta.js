@@ -45,6 +45,7 @@ export function construirVentaLocal({
   ahora = new Date(),
   claveEnLinea = null,
   cobros = [],
+  conIsv = true,
 }) {
   if (!copia) throw new ErrorDeVentaLocal("No hay copia local para vender sin conexión.")
 
@@ -92,7 +93,8 @@ export function construirVentaLocal({
     }
   })
 
-  const tasaIsv = Number(copia.empresa?.tasaIsv ?? 15)
+  // Sin la casilla de ISV, la venta se guarda con tasa 0 y así llega al servidor.
+  const tasaIsv = conIsv === false ? 0 : Number(copia.empresa?.tasaIsv ?? 15)
   const { total } = totalesDe(renglones, tasaIsv)
 
   if (formaPago === "credito" && cobros.length > 0) {

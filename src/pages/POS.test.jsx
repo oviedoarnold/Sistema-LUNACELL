@@ -49,7 +49,8 @@ const existenciasEnBodega = (cambios = {}) =>
     quantity: cambios[p.id] ?? p.stock,
   }))
 
-const BODEGA = { id: "bodega", name: "Lunacell Bodega", type: "bodega" }
+// Tipo tienda: es la que nace con la casilla de ISV marcada.
+const BODEGA = { id: "bodega", name: "Lunacell Bodega", type: "tienda" }
 const CAMION_01 = { id: "camion-01", name: "Camión 01", type: "camion" }
 
 function renderPOS({
@@ -572,9 +573,9 @@ describe("POS: venta registrada por el servidor", () => {
   it.each([
     ["Efectivo", "efectivo", ""],
     ["Transferencia", "transferencia", "TRF-1"],
-    ["Tarjeta", "tarjeta", "AUT-1"],
-    ["Enlace de pago", "enlace", "LNK-1"],
-  ])("pago único con %s: manda el total, sin pedir importe", async (etiqueta, medio, ref) => {
+    ["Tarjeta", "tarjeta", "AUT-1", 14.49],
+    ["Enlace de pago", "enlace", "LNK-1", 14.49],
+  ])("pago único con %s: manda el total, sin pedir importe", async (etiqueta, medio, ref, cargo) => {
     const { falso } = await renderPOS()
 
     agregar("Martillo de uña")
@@ -593,7 +594,7 @@ describe("POS: venta registrada por el servidor", () => {
     clicFacturar()
 
     await waitFor(() => expect(falso.datos.ventas).toHaveLength(1))
-    expect(rpcDeVenta(falso)[1].p_cobros).toEqual([{ medio, monto: 207, referencia: ref }])
+    expect(rpcDeVenta(falso)[1].p_cobros).toEqual([{ medio, monto: 207, referencia: ref, ...(cargo ? { cargo } : {}) }])
   })
 
   it("sin referencia la venta sale igual, sin inventar una", async () => {
@@ -609,7 +610,7 @@ describe("POS: venta registrada por el servidor", () => {
     clicFacturar()
 
     await waitFor(() => expect(falso.datos.ventas).toHaveLength(1))
-    expect(rpcDeVenta(falso)[1].p_cobros).toEqual([{ medio: "tarjeta", monto: 207, referencia: "" }])
+    expect(rpcDeVenta(falso)[1].p_cobros).toEqual([{ medio: "tarjeta", monto: 207, referencia: "", cargo: 14.49 }])
   })
 
   it("en pago mixto tampoco pide referencia", async () => {
@@ -625,7 +626,7 @@ describe("POS: venta registrada por el servidor", () => {
     await waitFor(() => expect(falso.datos.ventas).toHaveLength(1))
     expect(rpcDeVenta(falso)[1].p_cobros).toEqual([
       { medio: "transferencia", monto: 100, referencia: "" },
-      { medio: "enlace", monto: 107, referencia: "" },
+      { medio: "enlace", monto: 107, referencia: "", cargo: 7.49 },
     ])
   })
 
@@ -662,6 +663,7 @@ describe("POS: venta registrada por el servidor", () => {
   ])("pago mixto con %s y %s: manda los dos, con decimales exactos", async (etiquetaA, medioA, etiquetaB, medioB) => {
     const { falso } = await renderPOS()
     const refDe = (medio) => (medio === "efectivo" ? "" : `REF-${medio}`)
+    const conCargo = (medio, cargo) => (medio === "tarjeta" || medio === "enlace" ? { cargo } : {})
 
     agregar("Martillo de uña")
     mixto()
@@ -677,8 +679,8 @@ describe("POS: venta registrada por el servidor", () => {
 
     await waitFor(() => expect(falso.datos.ventas).toHaveLength(1))
     expect(rpcDeVenta(falso)[1].p_cobros).toEqual([
-      { medio: medioA, monto: 100.1, referencia: refDe(medioA) },
-      { medio: medioB, monto: 106.9, referencia: refDe(medioB) },
+      { medio: medioA, monto: 100.1, referencia: refDe(medioA), ...conCargo(medioA, 7.01) },
+      { medio: medioB, monto: 106.9, referencia: refDe(medioB), ...conCargo(medioB, 7.48) },
     ])
   })
 
@@ -908,6 +910,103 @@ describe("POS: venta registrada por el servidor", () => {
 
     expect(screen.getByLabelText("Importe de Transferencia")).toHaveValue("107.00")
     expect(botonFacturar()).toBeEnabled()
+  })
+
+  it("el total destacado sube con el cargo, y efectivo no lo lleva", async () => {
+    await renderPOS()
+
+    agregar("Martillo de uña")
+    unico("Efectivo")
+
+    expect(totales().querySelector(".grand")).toHaveTextContent("L 207.00")
+    expect(screen.queryByText(/cargo por medio de pago/i)).not.toBeInTheDocument()
+
+    unico("Tarjeta")
+
+    expect(screen.getByText(/cargo por medio de pago \(7%\)/i).nextSibling).toHaveTextContent("L 14.49")
+    expect(totales().querySelector(".grand")).toHaveTextContent("L 221.49")
+    expect(screen.getAllByText("Total")).toHaveLength(1)
+
+    unico("Transferencia")
+
+    expect(totales().querySelector(".grand")).toHaveTextContent("L 207.00")
+  })
+
+  it("en pago mixto el cargo solo va sobre la parte de la tarjeta", async () => {
+    const { falso } = await renderPOS()
+
+    agregar("Martillo de uña")
+    mixto()
+    marcar("Efectivo")
+    marcar("Tarjeta")
+    importe("Efectivo", "107")
+
+    expect(screen.getByText(/cargo por medio de pago/i).nextSibling).toHaveTextContent("L 7.00")
+    expect(totales().querySelector(".grand")).toHaveTextContent("L 214.00")
+
+    clicFacturar()
+
+    await waitFor(() => expect(falso.datos.ventas).toHaveLength(1))
+    expect(rpcDeVenta(falso)[1].p_cobros).toEqual([
+      { medio: "efectivo", monto: 107, referencia: "" },
+      { medio: "tarjeta", monto: 100, referencia: "", cargo: 7 },
+    ])
+  })
+
+  it("la casilla de ISV cambia el total enseguida, y la venta sale sin ISV", async () => {
+    const { falso } = await renderPOS()
+    const casilla = () => screen.getByRole("checkbox", { name: /isv/i })
+
+    agregar("Martillo de uña")
+    expect(casilla()).toBeChecked()
+    expect(totales().querySelector(".grand")).toHaveTextContent("L 207.00")
+
+    fireEvent.click(casilla())
+
+    expect(totales().querySelector(".grand")).toHaveTextContent("L 180.00")
+
+    unico("Tarjeta")
+
+    expect(totales().querySelector(".grand")).toHaveTextContent("L 192.60")
+
+    clicFacturar()
+
+    await waitFor(() => expect(falso.datos.ventas).toHaveLength(1))
+    expect(rpcDeVenta(falso)[1]).toMatchObject({
+      p_con_isv: false,
+      p_cobros: [{ medio: "tarjeta", monto: 180, referencia: "", cargo: 12.6 }],
+    })
+    expect(falso.datos.ventas[0]).toMatchObject({ isv: 0, tasa_isv: 0, total: 180, cargo_por_medio: 12.6 })
+  })
+
+  it.each([
+    ["una bodega", "bodega"],
+    ["un camión", "camion"],
+  ])("en %s la casilla de ISV nace desmarcada, y el vendedor puede marcarla", async (_, tipo) => {
+    await renderPOS({ ubicaciones: [{ ...BODEGA, type: tipo }] })
+
+    agregar("Martillo de uña")
+
+    const casilla = await screen.findByRole("checkbox", { name: /isv/i })
+
+    await waitFor(() => expect(casilla).not.toBeChecked())
+    expect(totales().querySelector(".grand")).toHaveTextContent("L 180.00")
+
+    fireEvent.click(casilla)
+
+    expect(casilla).toBeChecked()
+    expect(totales().querySelector(".grand")).toHaveTextContent("L 207.00")
+  })
+
+  it("una venta a crédito sin ISV también pasa por la función que lo retira", async () => {
+    const { falso } = await renderPOS()
+
+    agregar("Martillo de uña")
+    fireEvent.click(screen.getByRole("checkbox", { name: /isv/i }))
+    fireEvent.click(screen.getByRole("button", { name: /crédito/i }))
+
+    expect(screen.getByRole("checkbox", { name: /isv/i })).not.toBeChecked()
+    expect(rpcDeVenta(falso)).toBeUndefined()
   })
 
   it("el panel muestra un solo total: el cuadre no lo repite", async () => {

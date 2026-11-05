@@ -81,14 +81,14 @@ export const REPORTE = {
 }
 
 REPORTE.medios = {
-  totales: { total: 165, registrado: 115, sin_registrar: 50, comision: 7, neto: 158, comision_de_anuladas: 5.6 },
+  totales: { total: 165, registrado: 115, sin_registrar: 50, cargos: 7, total_cobrado: 172, cargos_a_devolver: 0 },
   por_medio: [
-    { medio: "efectivo", operaciones: 1, monto: 15, comision: 0, neto: 15 },
-    { medio: "tarjeta", operaciones: 1, monto: 100, comision: 7, neto: 93 },
-    { medio: "sin_registrar", operaciones: 1, monto: 50, comision: 0, neto: 50 },
+    { medio: "efectivo", operaciones: 1, monto: 15, cargo: 0, total_cobrado: 15 },
+    { medio: "tarjeta", operaciones: 1, monto: 100, cargo: 7, total_cobrado: 107 },
+    { medio: "sin_registrar", operaciones: 1, monto: 50, cargo: 0, total_cobrado: 50 },
   ],
   por_ubicacion: [
-    { ubicacion_id: "camion-1", ubicacion: "Camión 01", efectivo: 15, transferencia: 0, tarjeta: 100, enlace: 0, sin_registrar: 50, total: 165, comision: 7 },
+    { ubicacion_id: "camion-1", ubicacion: "Camión 01", efectivo: 15, transferencia: 0, tarjeta: 100, enlace: 0, sin_registrar: 50, total: 165, cargo: 7 },
   ],
   por_venta: {
     "v-1": [{ medio: "efectivo", monto: 15, referencia: "" }, { medio: "tarjeta", monto: 100, referencia: "AUT-9" }],
@@ -101,7 +101,7 @@ REPORTE.medios = {
 export const REPORTE_VACIO = {
   ...REPORTE,
   medios: {
-    totales: { total: 0, registrado: 0, sin_registrar: 0, comision: 0, neto: 0, comision_de_anuladas: 0 },
+    totales: { total: 0, registrado: 0, sin_registrar: 0, cargos: 0, total_cobrado: 0, cargos_a_devolver: 0 },
     por_medio: [], por_ubicacion: [], por_venta: {}, por_abono: {}, por_anulacion: {},
   },
   indicadores: Object.fromEntries(Object.keys(REPORTE.indicadores).map((k) => [k, 0])),
