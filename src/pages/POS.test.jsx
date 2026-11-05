@@ -582,7 +582,8 @@ describe("POS: venta registrada por el servidor", () => {
     unico(etiqueta)
 
     expect(screen.queryByLabelText(`Importe de ${etiqueta}`)).not.toBeInTheDocument()
-    expect(screen.getByText("Importe asignado").nextSibling).toHaveTextContent("207.00")
+    expect(totales().querySelector(".grand")).toHaveTextContent(`L ${(207 + (cargo || 0)).toFixed(2)}`)
+    expect(screen.queryByText(/importe asignado|pendiente/i)).not.toBeInTheDocument()
 
     if (ref) {
       expect(botonFacturar()).toBeEnabled()
@@ -704,7 +705,7 @@ describe("POS: venta registrada por el servidor", () => {
     expect(screen.getByRole("checkbox", { name: "Transferencia" })).toBeEnabled()
   })
 
-  it("un pago mixto no se confirma con un solo medio, aunque ese medio lleve el total", async () => {
+  it("un pago mixto no se confirma con un solo medio, y no pide importe todavía", async () => {
     await renderPOS()
 
     agregar("Martillo de uña")
@@ -712,12 +713,47 @@ describe("POS: venta registrada por el servidor", () => {
     marcar("Efectivo")
 
     expect(screen.queryByLabelText(/^Referencia de Efectivo/)).not.toBeInTheDocument()
-    expect(screen.getByLabelText("Importe de Efectivo")).toHaveValue("")
-
-    importe("Efectivo", "207")
-
+    expect(screen.queryByLabelText("Importe de Efectivo")).not.toBeInTheDocument()
     expect(screen.getByText("Elige 2 medios de pago.")).toBeInTheDocument()
     expect(botonFacturar()).toBeDisabled()
+  })
+
+  it.each([["Tarjeta"], ["Enlace de pago"]])("en pago mixto, elegir %s calcula el 7 %% sin escribir nada, igual que en pago único", async (medio) => {
+    await renderPOS()
+
+    agregar("Martillo de uña")
+    mixto()
+    marcar(medio)
+
+    expect(screen.queryByLabelText(`Importe de ${medio}`)).not.toBeInTheDocument()
+    expect(screen.getByText(/cargo por medio de pago/i).nextSibling).toHaveTextContent("L 14.49")
+    expect(totales().querySelector(".grand")).toHaveTextContent("L 221.49")
+    expect(screen.queryByText(/importe asignado|pendiente/i)).not.toBeInTheDocument()
+  })
+
+  it("al elegir el segundo medio el primero conserva el total, y al escribir se reparte", async () => {
+    await renderPOS()
+
+    agregar("Martillo de uña")
+    mixto()
+    marcar("Tarjeta")
+    marcar("Efectivo")
+
+    expect(screen.getByLabelText("Importe de Tarjeta")).toHaveValue("207.00")
+    expect(screen.getByLabelText("Importe de Efectivo")).toHaveValue("")
+    expect(totales().querySelector(".grand")).toHaveTextContent("L 221.49")
+    expect(botonFacturar()).toBeDisabled()
+
+    importe("Efectivo", "107")
+
+    expect(screen.getByLabelText("Importe de Tarjeta")).toHaveValue("100.00")
+    expect(totales().querySelector(".grand")).toHaveTextContent("L 214.00")
+    expect(botonFacturar()).toBeEnabled()
+
+    marcar("Efectivo")
+
+    expect(screen.queryByLabelText("Importe de Tarjeta")).not.toBeInTheDocument()
+    expect(totales().querySelector(".grand")).toHaveTextContent("L 221.49")
   })
 
   it("un pago mixto exige importe positivo en los dos medios", async () => {
@@ -751,10 +787,7 @@ describe("POS: venta registrada por el servidor", () => {
 
     expect(screen.getByLabelText("Importe de Transferencia")).toHaveValue("107.00")
 
-    const resumen = screen.getByText("Pendiente").closest("dl")
-
-    expect(within(resumen).getByText("Pendiente").nextSibling).toHaveTextContent("0.00")
-    expect(within(resumen).getByText("Importe asignado").nextSibling).toHaveTextContent("207.00")
+    expect(totales().querySelector(".grand")).toHaveTextContent("L 207.00")
     expect(botonFacturar()).toBeEnabled()
 
     referencia("Transferencia", "TRF-1")
@@ -849,7 +882,7 @@ describe("POS: venta registrada por el servidor", () => {
     unico("Pago único")
 
     expect(screen.queryByLabelText(/^importe de/i)).not.toBeInTheDocument()
-    expect(screen.getByText("Importe asignado").nextSibling).toHaveTextContent("0.00")
+    expect(screen.getByText("Elige el medio de pago.")).toBeInTheDocument()
     expect(botonFacturar()).toBeDisabled()
 
     unico("Tarjeta")
@@ -878,7 +911,7 @@ describe("POS: venta registrada por el servidor", () => {
     agregar("Martillo de uña")
 
     // Dos martillos: 414.00. El único medio sigue al total.
-    expect(screen.getByText("Importe asignado").nextSibling).toHaveTextContent("414.00")
+    expect(totales().querySelector(".grand")).toHaveTextContent("L 414.00")
     expect(botonFacturar()).toBeEnabled()
 
     mixto()
@@ -902,7 +935,6 @@ describe("POS: venta registrada por el servidor", () => {
 
     // El escrito no se cambia solo: si pasa del total, no se puede confirmar.
     expect(screen.getByLabelText("Importe de Efectivo")).toHaveValue("300")
-    expect(screen.getByText("Excedente").nextSibling).toHaveTextContent("93.00")
     expect(screen.getByText(/el total bajó/i)).toBeInTheDocument()
     expect(botonFacturar()).toBeDisabled()
 
@@ -1035,7 +1067,6 @@ describe("POS: venta registrada por el servidor", () => {
     fireEvent.click(screen.getByRole("button", { name: /crédito/i }))
 
     expect(screen.queryByRole("radio", { name: "Efectivo" })).not.toBeInTheDocument()
-    expect(screen.queryByText("Importe asignado")).not.toBeInTheDocument()
     expect(rpcDeVenta(falso)).toBeUndefined()
   })
 

@@ -1,6 +1,5 @@
 import { useId, useState } from "react"
 
-import { formatMoney } from "../../utils/format"
 import {
   MEDIOS_DE_PAGO,
   MEDIOS_EN_MIXTO,
@@ -38,6 +37,7 @@ function SelectorDeMedios({ valor, total, onCambiar }) {
 
   const mixto = valor.modalidad === MIXTO
   const lleno = valor.elegidos.length >= MEDIOS_EN_MIXTO
+  const conImportes = mixto && lleno
 
   const cambiar = (siguiente) => {
     setAjustado(false)
@@ -90,9 +90,9 @@ function SelectorDeMedios({ valor, total, onCambiar }) {
       </div>
 
       <div className="medios-de-pago-filas">
-        {MEDIOS_DE_PAGO.filter((m) => valor.elegidos.includes(m.id) && (mixto || m.conReferencia)).map((m) => (
+        {MEDIOS_DE_PAGO.filter((m) => valor.elegidos.includes(m.id) && (conImportes || m.conReferencia)).map((m) => (
           <div key={m.id} className="medios-de-pago-fila">
-            {mixto && (
+            {conImportes && (
               <div className={`field${importeCalculado(valor, m.id) ? " medios-de-pago-calculado" : ""}`}>
                 <label htmlFor={`${id}-monto-${m.id}`}>Importe de {m.etiqueta}</label>
 
@@ -139,33 +139,19 @@ function SelectorDeMedios({ valor, total, onCambiar }) {
 }
 
 /*
-  Cuánto va asignado y qué falta. Va aparte del selector para que el punto de
-  venta lo ponga junto al botón de facturar: ahí se ve por qué no se puede
-  confirmar, aunque los campos hayan quedado fuera de la vista. No repite el
-  total: cada pantalla ya lo muestra.
+  Por qué no se puede confirmar, cerca del botón. Sin nada que decir no ocupa sitio.
 */
-export function ResumenDeMedios({ valor, total, moneda }) {
+export function AvisoDeMedios({ valor, total }) {
   const pendiente = faltaPorAsignar(cobrosDelSelector(valor, total), total)
   const problema = total > 0 ? problemaDelSelector(valor, total) : null
+  const texto = pendiente < 0 ? "El total bajó: reduce un importe." : problema
+
+  if (!texto) return null
 
   return (
-    <div className="medios-de-pago-cuadre">
-      <dl className="medios-de-pago-resumen">
-        <div>
-          <dt>Importe asignado</dt>
-          <dd>{formatMoney(total - pendiente, moneda)}</dd>
-        </div>
-
-        <div className={pendiente === 0 ? undefined : "medios-de-pago-falta"}>
-          <dt>{pendiente < 0 ? "Excedente" : "Pendiente"}</dt>
-          <dd>{formatMoney(Math.abs(pendiente), moneda)}</dd>
-        </div>
-      </dl>
-
-      <p className="medios-de-pago-aviso" role="status">
-        {pendiente < 0 ? "El total bajó: reduce un importe." : problema}
-      </p>
-    </div>
+    <p className="medios-de-pago-aviso medios-de-pago-cuadre" role="status">
+      {texto}
+    </p>
   )
 }
 

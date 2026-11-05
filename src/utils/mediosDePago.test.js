@@ -62,11 +62,20 @@ describe("pago único", () => {
 })
 
 describe("pago mixto", () => {
-  it("los importes nacen vacíos, y pide escribir uno", () => {
-    const valor = marcados("efectivo", "tarjeta")
+  it("el primero lleva el total y su cargo sin escribir nada, como en pago único", () => {
+    const uno = marcados("tarjeta")
 
+    expect(importeDe(uno, "tarjeta", 120)).toBe("120.00")
+    expect(cobrosDelSelector(uno, 120)).toEqual([{ medio: "tarjeta", monto: 120, referencia: "", cargo: 8.4 }])
+    expect(problemaDelSelector(uno, 120)).toMatch(/elige 2 medios/i)
+  })
+
+  it("el segundo nace vacío y el primero conserva el total, aunque se elijan en cualquier orden", () => {
+    const valor = marcados("tarjeta", "efectivo")
+
+    expect(valor.primero).toBe("tarjeta")
+    expect(importeDe(valor, "tarjeta", 391)).toBe("391.00")
     expect(importeDe(valor, "efectivo", 391)).toBe("")
-    expect(importeDe(valor, "tarjeta", 391)).toBe("")
     expect(problemaDelSelector(valor, 391)).toMatch(/el otro se calcula solo/i)
   })
 
@@ -108,28 +117,34 @@ describe("pago mixto", () => {
     expect(faltaPorAsignar(cobrosDelSelector(valor, 0.3), 0.3)).toBe(0)
   })
 
-  it("borrar el importe escrito deja los dos vacíos", () => {
-    let valor = escribirImporte(marcados("efectivo", "tarjeta"), "efectivo", "100", 391).valor
+  it("borrar el importe escrito devuelve el total al primero", () => {
+    let valor = escribirImporte(marcados("efectivo", "tarjeta"), "tarjeta", "100", 391).valor
 
-    valor = escribirImporte(valor, "efectivo", "", 391).valor
+    valor = escribirImporte(valor, "tarjeta", "", 391).valor
 
     expect(valor.escrito).toBeNull()
+    expect(importeDe(valor, "efectivo", 391)).toBe("391.00")
     expect(importeDe(valor, "tarjeta", 391)).toBe("")
   })
 
-  it("soltar el escrito borra su importe, y soltar el calculado conserva el escrito", () => {
-    const base = escribirReferencia(escribirImporte(marcados("efectivo", "tarjeta"), "tarjeta", "91", 391).valor, "tarjeta", "AUT-1")
-    const sinEscrito = elegirMedio(base, "tarjeta")
+  it("soltar uno borra lo escrito y su referencia, y el que queda vuelve a llevar el total", () => {
+    const base = escribirReferencia(escribirImporte(marcados("efectivo", "tarjeta"), "efectivo", "91", 391).valor, "tarjeta", "AUT-1")
+    const soloEfectivo = elegirMedio(base, "tarjeta")
 
-    expect(sinEscrito.elegidos).toEqual(["efectivo"])
-    expect(sinEscrito.montos.tarjeta).toBe("")
-    expect(sinEscrito.referencias.tarjeta).toBe("")
-    expect(sinEscrito.escrito).toBeNull()
+    expect(soloEfectivo.elegidos).toEqual(["efectivo"])
+    expect(soloEfectivo.referencias.tarjeta).toBe("")
+    expect(soloEfectivo.escrito).toBeNull()
+    expect(soloEfectivo.primero).toBe("efectivo")
+    expect(importeDe(soloEfectivo, "efectivo", 391)).toBe("391.00")
 
-    const sinCalculado = elegirMedio(base, "efectivo")
+    const soloTarjeta = elegirMedio(base, "efectivo")
 
-    expect(sinCalculado.escrito).toBe("tarjeta")
-    expect(importeDe(elegirMedio(sinCalculado, "enlace"), "enlace", 391)).toBe("300.00")
+    expect(importeDe(soloTarjeta, "tarjeta", 391)).toBe("391.00")
+    expect(soloTarjeta.referencias.tarjeta).toBe("AUT-1")
+  })
+
+  it("sin ninguno elegido, el siguiente vuelve a ser el primero", () => {
+    expect(elegirMedio(elegirMedio(marcados("efectivo"), "efectivo"), "enlace").primero).toBe("enlace")
   })
 
   it("siempre en el mismo orden, sin importar cómo se marquen", () => {

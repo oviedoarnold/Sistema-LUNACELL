@@ -24,7 +24,7 @@ import ClientAutocomplete from "../components/documents/ClientAutocomplete"
 import ModalDeCliente from "../components/documents/ModalDeCliente"
 import { useCarrito } from "../hooks/useCarrito"
 import { useExistenciaDeMiUbicacion } from "../hooks/useExistenciaDeMiUbicacion"
-import SelectorDeMedios, { ResumenDeMedios } from "../components/pagos/SelectorDeMedios"
+import SelectorDeMedios, { AvisoDeMedios } from "../components/pagos/SelectorDeMedios"
 import { TASA_DE_CARGO, cargoDeCobros, cobrosDelSelector, problemaDelSelector, selectorVacio } from "../utils/mediosDePago"
 import { tipoDeUbicacion } from "../lib/api/ubicaciones"
 import { totalesDe } from "../lib/sinConexion/venta"
@@ -1179,11 +1179,7 @@ function POS() {
               </div>
 
               {paymentType === "contado" && (
-                <ResumenDeMedios
-                  valor={medios}
-                  total={totalACobrar}
-                  moneda={copiaLocal?.empresa?.moneda || company?.currency}
-                />
+                <AvisoDeMedios valor={medios} total={totalACobrar} />
               )}
 
               <div className="pos-acciones">

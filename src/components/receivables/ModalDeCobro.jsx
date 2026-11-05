@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react"
 
-import SelectorDeMedios, { ResumenDeMedios } from "../pagos/SelectorDeMedios"
+import SelectorDeMedios, { AvisoDeMedios } from "../pagos/SelectorDeMedios"
 import ModalShell from "../forms/ModalShell"
 import FormField from "../forms/FormField"
 import { formatMoney } from "../../utils/format"
@@ -208,11 +208,7 @@ function ModalDeCobro({
           }}
         />
 
-        <ResumenDeMedios
-          valor={medios}
-          total={Number.isFinite(montoNumero) ? montoNumero : 0}
-          moneda={moneda}
-        />
+        <AvisoDeMedios valor={medios} total={Number.isFinite(montoNumero) ? montoNumero : 0} />
 
         {cargo > 0 && (
           <dl className="cobro-con-cargo">
