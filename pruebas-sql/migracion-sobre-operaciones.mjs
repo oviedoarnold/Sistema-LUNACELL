@@ -46,10 +46,27 @@ export const firmaDe = async (db, nombre) =>
 export const cuerpoDe = async (db, firma) =>
   (await db.query("select replace(prosrc, chr(13), '') as cuerpo from pg_proc where oid = $1::regprocedure", [firma])).rows[0].cuerpo
 
+// Quita los comentarios /* … */ recorriendo el texto una vez, sin expresiones regulares.
+function sinComentariosDeBloque(texto) {
+  let resultado = ""
+  let desde = 0
+
+  for (let inicio = texto.indexOf("/*"); inicio !== -1; inicio = texto.indexOf("/*", desde)) {
+    const fin = texto.indexOf("*/", inicio + 2)
+
+    resultado += texto.slice(desde, inicio)
+
+    if (fin === -1) return resultado
+
+    desde = fin + 2
+  }
+
+  return resultado + texto.slice(desde)
+}
+
 // Sin comentarios ni espacios de más: lo que se compara es el código.
 export const soloCodigo = (cuerpo) =>
-  cuerpo
-    .replace(/\/\*[\s\S]*?\*\//g, "")
+  sinComentariosDeBloque(cuerpo)
     .replace(/--.*$/gm, "")
     .replace(/\s+/g, " ")
     .trim()
