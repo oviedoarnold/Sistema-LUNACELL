@@ -7,7 +7,7 @@
 
 import { describe, it, expect, beforeAll, afterAll } from "vitest"
 
-import { levantarBase, comoUsuario, comoDueno } from "./arnes.mjs"
+import { levantarBase, consultarComo } from "./arnes.mjs"
 import { crearCliente, crearVendedor } from "./fixtures.mjs"
 import {
   conciliar,
@@ -20,27 +20,20 @@ import {
   ventaSinConexion,
 } from "./escenario-sin-conexion.mjs"
 
-let base
+// Una sola base para todo el archivo: cada prueba arma su propia empresa.
 let db
+let cerrarBase = async () => {}
 
 beforeAll(async () => {
-  base = await levantarBase()
+  const base = await levantarBase()
+
   db = base.admin
+  cerrarBase = () => base.cerrar()
 }, 180000)
 
-afterAll(async () => {
-  await base?.cerrar()
-})
+afterAll(() => cerrarBase())
 
-async function como(authId, consulta, valores = []) {
-  await comoUsuario(db, authId)
-
-  try {
-    return await db.query(consulta, valores)
-  } finally {
-    await comoDueno(db)
-  }
-}
+const como = (authId, consulta, valores = []) => consultarComo(db, authId, consulta, valores)
 
 const unaFila = async (authId, consulta, valores) => (await como(authId, consulta, valores)).rows[0].r
 
