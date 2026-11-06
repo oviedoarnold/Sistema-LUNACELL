@@ -14,13 +14,20 @@ export const textoDelMotivo = (valor) => MOTIVOS_DE_NEGOCIACION.find((m) => m.va
 // Bajar el precio necesita un motivo; subirlo, no.
 export const necesitaMotivo = (precio, referencia) => Number(precio) < Number(referencia)
 
-// Null si el precio se puede usar; si no, qué falta.
-export function problemaDelPrecioNegociado(precio, referencia, motivo) {
+// Mayor que cero, con hasta dos decimales: lo mismo que acepta la base.
+export function esPrecioValido(precio) {
   const valor = typeof precio === "string" && precio.trim() === "" ? Number.NaN : Number(precio)
 
-  if (!(valor > 0) || !Number.isFinite(valor) || valor !== Math.round(valor * 100) / 100 || valor >= 10000000000) {
+  return valor > 0 && Number.isFinite(valor) && valor === Math.round(valor * 100) / 100 && valor < 10000000000
+}
+
+// Null si el precio se puede usar; si no, qué falta.
+export function problemaDelPrecioNegociado(precio, referencia, motivo) {
+  if (!esPrecioValido(precio)) {
     return "El precio debe ser mayor que cero y tener hasta dos decimales."
   }
+
+  const valor = Number(precio)
 
   if (necesitaMotivo(valor, referencia) && !MOTIVOS_DE_NEGOCIACION.some((m) => m.valor === motivo)) {
     return "Elige el motivo por el que se baja el precio."

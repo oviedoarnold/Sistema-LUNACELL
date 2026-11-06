@@ -236,15 +236,17 @@
 }
 
 /*
-  Número y nombre arriba; cantidad, subtotal y eliminar debajo. Con ancho de
-  sobra, todo en una línea.
+  Número, nombre y subtotal arriba; cantidad, precio y eliminar debajo, y bajo
+  ellos, solo si hace falta, el motivo de una rebaja. Así el subtotal nunca se
+  corta en un teléfono. Con ancho de sobra, la línea entera en una fila.
 */
 .pos .cart-row {
   display: grid;
   grid-template-areas:
-    "numero nombre nombre nombre"
-    ". cantidad subtotal quitar";
-  grid-template-columns: auto auto minmax(0, 1fr) auto;
+    "numero nombre nombre subtotal subtotal"
+    ". cantidad precio . quitar"
+    ". ajuste ajuste ajuste ajuste";
+  grid-template-columns: auto auto auto minmax(0, 1fr) auto;
   align-items: center;
   gap: var(--space-1) var(--space-2);
   padding: 6px 0;
@@ -261,9 +263,11 @@
   color: var(--text-muted);
 }
 
+/* Ocupa su área sin ensancharla: un nombre largo no le quita sitio al subtotal. */
 .pos .cart-row .name {
   grid-area: nombre;
   min-width: 0;
+  contain: inline-size;
   overflow-wrap: anywhere;
 }
 
@@ -273,18 +277,100 @@
 
 .pos .cart-row .sub {
   grid-area: subtotal;
+  align-self: start;
   width: auto;
+  white-space: nowrap;
+  text-align: right;
 }
 
 .pos .cart-row .cart-remove-button {
   grid-area: quitar;
+  justify-self: end;
 }
 
-@container (min-width: 360px) {
+@container (min-width: 620px) {
   .pos .cart-row {
-    grid-template-areas: "numero nombre cantidad subtotal quitar";
-    grid-template-columns: auto minmax(0, 1fr) auto minmax(74px, auto) auto;
+    grid-template-areas:
+      "numero nombre cantidad precio subtotal quitar"
+      ". ajuste ajuste ajuste ajuste ajuste";
+    grid-template-columns: auto minmax(0, 1fr) auto auto minmax(74px, auto) auto;
   }
+}
+
+/*
+  El precio unitario se escribe ahí mismo. El borde dice que es un campo; el
+  color, si está negociado o si algo falta.
+*/
+.pos .pos-precio-campo {
+  grid-area: precio;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  height: 28px;
+  padding: 0 7px;
+  border: 1.5px solid var(--line-strong);
+  border-radius: 7px;
+  background: var(--surface);
+  font-family: var(--font-mono);
+  font-size: 13px;
+  color: var(--text-muted);
+  cursor: text;
+}
+
+.pos .pos-precio-campo input {
+  width: 8.5ch;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text-primary);
+  font: inherit;
+  text-align: right;
+  outline: none;
+}
+
+.pos .pos-precio-campo:focus-within {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 2px var(--focus-ring);
+}
+
+.pos .pos-precio-campo.is-negociado {
+  border-color: var(--primary);
+  background: var(--primary-soft);
+}
+
+.pos .pos-precio-campo.is-invalid {
+  border-color: var(--danger);
+  background: var(--danger-soft);
+}
+
+/* El motivo de la rebaja y el aviso: una sola línea compacta bajo la fila. */
+.pos .pos-precio-ajuste {
+  grid-area: ajuste;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px var(--space-2);
+}
+
+.pos .pos-precio-ajuste select {
+  width: auto;
+  max-width: 100%;
+  height: 28px;
+  padding: 0 6px;
+  border: 1.5px solid var(--line-strong);
+  border-radius: 7px;
+  background-color: var(--surface);
+  font-size: 12.5px;
+}
+
+.pos .pos-precio-ajuste select[aria-invalid="true"] {
+  border-color: var(--danger);
+}
+
+.pos .pos-precio-problema {
+  font-size: 12px;
+  color: var(--danger);
 }
 
 /* En una pantalla táctil, los botones de la línea con altura para el dedo. */
@@ -293,6 +379,15 @@
   .pos .cart-remove-button {
     width: 40px;
     height: 40px;
+  }
+
+  .pos .pos-precio-campo,
+  .pos .pos-precio-ajuste select {
+    height: 40px;
+  }
+
+  .pos .pos-precio-campo input {
+    font-size: 16px;
   }
 }
 
@@ -303,62 +398,27 @@
   font-weight: 400;
 }
 
+.pos .pos-importe {
+  white-space: nowrap;
+}
+
 .pos .price .pos-precio-especial {
   display: block;
   text-align: right;
 }
 
-.pos .pos-precio-acciones {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 2px var(--space-2);
-}
-
 .pos .pos-precio-enlace {
-  padding: 2px 0;
+  padding: 0;
   border: 0;
   background: none;
   color: var(--text-muted);
   font: inherit;
-  font-size: 12px;
-  font-weight: 400;
   text-decoration: underline;
   cursor: pointer;
 }
 
 .pos .pos-precio-enlace:hover {
   color: var(--text-primary);
-}
-
-/* Debajo de la línea, a todo su ancho: nunca tapa la cantidad ni el subtotal. */
-.pos .pos-editor-precio {
-  grid-column: 1 / -1;
-  display: grid;
-  gap: var(--space-1);
-  padding: var(--space-1) 0;
-}
-
-.pos .pos-editor-actual {
-  margin: 0;
-  font-size: 12.5px;
-  color: var(--text-muted);
-}
-
-.pos .pos-editor-campos {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
-  gap: var(--space-1) var(--space-2);
-}
-
-.pos .pos-editor-acciones {
-  display: flex;
-  gap: var(--space-2);
-}
-
-@media (pointer: coarse) {
-  .pos .pos-precio-enlace {
-    min-height: 32px;
-  }
 }
 
 .pos .pos-aviso-precios {

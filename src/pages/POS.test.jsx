@@ -186,7 +186,7 @@ describe("POS: artículos facturados", () => {
     const fila = document.querySelector(".cart-row")
 
     expect(fila).toHaveTextContent("Martillo de uña")
-    expect(fila).toHaveTextContent("L 180.00 c/u")
+    expect(within(fila).getByLabelText("Precio de Martillo de uña")).toHaveValue("180.00")
     expect(within(fila).getByText("1")).toBeInTheDocument()
     expect(fila.querySelector(".sub")).toHaveTextContent("L 180.00")
     expect(within(fila).getByTitle(/eliminar/i)).toBeInTheDocument()
@@ -360,7 +360,7 @@ describe("POS: precios por cliente", () => {
     await elegirCliente("Ferremax")
     agregar("Cemento gris")
 
-    expect(filasDelCarrito()[0]).toHaveTextContent(/L 200.00 c\/u/)
+    expect(within(filasDelCarrito()[0]).getByLabelText("Precio de Cemento gris")).toHaveValue("200.00")
     expect(filasDelCarrito()[0]).toHaveTextContent(/precio especial/i)
     expect(totales()).toHaveTextContent("L 230.00")
 
@@ -377,7 +377,7 @@ describe("POS: precios por cliente", () => {
     await elegirCliente("Ferremax")
     agregar("Martillo de uña")
 
-    expect(filasDelCarrito()[0]).toHaveTextContent(/L 180.00 c\/u/)
+    expect(within(filasDelCarrito()[0]).getByLabelText("Precio de Martillo de uña")).toHaveValue("180.00")
     expect(filasDelCarrito()[0]).not.toHaveTextContent(/precio especial/i)
   })
 
@@ -458,34 +458,56 @@ describe("POS: precio negociado", () => {
 
   const fila = () => filasDelCarrito()[0]
   const facturar = () => screen.getByRole("button", { name: /generar factura/i })
+  const campo = (producto = "Cemento gris") => screen.getByLabelText(`Precio de ${producto}`)
+  const motivo = (producto = "Cemento gris") => screen.queryByLabelText(`Motivo del precio de ${producto}`)
 
-  const negociar = (producto, precio, motivo) => {
-    fireEvent.click(screen.getByRole("button", { name: `Modificar precio de ${producto}` }))
-    fireEvent.change(screen.getByLabelText(`Nuevo precio de ${producto}`), { target: { value: String(precio) } })
-
-    if (motivo) fireEvent.change(screen.getByLabelText(`Motivo del precio de ${producto}`), { target: { value: motivo } })
-
-    fireEvent.click(screen.getByRole("button", { name: "Aplicar" }))
+  // Como lo hace el vendedor: entra al campo, borra, escribe y sale.
+  const escribir = (producto, valor) => {
+    fireEvent.focus(campo(producto))
+    fireEvent.change(campo(producto), { target: { value: String(valor) } })
   }
 
-  it("muestra el precio actual, aplica el nuevo y recalcula subtotal, ISV y total", async () => {
+  const negociar = (producto, precio, motivoElegido) => {
+    escribir(producto, precio)
+    fireEvent.blur(campo(producto))
+
+    if (motivoElegido) fireEvent.change(motivo(producto), { target: { value: motivoElegido } })
+  }
+
+  it("el precio de cada línea es un campo editable con el precio vigente", async () => {
     await renderConPrecios()
 
     agregar("Cemento gris")
-    fireEvent.click(screen.getByRole("button", { name: "Modificar precio de Cemento gris" }))
 
-    expect(screen.getByText("Precio actual: L 250.00")).toBeInTheDocument()
+    expect(campo()).toHaveAttribute("type", "text")
+    expect(campo()).toHaveAttribute("inputmode", "decimal")
+    expect(campo()).toHaveValue("250.00")
+    expect(screen.queryByRole("button", { name: /modificar precio/i })).not.toBeInTheDocument()
+  })
 
-    fireEvent.change(screen.getByLabelText("Nuevo precio de Cemento gris"), { target: { value: "180" } })
-    fireEvent.change(screen.getByLabelText("Motivo del precio de Cemento gris"), { target: { value: "mayoreo" } })
-    fireEvent.click(screen.getByRole("button", { name: "Aplicar" }))
+  it("cambia L 180 por L 100 escribiendo en el campo, y recalcula subtotal, ISV y total", async () => {
+    await renderConPrecios()
 
-    expect(fila()).toHaveTextContent(/L 180.00 c\/u/)
-    expect(fila()).toHaveTextContent("Precio negociado")
-    expect(fila()).toHaveTextContent("Referencia: L 250.00")
-    expect(totales()).toHaveTextContent("L 180.00")
-    expect(totales()).toHaveTextContent("L 27.00")
-    expect(totales()).toHaveTextContent("L 207.00")
+    agregar("Martillo de uña")
+    expect(campo("Martillo de uña")).toHaveValue("180.00")
+
+    negociar("Martillo de uña", 100, "mayoreo")
+
+    expect(campo("Martillo de uña")).toHaveValue("100.00")
+    expect(fila()).toHaveTextContent("Precio negociado · antes L 180.00")
+    expect(fila().querySelector(".sub")).toHaveTextContent("L 100.00")
+    expect(totales()).toHaveTextContent("L 15.00")
+    expect(totales()).toHaveTextContent("L 115.00")
+  })
+
+  it("recalcula mientras se escribe, sin aplicar ni abrir nada", async () => {
+    await renderConPrecios()
+
+    agregar("Cemento gris")
+    escribir("Cemento gris", "300")
+
+    expect(totales()).toHaveTextContent("L 345.00")
+    expect(document.querySelector(".modal, [role=dialog]")).toBeNull()
   })
 
   it("envía el precio y el motivo, y la factura sale con lo negociado", async () => {
@@ -508,6 +530,30 @@ describe("POS: precio negociado", () => {
     expect(falso.datos.productos.find((p) => p.id === "p2").precio).toBe(250)
   })
 
+  it("dos productos con precios distintos negociados", async () => {
+    const { falso } = await renderConPrecios()
+
+    agregar("Cemento gris")
+    agregar("Martillo de uña")
+    negociar("Cemento gris", 180, "mayoreo")
+    negociar("Martillo de uña", 200)
+    elegirEfectivo()
+
+    expect(totales()).toHaveTextContent("L 437.00")
+
+    fireEvent.click(facturar())
+    await waitFor(() => expect(falso.datos.ventas).toHaveLength(1))
+
+    const { p_items: items } = falso.rpc.mock.calls.find(([n]) => n === "registrar_venta_con_medios")[1]
+
+    expect(items).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ producto_id: "p2", precio_negociado: 180, motivo_negociacion: "mayoreo" }),
+        expect.objectContaining({ producto_id: "p1", precio_negociado: 200, motivo_negociacion: null }),
+      ])
+    )
+  })
+
   it("a crédito con ISV también va por el flujo autorizado", async () => {
     const { falso } = await renderConPrecios()
 
@@ -528,29 +574,47 @@ describe("POS: precio negociado", () => {
     await renderConPrecios()
     await elegirCliente("Ferremax")
     agregar("Cemento gris")
+    expect(campo()).toHaveValue("200.00")
+
     negociar("Cemento gris", 180, "promocion")
 
-    expect(fila()).toHaveTextContent("Referencia: L 200.00")
+    expect(fila()).toHaveTextContent("antes L 200.00")
     expect(fila()).not.toHaveTextContent("Precio especial")
     expect(totales()).toHaveTextContent("L 207.00")
 
     fireEvent.click(screen.getByRole("button", { name: "Restaurar el precio de Cemento gris" }))
 
-    expect(fila()).toHaveTextContent(/L 200.00 c\/u/)
+    expect(campo()).toHaveValue("200.00")
     expect(fila()).toHaveTextContent("Precio especial")
     expect(fila()).not.toHaveTextContent("Precio negociado")
     expect(totales()).toHaveTextContent("L 230.00")
   })
 
-  it("cambiar la cantidad conserva el precio negociado", async () => {
+  it("escribir de nuevo el precio de referencia deja la línea sin negociación", async () => {
     await renderConPrecios()
 
     agregar("Cemento gris")
     negociar("Cemento gris", 180, "mayoreo")
-    fireEvent.click(screen.getByRole("button", { name: "Agregar una unidad de Cemento gris" }))
+    negociar("Cemento gris", "250")
 
-    expect(fila()).toHaveTextContent(/L 180.00 c\/u/)
-    expect(totales()).toHaveTextContent("L 414.00")
+    expect(fila()).not.toHaveTextContent("Precio negociado")
+    expect(campo()).toHaveValue("250.00")
+  })
+
+  it("cambiar la cantidad antes y después conserva el precio negociado", async () => {
+    await renderConPrecios()
+
+    agregar("Martillo de uña")
+    fireEvent.click(screen.getByRole("button", { name: "Agregar una unidad de Martillo de uña" }))
+    negociar("Martillo de uña", 150, "mayoreo")
+
+    expect(totales()).toHaveTextContent("L 345.00")
+
+    fireEvent.click(screen.getByRole("button", { name: "Agregar una unidad de Martillo de uña" }))
+
+    expect(campo("Martillo de uña")).toHaveValue("150.00")
+    expect(fila().querySelector(".sub")).toHaveTextContent("L 450.00")
+    expect(totales()).toHaveTextContent("L 517.50")
   })
 
   it("cambiar de cliente conserva lo negociado, actualiza la referencia y avisa", async () => {
@@ -558,12 +622,12 @@ describe("POS: precio negociado", () => {
 
     agregar("Cemento gris")
     negociar("Cemento gris", 150, "mayoreo")
-    expect(fila()).toHaveTextContent("Referencia: L 250.00")
+    expect(fila()).toHaveTextContent("antes L 250.00")
 
     await elegirCliente("Ferremax")
 
-    expect(fila()).toHaveTextContent(/L 150.00 c\/u/)
-    expect(fila()).toHaveTextContent("Referencia: L 200.00")
+    expect(campo()).toHaveValue("150.00")
+    expect(fila()).toHaveTextContent("antes L 200.00")
     expect(screen.getByText("Precios actualizados para Ferremax. Se conservan los precios negociados.")).toBeInTheDocument()
     expect(totales()).toHaveTextContent("L 172.50")
   })
@@ -616,54 +680,58 @@ describe("POS: precio negociado", () => {
     ["negativo", "-5"],
     ["vacío", ""],
     ["con tres decimales", "10.123"],
-  ])("no acepta un precio %s", async (_, valor) => {
-    await renderConPrecios()
-
-    agregar("Cemento gris")
-    fireEvent.click(screen.getByRole("button", { name: "Modificar precio de Cemento gris" }))
-    fireEvent.change(screen.getByLabelText("Nuevo precio de Cemento gris"), { target: { value: valor } })
-    fireEvent.click(screen.getByRole("button", { name: "Aplicar" }))
-
-    expect(screen.getByRole("alert")).toHaveTextContent(/mayor que cero/i)
-    expect(fila()).not.toHaveTextContent("Precio negociado")
-  })
-
-  it("bajar el precio pide motivo; subirlo, no", async () => {
-    await renderConPrecios()
-
-    agregar("Cemento gris")
-    fireEvent.click(screen.getByRole("button", { name: "Modificar precio de Cemento gris" }))
-
-    expect(screen.queryByLabelText("Motivo del precio de Cemento gris")).not.toBeInTheDocument()
-
-    fireEvent.change(screen.getByLabelText("Nuevo precio de Cemento gris"), { target: { value: "180" } })
-    fireEvent.click(screen.getByRole("button", { name: "Aplicar" }))
-
-    expect(screen.getByRole("alert")).toHaveTextContent(/motivo/i)
-
-    fireEvent.change(screen.getByLabelText("Nuevo precio de Cemento gris"), { target: { value: "300" } })
-
-    expect(screen.queryByLabelText("Motivo del precio de Cemento gris")).not.toBeInTheDocument()
-
-    fireEvent.click(screen.getByRole("button", { name: "Aplicar" }))
-
-    expect(fila()).toHaveTextContent("Precio negociado")
-  })
-
-  it("con el editor abierto no se factura; al cancelar, el precio sigue igual", async () => {
+    ["que no es un número", "abc"],
+  ])("no acepta un precio %s ni deja facturar", async (_, valor) => {
     await renderConPrecios()
 
     agregar("Cemento gris")
     elegirEfectivo()
-    fireEvent.click(screen.getByRole("button", { name: "Modificar precio de Cemento gris" }))
+    negociar("Cemento gris", valor)
 
+    expect(screen.getByRole("alert")).toHaveTextContent(/mayor que cero/i)
+    expect(campo()).toHaveAttribute("aria-invalid", "true")
+    expect(fila()).not.toHaveTextContent("Precio negociado")
+    expect(totales()).toHaveTextContent("L 287.50")
     expect(facturar()).toBeDisabled()
     expect(screen.getByRole("button", { name: "Vista previa" })).toBeDisabled()
+  })
 
-    fireEvent.click(screen.getByRole("button", { name: "Cancelar" }))
+  it("bajar el precio pide motivo junto a la línea y no deja facturar hasta elegirlo; subirlo, no", async () => {
+    await renderConPrecios()
 
+    agregar("Cemento gris")
+    elegirEfectivo()
+
+    expect(motivo()).not.toBeInTheDocument()
+
+    negociar("Cemento gris", 180)
+
+    expect(motivo()).toBeInTheDocument()
+    expect(screen.getByRole("alert")).toHaveTextContent(/motivo/i)
+    expect(facturar()).toBeDisabled()
+
+    fireEvent.change(motivo(), { target: { value: "mayoreo" } })
+
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument()
     expect(facturar()).toBeEnabled()
-    expect(fila()).toHaveTextContent(/L 250.00 c\/u/)
+
+    negociar("Cemento gris", 300)
+
+    expect(motivo()).not.toBeInTheDocument()
+    expect(fila()).toHaveTextContent("Precio negociado")
+    expect(facturar()).toBeEnabled()
+  })
+
+  it("se puede volver a cambiar el importe las veces que haga falta", async () => {
+    await renderConPrecios()
+
+    agregar("Cemento gris")
+    negociar("Cemento gris", 300)
+    negociar("Cemento gris", 280)
+    negociar("Cemento gris", 200, "otro")
+
+    expect(campo()).toHaveValue("200.00")
+    expect(totales()).toHaveTextContent("L 230.00")
   })
 
   it("quitar el producto descarta la negociación: al volver, usa su precio", async () => {
@@ -674,7 +742,7 @@ describe("POS: precio negociado", () => {
     fireEvent.click(screen.getByRole("button", { name: "Eliminar Cemento gris de la venta" }))
     agregar("Cemento gris")
 
-    expect(fila()).toHaveTextContent(/L 250.00 c\/u/)
+    expect(campo()).toHaveValue("250.00")
     expect(fila()).not.toHaveTextContent("Precio negociado")
   })
 
@@ -690,7 +758,7 @@ describe("POS: precio negociado", () => {
 
     agregar("Cemento gris")
 
-    expect(fila()).toHaveTextContent(/L 250.00 c\/u/)
+    expect(campo()).toHaveValue("250.00")
   })
 
   it("el rechazo del servidor se muestra y no vacía la venta", async () => {
@@ -707,27 +775,28 @@ describe("POS: precio negociado", () => {
     expect(fila()).toHaveTextContent("Precio negociado")
   })
 
-  it("el vendedor con permiso de facturar puede negociar", async () => {
+  it("el vendedor con permiso de facturar puede escribir el precio", async () => {
     await renderConPrecios({ rolDelUsuario: "vendedor", permisosDelUsuario: ["pos"] })
 
     agregar("Cemento gris")
 
-    expect(screen.getByRole("button", { name: "Modificar precio de Cemento gris" })).toBeInTheDocument()
+    expect(campo()).toBeInTheDocument()
   })
 
-  it("el contador no ve la opción", async () => {
+  it("el contador ve el precio, pero no un campo para cambiarlo", async () => {
     await renderConPrecios({ rolDelUsuario: "contador", permisosDelUsuario: ["pos"] })
 
     agregar("Cemento gris")
 
-    expect(screen.queryByRole("button", { name: /modificar precio/i })).not.toBeInTheDocument()
+    expect(screen.queryByLabelText("Precio de Cemento gris")).not.toBeInTheDocument()
+    expect(fila()).toHaveTextContent(/L 250.00 c\/u/)
   })
 
   it("no muestra costos", async () => {
     await renderConPrecios()
 
     agregar("Cemento gris")
-    fireEvent.click(screen.getByRole("button", { name: "Modificar precio de Cemento gris" }))
+    negociar("Cemento gris", 180)
 
     expect(document.querySelector(".cart-card").textContent).not.toMatch(/costo|margen|utilidad/i)
   })
