@@ -299,7 +299,7 @@ describe("POS sin conexión en una ubicación habilitada", () => {
     fireEvent.click(screen.getByText(CLIENTES[0].name))
     agregar("Martillo de uña")
 
-    expect(filaDelCarrito("Martillo de uña")).toHaveTextContent(/L 100.00 c\/u/)
+    expect(screen.getByLabelText("Precio de Martillo de uña")).toHaveValue("100.00")
     expect(filaDelCarrito("Martillo de uña")).toHaveTextContent(/precio especial/i)
 
     elegirEfectivo()
@@ -319,10 +319,10 @@ describe("POS sin conexión en una ubicación habilitada", () => {
     await quitarConexion()
 
     agregar("Martillo de uña")
-    fireEvent.click(screen.getByRole("button", { name: "Modificar precio de Martillo de uña" }))
-    fireEvent.change(screen.getByLabelText("Nuevo precio de Martillo de uña"), { target: { value: "150" } })
+    fireEvent.focus(screen.getByLabelText("Precio de Martillo de uña"))
+    fireEvent.change(screen.getByLabelText("Precio de Martillo de uña"), { target: { value: "150" } })
+    fireEvent.blur(screen.getByLabelText("Precio de Martillo de uña"))
     fireEvent.change(screen.getByLabelText("Motivo del precio de Martillo de uña"), { target: { value: "mayoreo" } })
-    fireEvent.click(screen.getByRole("button", { name: "Aplicar" }))
 
     expect(filaDelCarrito("Martillo de uña")).toHaveTextContent("Precio negociado")
 

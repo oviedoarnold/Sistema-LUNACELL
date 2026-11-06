@@ -26,9 +26,14 @@ La factura muestra el precio vendido.
 
 ## En el POS
 
-- **Modificar precio** abre el editor debajo de la línea. Mientras está abierto no se
-  puede facturar.
-- **Restaurar** vuelve al precio de referencia.
+- El precio unitario de cada línea de «Artículos facturados» es un campo editable,
+  junto a la cantidad: se borra, se escribe el nuevo y los totales se recalculan al
+  momento, sin abrir nada.
+- Al bajar el precio aparece, bajo la línea, el motivo de la rebaja.
+- Mientras un precio no sea válido o falte el motivo, no se puede facturar ni ver la
+  vista previa.
+- **Restaurar** vuelve al precio de referencia. Escribir de nuevo ese precio hace lo
+  mismo.
 - Cambiar la cantidad conserva el precio negociado.
 - Cambiar de cliente conserva el precio negociado y actualiza su referencia.
 - Quitar el producto del carrito descarta la negociación.
