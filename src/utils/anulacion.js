@@ -50,6 +50,11 @@ export function puedeVerAnular(venta, { esAdmin, puedeAnular, ubicacionId }) {
 
 /* Por qué no se puede anular, o null si se puede. */
 export function razonParaNoAnular(venta, { esAdmin }, ahora = new Date()) {
+  // La mercadería salió de otra ubicación (0045): anular_venta() no la devuelve.
+  if (venta.pedidoId) {
+    return "Es la factura de un pedido entregado en otra ubicación. Su anulación se habilitará en la etapa de cancelaciones y devoluciones."
+  }
+
   if (venta.origin === "conciliacion" && !esAdmin) {
     return "Se aplicó por conciliación: solo un administrador puede anularla."
   }

@@ -71,6 +71,12 @@ describe("por qué no se puede anular", () => {
     expect(razonParaNoAnular(venta(), ADMIN, MISMO_DIA)).toBeNull()
   })
 
+  // 0045: su mercadería salió de otra ubicación; se anula en la etapa C.
+  it("la factura de un pedido interubicación no se anula con este procedimiento, ni por el administrador", () => {
+    expect(razonParaNoAnular(venta({ pedidoId: "ped-1" }), VENDEDOR, MISMO_DIA)).toMatch(/pedido entregado en otra ubicación/)
+    expect(razonParaNoAnular(venta({ pedidoId: "ped-1" }), ADMIN, MISMO_DIA)).toMatch(/pedido entregado en otra ubicación/)
+  })
+
   it("una de conciliación solo la anula el administrador", () => {
     expect(razonParaNoAnular(venta({ origin: "conciliacion" }), VENDEDOR, MISMO_DIA)).toMatch(/solo un administrador/)
     expect(razonParaNoAnular(venta({ origin: "conciliacion" }), ADMIN, MISMO_DIA)).toBeNull()

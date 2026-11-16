@@ -13,6 +13,7 @@ import Products from "../pages/Products"
 import Inventory from "../pages/Inventory"
 import Transfers from "../pages/Transfers"
 import POS from "../pages/POS"
+import Pedidos from "../pages/Pedidos"
 import Quotes from "../pages/Quotes"
 import SalesHistory from "../pages/SalesHistory"
 import Reports from "../pages/Reports"
@@ -120,6 +121,18 @@ function AppRouter() {
             <ProtectedRoute permission={PERMISSIONS.POS}>
               <MainLayout>
                 <POS />
+              </MainLayout>
+            </ProtectedRoute>
+          }
+        />
+
+        {/* PEDIDOS INTERUBICACIÓN */}
+        <Route
+          path="/pedidos"
+          element={
+            <ProtectedRoute permission={PERMISSIONS.POS}>
+              <MainLayout>
+                <Pedidos />
               </MainLayout>
             </ProtectedRoute>
           }

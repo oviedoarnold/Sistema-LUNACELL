@@ -5,6 +5,7 @@
     "/api/health",
     "/dashboard",
     "/pos",
+    "/pedidos",
     "/products",
     "/inventory",
     "/inventory/transfers",

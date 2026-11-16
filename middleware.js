@@ -18,6 +18,7 @@ export const config = {
   matcher: [
     "/dashboard",
     "/pos",
+    "/pedidos",
     "/products",
     "/inventory",
     "/inventory/transfers",

@@ -17,6 +17,7 @@
 /demo/*  /  200
 /dashboard/*  /  200
 /pos/*  /  200
+/pedidos/*  /  200
 /products/*  /  200
 /inventory/*  /  200
 /clients/*  /  200

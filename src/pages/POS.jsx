@@ -19,6 +19,7 @@ import { MiniaturaDeProducto } from "../components/ImagenDeProducto"
 import { claveDeIdempotencia } from "../utils/ids"
 import { SalesContext } from "../context/contexts"
 import { ClientsContext } from "../context/contexts"
+import { LocationsContext } from "../context/contexts"
 import InvoiceTemplate from "../components/InvoiceTemplate"
 import ClientAutocomplete from "../components/documents/ClientAutocomplete"
 import ModalDeCliente from "../components/documents/ModalDeCliente"
@@ -41,6 +42,9 @@ import DocumentPreviewModal from "../components/documents/DocumentPreviewModal"
 import ComprobanteProvisional from "../components/sinConexion/ComprobanteProvisional"
 import EstadoSinConexion from "../components/sinConexion/EstadoSinConexion"
 import PrecioDeLinea from "../components/pos/PrecioDeLinea"
+import OpcionesDePedido from "../components/pos/OpcionesDePedido"
+import { entregarPedido } from "../lib/api/pedidos"
+import { avisarCambioDePedidos } from "../hooks/useAvisosDePedidos"
 import { esPrecioValido, necesitaMotivo, problemaDelPrecioNegociado } from "../utils/preciosNegociados"
 import PanelDeVentasLocales from "../components/sinConexion/PanelDeVentasLocales"
 import { useAuth } from "../hooks/useAuth"
@@ -93,7 +97,18 @@ function motivoDelBloqueo(copia) {
   return "Sin conexión con el servidor. Esta ubicación no está habilitada para vender sin conexión: podrás facturar cuando vuelva la conexión."
 }
 
-function textoDelBotonDeVenta(facturando, modoSinConexion) {
+// Una prima escrita a mano: vacía es cero; con más de dos decimales no vale.
+function leerPrima(texto) {
+  const limpio = String(texto || "").trim()
+
+  if (limpio === "") return 0
+
+  return /^\d{1,10}(\.\d{1,2})?$/.test(limpio) ? Number(limpio) : null
+}
+
+function textoDelBotonDeVenta(facturando, modoSinConexion, esPedido) {
+  if (esPedido) return facturando ? "Enviando…" : "Entregar y enviar pedido"
+
   if (facturando) return modoSinConexion ? "Guardando…" : "Registrando…"
 
   return modoSinConexion ? "Guardar venta sin conexión" : "Generar factura"
@@ -176,6 +191,25 @@ function POS() {
   const [tipoEnLinea, setTipoEnLinea] = useState()
   const [isvElegido, setIsvElegido] = useState(null)
 
+  /*
+    Enviar un pedido a otra ubicación (0045): esta entrega y descuenta, la otra
+    factura. Solo con conexión y hacia una ubicación activa que facture. Si la
+    conexión se cae con el modo elegido, el pedido no se envía: no se convierte
+    en una venta de aquí.
+  */
+  const { locations = [] } = useContext(LocationsContext) || {}
+  const [operacion, setOperacion] = useState("venta")
+  const [destinoId, setDestinoId] = useState("")
+  const [primaTexto, setPrimaTexto] = useState("")
+  const destinos = useMemo(
+    () => locations.filter((u) => u.active && u.sells && String(u.id) !== String(ubicacionId)),
+    [locations, ubicacionId]
+  )
+  const esPedido = operacion === "pedido"
+  const puedeEnviarPedido = Boolean(ubicacionId) && !modoSinConexion && destinos.length > 0
+  const destino = esPedido ? destinos.find((u) => String(u.id) === String(destinoId)) || null : null
+  const nombreDeAqui = locations.find((u) => String(u.id) === String(ubicacionId))?.name || ""
+
   useEffect(() => {
     if (!ubicacionId || modoSinConexion) return undefined
 
@@ -192,7 +226,9 @@ function POS() {
 
   const tipoDeMiUbicacion = modoSinConexion ? copiaLocal?.ubicacion?.tipo : tipoEnLinea
   const tipoPendiente = !modoSinConexion && Boolean(ubicacionId) && tipoEnLinea === undefined
-  const conIsv = isvElegido ?? tipoDeMiUbicacion === "tienda"
+  // En un pedido manda el destino: si factura con numeración fiscal, lleva ISV siempre.
+  const isvFijo = Boolean(destino?.fiscal)
+  const conIsv = esPedido ? isvFijo || (isvElegido ?? destino?.type === "tienda") : isvElegido ?? tipoDeMiUbicacion === "tienda"
   const tasaISV = conIsv ? tasaDeLaEmpresa : 0
 
   /*
@@ -454,11 +490,20 @@ function POS() {
     [cart, tasaISV]
   )
 
-  const cobrosDeLaVenta = () => (paymentType === "contado" ? cobrosDelSelector(medios, totalACobrar, tasasDeCargo) : [])
+  /*
+    Un pedido a crédito puede llevar una prima cobrada aquí: los medios se
+    reparten la prima y no el total. Sin prima, no lleva medios.
+  */
+  const prima = esPedido && paymentType === "credito" ? leerPrima(primaTexto) : 0
+  const conPrima = esPedido && paymentType === "credito" && prima > 0
+  const llevaMedios = paymentType === "contado" || conPrima
+  const totalDeLosMedios = conPrima ? prima : totalACobrar
+
+  const cobrosDeLaVenta = () => (llevaMedios ? cobrosDelSelector(medios, totalDeLosMedios, tasasDeCargo) : [])
 
   // Mientras los medios no sumen el total, la venta no se puede confirmar.
   const mediosSinCuadrar =
-    paymentType === "contado" && problemaDelSelector(medios, totalACobrar, tasasDeCargo) !== null
+    llevaMedios && problemaDelSelector(medios, totalDeLosMedios, tasasDeCargo) !== null
 
   // Lo que tarjeta y enlace suman a lo que paga el comprador.
   const cargo = cargoDeCobros(cobrosDeLaVenta())
@@ -471,6 +516,7 @@ function POS() {
   ) => {
     setPaymentType(type)
     setMedios(selectorVacio())
+    setPrimaTexto("")
     handleClearClient()
 
     if (type === "credito") {
@@ -561,6 +607,10 @@ function POS() {
       return false
     }
 
+    if (esPedido && !validarPedido()) {
+      return false
+    }
+
     if (
       paymentType === "credito" &&
       !dueDate
@@ -576,6 +626,20 @@ function POS() {
     }
 
     return true
+  }
+
+  // Lo propio de un pedido, además de lo que se exige a cualquier venta.
+  const validarPedido = () => {
+    let problema = null
+
+    if (!destino) problema = ["Ubicación requerida", "Elige la ubicación que va a facturar el pedido."]
+    else if (!selectedClient) problema = ["Cliente requerido", "Un pedido para otra ubicación necesita un cliente registrado."]
+    else if (prima === null) problema = ["Prima no válida", "Escribe la prima con hasta dos decimales, o déjala vacía."]
+    else if (prima >= totalACobrar) problema = ["Prima no válida", "La prima debe ser menor que el total. Si paga todo, envíalo al contado."]
+
+    if (problema) Swal.fire({ icon: "warning", title: problema[0], text: problema[1] })
+
+    return !problema
   }
 
   const getCustomerName = () => {
@@ -728,6 +792,9 @@ function POS() {
     setPaymentType("contado")
     setMedios(selectorVacio())
     setIsvElegido(null)
+    setOperacion("venta")
+    setDestinoId("")
+    setPrimaTexto("")
     setAvisoDePrecios("")
     setNegociaciones({})
     handleClearClient()
@@ -805,6 +872,80 @@ function POS() {
     return null
   }
 
+  /*
+    Entrega aquí y envía el pedido. Sin respuesta, reintentar con la misma
+    clave es seguro: el servidor devuelve el pedido ya entregado sin descontar
+    otra vez.
+  */
+  const enviarPedido = async () => {
+    const confirmacion = await Swal.fire({
+      icon: "question",
+      title: `¿Entregar y enviar a ${destino.name}?`,
+      text: `${nombreDeAqui || "Esta ubicación"} entrega ${unidades} ${unidades === 1 ? "unidad" : "unidades"} ahora y su inventario baja. ${destino.name} recibe el pedido y emite la factura.`,
+      showCancelButton: true,
+      confirmButtonText: "Entregar y enviar",
+      cancelButtonText: "Cancelar",
+    })
+
+    if (!confirmacion.isConfirmed) return null
+
+    const pedido = {
+      destinoId: destino.id,
+      clienteId: selectedClient.id,
+      items: buildSalePayload().items,
+      formaPago: paymentType,
+      cobros: cobrosDeLaVenta(),
+      conIsv,
+      fechaVencimiento: dueDate,
+      rtn: buyerRTN.trim() || selectedClient?.rtn || "",
+    }
+
+    for (;;) {
+      try {
+        const enviado = await entregarPedido(pedido, claveDeVenta)
+
+        clearSaleForm()
+        avisarCambioDePedidos()
+        await existenciasDeMiUbicacion.recargar()
+        void sinConexion?.actualizarCopia({ forzar: true })
+
+        Swal.fire({
+          icon: "success",
+          title: `Pedido ${enviado.numero} enviado`,
+          text: `Se descontó el inventario de ${enviado.origen}. ${enviado.destino} lo verá en su campanita y lo facturará.`,
+        })
+
+        return enviado
+      } catch (error) {
+        if (error?.motivo === "sin-respuesta") {
+          const otraVez = await Swal.fire({
+            icon: "warning",
+            title: "No hubo respuesta del servidor",
+            text: "El pedido pudo haberse registrado o no. Reintentar es seguro: no se descuenta dos veces.",
+            showCancelButton: true,
+            confirmButtonText: "Reintentar",
+            cancelButtonText: "Cancelar",
+          })
+
+          if (otraVez.isConfirmed) continue
+
+          return null
+        }
+
+        if (error?.motivo === "porcentaje-cambiado") {
+          await refrescarEmpresa?.().catch(() => {})
+          Swal.fire({ icon: "warning", title: "El porcentaje adicional cambió", text: `${error.message} El total ya muestra el porcentaje vigente.` })
+
+          return null
+        }
+
+        Swal.fire({ icon: "error", title: "No se pudo enviar el pedido", text: error?.message || "Ocurrió un error al enviar el pedido." })
+
+        return null
+      }
+    }
+  }
+
   const generateSale = async () => {
     let resultado
 
@@ -824,8 +965,14 @@ function POS() {
       return null
     }
 
-    if (paymentType === "contado") {
-      const problema = problemaDelSelector(medios, totalACobrar, tasasDeCargo)
+    if (esPedido && sinServidor) {
+      Swal.fire({ icon: "warning", title: "Sin conexión", text: "Los pedidos para otra ubicación necesitan conexión. Podrás enviarlo cuando vuelva." })
+
+      return null
+    }
+
+    if (llevaMedios) {
+      const problema = problemaDelSelector(medios, totalDeLosMedios, tasasDeCargo)
 
       if (problema) {
         Swal.fire({ icon: "warning", title: "Revisa el medio de pago", text: problema })
@@ -837,6 +984,10 @@ function POS() {
     setFacturando(true)
 
     try {
+      if (esPedido) {
+        return await enviarPedido()
+      }
+
       if (modoSinConexion) {
         return await guardarSinConexion()
       }
@@ -1138,8 +1289,26 @@ function POS() {
           <div className="card-pad pos-panel">
             <div className="pos-panel-cuerpo">
               <h2 id="pos-titulo-venta" className="pos-titulo">
-                Venta actual
+                {esPedido ? "Pedido para otra ubicación" : "Venta actual"}
               </h2>
+
+              {(puedeEnviarPedido || esPedido) && (
+                <OpcionesDePedido
+                  esPedido={esPedido}
+                  onCambiar={(pedido) => {
+                    setOperacion(pedido ? "pedido" : "venta")
+                    setIsvElegido(null)
+                  }}
+                  destinos={destinos}
+                  destinoId={destinoId}
+                  onDestino={(id) => {
+                    setDestinoId(id)
+                    setIsvElegido(null)
+                  }}
+                  sinConexion={sinServidor}
+                  nombreDeAqui={nombreDeAqui}
+                />
+              )}
 
               {/*
                 No es la etiqueta de un campo sino el nombre de un grupo de
@@ -1185,7 +1354,9 @@ function POS() {
                     label={
                       paymentType === "credito"
                         ? "Cliente requerido para crédito"
-                        : "Cliente"
+                        : esPedido
+                          ? "Cliente requerido para el pedido"
+                          : "Cliente"
                     }
                     placeholder={
                       paymentType === "credito"
@@ -1194,8 +1365,8 @@ function POS() {
                     }
                     value={clientSearch}
                     selectedClient={selectedClient}
-                    required={paymentType === "credito"}
-                    allowFreeText={paymentType === "contado"}
+                    required={paymentType === "credito" || esPedido}
+                    allowFreeText={paymentType === "contado" && !esPedido}
                     onChange={handleClientSearchChange}
                     onSelect={handleSelectClient}
                     onClear={handleClearClient}
@@ -1235,10 +1406,30 @@ function POS() {
                 </div>
               )}
 
-              {paymentType === "contado" && (
+              {esPedido && paymentType === "credito" && (
+                <div className="field pos-campo">
+                  <label htmlFor="pos-prima-del-pedido">
+                    Prima cobrada aquí <span className="etiqueta-suave">(opcional)</span>
+                  </label>
+
+                  <input
+                    id="pos-prima-del-pedido"
+                    type="text"
+                    inputMode="decimal"
+                    placeholder="0.00"
+                    value={primaTexto}
+                    onChange={(event) => {
+                      setPrimaTexto(event.target.value)
+                      setMedios(selectorVacio())
+                    }}
+                  />
+                </div>
+              )}
+
+              {llevaMedios && (
                 <SelectorDeMedios
                   valor={medios}
-                  total={totalACobrar}
+                  total={totalDeLosMedios}
                   onCambiar={setMedios}
                 />
               )}
@@ -1373,6 +1564,8 @@ function POS() {
                     <input
                       type="checkbox"
                       checked={conIsv}
+                      disabled={esPedido && isvFijo}
+                      title={esPedido && isvFijo ? "La ubicación que factura emite facturas fiscales: lleva ISV" : undefined}
                       onChange={(event) => setIsvElegido(event.target.checked)}
                     />
                     ISV ({tasaDeLaEmpresa}%)
@@ -1392,33 +1585,51 @@ function POS() {
                 <div className="totals-row grand">
                   <span>Total</span>
 
-                  <span className="v">{formatMoney(total + cargo)}</span>
+                  <span className="v">{formatMoney(conPrima ? total : total + cargo)}</span>
                 </div>
+
+                {conPrima && (
+                  <>
+                    <div className="totals-row">
+                      <span>Prima a cobrar aquí</span>
+
+                      <span className="v">{formatMoney(prima + cargo)}</span>
+                    </div>
+
+                    <div className="totals-row">
+                      <span>Queda a crédito</span>
+
+                      <span className="v">{formatMoney(total - prima)}</span>
+                    </div>
+                  </>
+                )}
               </div>
 
-              {paymentType === "contado" && (
-                <AvisoDeMedios valor={medios} total={totalACobrar} tasas={tasasDeCargo} />
+              {llevaMedios && (
+                <AvisoDeMedios valor={medios} total={totalDeLosMedios} tasas={tasasDeCargo} />
               )}
 
               <div className="pos-acciones">
                 <button
                   type="button"
                   className="btn btn-primary btn-lg btn-block"
-                  disabled={cart.length === 0 || facturando || !existenciaLista || bloqueadoSinConexion || mediosSinCuadrar || tipoPendiente || preciosCargando || preciosFallo || precioPendiente}
+                  disabled={cart.length === 0 || facturando || !existenciaLista || bloqueadoSinConexion || mediosSinCuadrar || (!esPedido && tipoPendiente) || preciosCargando || preciosFallo || precioPendiente || (esPedido && (!destino || sinServidor))}
                   onClick={generateSale}
                 >
-                  {textoDelBotonDeVenta(facturando, modoSinConexion)}
+                  {textoDelBotonDeVenta(facturando, modoSinConexion, esPedido)}
                 </button>
 
                 <div className="pos-acciones-secundarias">
-                  <button
-                    type="button"
-                    className="btn btn-secondary"
-                    disabled={cart.length === 0 || precioPendiente}
-                    onClick={openPreview}
-                  >
-                    Vista previa
-                  </button>
+                  {!esPedido && (
+                    <button
+                      type="button"
+                      className="btn btn-secondary"
+                      disabled={cart.length === 0 || precioPendiente}
+                      onClick={openPreview}
+                    >
+                      Vista previa
+                    </button>
+                  )}
 
                   <button
                     type="button"

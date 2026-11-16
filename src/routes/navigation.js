@@ -19,6 +19,10 @@ export const NAV_ROUTES = [
     permission: PERMISSIONS.POS,
   },
   {
+    path: "/pedidos",
+    permission: PERMISSIONS.POS,
+  },
+  {
     path: "/quotes",
     permission: PERMISSIONS.QUOTES,
   },
