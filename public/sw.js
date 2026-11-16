@@ -86,18 +86,20 @@ self.addEventListener("install", (event) => {
   event.origin en los mensajes de un cliente; entonces se mira la dirección
   de la página que lo mandó.
 */
-function origenDelMensaje(event) {
-  if (event.origin) return event.origin
-
+function origenDeLaPagina(cliente) {
   try {
-    return new URL(event.source.url).origin
+    return new URL(cliente.url).origin
   } catch {
     return ""
   }
 }
 
 self.addEventListener("message", (event) => {
-  if (origenDelMensaje(event) !== self.location.origin) return
+  const delMismoSitio =
+    event.origin === self.location.origin ||
+    (!event.origin && origenDeLaPagina(event.source) === self.location.origin)
+
+  if (!delMismoSitio) return
 
   if (event.data && event.data.tipo === "ACTIVAR") {
     self.skipWaiting()
