@@ -1,6 +1,8 @@
 import { useMemo, useState } from "react"
 import Swal from "sweetalert2"
 
+import { useBloqueoDeActualizacion } from "./useBloqueoDeActualizacion"
+
 import {
   EXCEDE_EXISTENCIAS,
   addProductToCart,
@@ -46,6 +48,9 @@ export function useCarrito({
   existenciaDe = existenciaEnCatalogo,
 } = {}) {
   const [lineas, setLineas] = useState(lineasIniciales)
+
+  // Un carrito con productos (venta, pedido, cotización o precio negociado) no se pierde por actualizar.
+  useBloqueoDeActualizacion(lineas.length > 0, "carrito")
 
   /*
     Cuántas unidades pide el usuario de cada producto antes de agregarlo.

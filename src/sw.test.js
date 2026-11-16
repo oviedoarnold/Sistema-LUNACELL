@@ -116,6 +116,7 @@ describe("service worker · migración de caché", () => {
       "activate",
       "fetch",
       "install",
+      "message",
     ])
   })
 
@@ -147,14 +148,40 @@ describe("service worker · migración de caché", () => {
   })
 
   /*
-    Sin skipWaiting el service worker nuevo espera a que se cierren todas
-    las pestañas del sitio para activarse, y mientras tanto el usuario
-    sigue con la versión anterior después de un despliegue.
+    La versión nueva no toma el control sola en medio de una venta: espera a
+    que la aplicación decida que es seguro y se lo pida (src/lib/actualizacion).
   */
-  it("no se queda esperando en la instalación", async () => {
+  it("se instala sin activarse sola", async () => {
     await sw.disparar("install")
 
+    expect(sw.contexto.self.skipWaitingLlamado).toBe(false)
+  })
+
+  const ORIGEN = "https://lunacell.oviedoarnold.lat"
+
+  it("se activa cuando la aplicación se lo pide, y solo con esa orden", () => {
+    sw.manejadores.message({ origin: ORIGEN, data: { tipo: "OTRA_COSA" } })
+    sw.manejadores.message({ origin: ORIGEN, data: null })
+    expect(sw.contexto.self.skipWaitingLlamado).toBe(false)
+
+    sw.manejadores.message({ origin: ORIGEN, data: { tipo: "ACTIVAR" } })
     expect(sw.contexto.self.skipWaitingLlamado).toBe(true)
+  })
+
+  it("también cuando el navegador no llena el origen, si la página es del mismo sitio", () => {
+    sw.manejadores.message({ origin: "", source: { url: `${ORIGEN}/pos` }, data: { tipo: "ACTIVAR" } })
+
+    expect(sw.contexto.self.skipWaitingLlamado).toBe(true)
+  })
+
+  it.each([
+    ["otro origen", { origin: "https://otro.example", data: { tipo: "ACTIVAR" } }],
+    ["una página de otro sitio sin origen", { origin: "", source: { url: "https://otro.example/x" }, data: { tipo: "ACTIVAR" } }],
+    ["un mensaje sin origen ni página", { data: { tipo: "ACTIVAR" } }],
+  ])("ignora la orden que llega de %s", (_, evento) => {
+    sw.manejadores.message(evento)
+
+    expect(sw.contexto.self.skipWaitingLlamado).toBe(false)
   })
 
   it("no borra nada cuando la única caché es la actual", async () => {
@@ -230,5 +257,23 @@ describe("service worker · navegación", () => {
     await sw.pedirPagina("https://lunacell.oviedoarnold.lat/pos")
 
     expect(sw.guardadas).toEqual([])
+  })
+})
+
+/*
+  La versión publicada y las funciones del servidor no pasan por la caché:
+  respondida desde ahí, la aplicación nunca vería que hay una versión nueva.
+*/
+describe("service worker · lo que siempre va a la red", () => {
+  it.each(["/version.json?t=1", "/api/health"])("%s no se responde desde la caché", async (ruta) => {
+    const sw = montarServiceWorker()
+
+    expect(await sw.pedirPagina(`https://lunacell.oviedoarnold.lat${ruta}`, "cors")).toBeUndefined()
+  })
+
+  it("los archivos de la aplicación sí", async () => {
+    const sw = montarServiceWorker()
+
+    expect(await sw.pedirPagina("https://lunacell.oviedoarnold.lat/assets/index-abc.js", "cors")).toBeDefined()
   })
 })

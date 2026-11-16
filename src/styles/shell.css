@@ -621,3 +621,56 @@ body.sin-desplazamiento {
     transition: none;
   }
 }
+
+/*
+  El aviso de versión nueva (AvisoDeActualizacion). Fijo abajo y por encima
+  de todo, también de las ventanas: tiene que verse en cualquier pantalla
+  mientras cuenta. No tiene botones, a propósito: no hay nada que decidir.
+*/
+.aviso-actualizacion {
+  position: fixed;
+  left: 50%;
+  bottom: calc(var(--space-4) + env(safe-area-inset-bottom));
+  transform: translateX(-50%);
+  z-index: 2000;
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  width: min(560px, calc(100vw - 2 * var(--space-4)));
+  padding: var(--space-3) var(--space-4);
+  background: var(--lc-black-900);
+  color: var(--lc-white);
+  border: 1px solid var(--lc-gold-500);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg);
+}
+
+.aviso-actualizacion-icono {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  color: var(--lc-gold-400);
+}
+
+.aviso-actualizacion-texto {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 14px;
+  line-height: 1.4;
+}
+
+.aviso-actualizacion-cuenta {
+  flex: none;
+  min-width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--lc-gold-500);
+  color: var(--lc-gray-900);
+  font-family: var(--font-display);
+  font-size: 18px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}

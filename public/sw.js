@@ -67,8 +67,42 @@ async function precargar() {
   }
 }
 
+/*
+  La versión nueva se instala y precarga, pero no toma el control sola.
+
+  Antes llamaba a skipWaiting() aquí y se activaba en cuanto terminaba de
+  instalarse, con la página abierta en medio de una venta. Ahora espera a que
+  la aplicación decida que es seguro (src/lib/actualizacion): sin carrito,
+  sin venta ni pedido en envío, sin abono abierto y con conexión. Entonces
+  le manda {tipo: "ACTIVAR"} y recarga. La primera instalación no espera:
+  no hay versión anterior a la que reemplazar.
+*/
 self.addEventListener("install", (event) => {
-  event.waitUntil(precargar().then(() => self.skipWaiting()))
+  event.waitUntil(precargar())
+})
+
+/*
+  Solo obedece a páginas de su mismo origen. Algunos navegadores no llenan
+  event.origin en los mensajes de un cliente; entonces se mira la dirección
+  de la página que lo mandó.
+*/
+function origenDeLaPagina(cliente) {
+  try {
+    return new URL(cliente.url).origin
+  } catch {
+    return ""
+  }
+}
+
+self.addEventListener("message", (event) => {
+  // Otro origen, o sin origen y desde una página de otro sitio: se ignora.
+  if (event.origin !== self.location.origin && (event.origin || origenDeLaPagina(event.source) !== self.location.origin)) {
+    return
+  }
+
+  if (event.data && event.data.tipo === "ACTIVAR") {
+    self.skipWaiting()
+  }
 })
 
 /*
@@ -105,10 +139,9 @@ async function limpiarAssetsViejos() {
 
   Es lo que retira de golpe la cache de una version anterior —incluida
   "ferreteria-v1", la del sistema del que salio este— en el primer arranque
-  despues de desplegar. Con skipWaiting() en la instalacion y clients.claim()
-  aqui, el service worker nuevo toma el control sin esperar a que el usuario
-  cierre todas las pestañas, que es lo que dejaba a la gente viendo la
-  version vieja despues de un despliegue.
+  despues de desplegar. Con clients.claim() aqui, el service worker nuevo
+  toma el control de las pestañas abiertas en cuanto la aplicación lo activa,
+  sin esperar a que el usuario las cierre todas.
 */
 self.addEventListener("activate", (event) => {
   event.waitUntil(
@@ -128,6 +161,15 @@ self.addEventListener("activate", (event) => {
 
 function esArchivoPropio(url) {
   return url.origin === self.location.origin
+}
+
+/*
+  Lo que siempre va a la red: la versión publicada y las funciones del
+  servidor. Respondidas desde la caché, la aplicación creería que no hay
+  versión nueva y el healthcheck contestaría siempre lo mismo.
+*/
+function vaSiempreALaRed(url) {
+  return url.pathname === "/version.json" || url.pathname.startsWith("/api/")
 }
 
 /*
@@ -205,7 +247,7 @@ self.addEventListener("fetch", (event) => {
 
   const url = new URL(request.url)
 
-  if (!esArchivoPropio(url)) {
+  if (!esArchivoPropio(url) || vaSiempreALaRed(url)) {
     return
   }
 

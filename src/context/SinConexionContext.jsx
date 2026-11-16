@@ -17,6 +17,7 @@ import { pedirAlmacenamientoPersistente } from "../lib/sinConexion/persistencia"
 import { perfilSigueVigente } from "../lib/sinConexion/perfilLocal"
 import { crearSincronizador } from "../lib/sinConexion/sincronizador"
 import { construirVentaLocal } from "../lib/sinConexion/venta"
+import { useBloqueoDeActualizacion } from "../hooks/useBloqueoDeActualizacion"
 
 /*
   El modo sin conexión del POS (OFF-1.3): une el motor de OFF-1.2 con la
@@ -217,6 +218,9 @@ export function SinConexionProvider({
 
   const [conexion, setConexion] = useState(() => (ventana?.navigator?.onLine === false ? "sin_red" : "comprobando"))
   const [sincronizando, setSincronizando] = useState(false)
+
+  // Las ventas guardadas en el teléfono sobreviven a la actualización; solo no se recarga a mitad de un envío.
+  useBloqueoDeActualizacion(sincronizando, "sincronizacion")
   const [ultimaSincronizacion, setUltimaSincronizacion] = useState(null)
   const [errorDeSincronizacion, setErrorDeSincronizacion] = useState("")
 

@@ -5,7 +5,12 @@ import { fileURLToPath, pathToFileURL } from 'node:url'
 import { defineConfig, build as construir } from 'vite'
 import react from '@vitejs/plugin-react'
 
+import { versionDeLaCompilacion } from './scripts/versionDeLaCompilacion.mjs'
+
 const CARPETA_TEMPORAL = 'dist-prerender'
+
+// La versión de esta compilación, la misma que devuelve /api/health.
+const VERSION = versionDeLaCompilacion()
 
 /*
   La carpeta de salida de la compilación en curso: dist/ en producción,
@@ -129,12 +134,47 @@ export function precargarArchivosDelBuild() {
   }
 }
 
+/*
+  Escribe dist/version.json con la versión de la compilación.
+
+  Es lo que consulta la aplicación abierta para saber si se publicó otra
+  versión (src/lib/actualizacion). Es un archivo estático de la misma
+  compilación que el JavaScript, así que nunca dice otra cosa que lo que se
+  publicó con él; se sirve sin caché y el service worker no lo guarda.
+*/
+export function escribirVersion(version = VERSION) {
+  let esCompilacionDeServidor = false
+  let salida = 'dist'
+
+  return {
+    name: 'escribir-version',
+    apply: 'build',
+
+    configResolved(configuracion) {
+      esCompilacionDeServidor = Boolean(configuracion.build.ssr)
+      salida = carpetaDeSalida(configuracion)
+    },
+
+    writeBundle() {
+      if (esCompilacionDeServidor) return
+
+      writeFileSync(path.join(salida, 'version.json'), `${JSON.stringify({ version })}\n`)
+    },
+  }
+}
+
 export default defineConfig({
   plugins: [
     react(),
     prerenderizarLogin(),
     precargarArchivosDelBuild(),
+    escribirVersion(),
   ],
+
+  // La versión que lleva el JavaScript (src/lib/actualizacion/version.js).
+  define: {
+    __LUNACELL_VERSION__: JSON.stringify(VERSION),
+  },
 
   build: {
     /*
