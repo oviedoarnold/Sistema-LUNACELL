@@ -95,11 +95,10 @@ function origenDeLaPagina(cliente) {
 }
 
 self.addEventListener("message", (event) => {
-  const delMismoSitio =
-    event.origin === self.location.origin ||
-    (!event.origin && origenDeLaPagina(event.source) === self.location.origin)
-
-  if (!delMismoSitio) return
+  // Otro origen, o sin origen y desde una página de otro sitio: se ignora.
+  if (event.origin !== self.location.origin && (event.origin || origenDeLaPagina(event.source) !== self.location.origin)) {
+    return
+  }
 
   if (event.data && event.data.tipo === "ACTIVAR") {
     self.skipWaiting()
