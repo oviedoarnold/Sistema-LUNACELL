@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react"
+import { useBloqueoDeActualizacion } from "../../hooks/useBloqueoDeActualizacion"
 
 import SelectorDeMedios, { AvisoDeMedios } from "../pagos/SelectorDeMedios"
 import ModalShell from "../forms/ModalShell"
@@ -36,6 +37,9 @@ function ModalDeCobro({
   onConfirmar,
   onCerrar,
 }) {
+  // Un abono abierto no se pierde por actualizar.
+  useBloqueoDeActualizacion(true, "abono")
+
   const [monto, setMonto] = useState("")
   const [nota, setNota] = useState("")
   const [avisoLocal, setAvisoLocal] = useState("")

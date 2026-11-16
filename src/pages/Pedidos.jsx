@@ -11,6 +11,7 @@ import DetalleDePedido from "../components/pedidos/DetalleDePedido"
 import { SalesContext } from "../context/contexts"
 import { useAuth } from "../hooks/useAuth"
 import { avisarCambioDePedidos } from "../hooks/useAvisosDePedidos"
+import { useBloqueoDeActualizacion } from "../hooks/useBloqueoDeActualizacion"
 import { useSinConexion } from "../hooks/useSinConexion"
 import { ESTADOS_DE_PEDIDO, facturarPedido, marcarPedidoLeido, traerBandeja, traerDetalleDePedido } from "../lib/api/pedidos"
 import { fechaYHora, formatMoney } from "../utils/format"
@@ -55,6 +56,9 @@ function Pedidos() {
   const [vista, setVista] = useState("recibidos")
   const [estado, setEstado] = useState("pendiente")
   const [facturando, setFacturando] = useState(false)
+
+  // Facturar un pedido no se interrumpe por actualizar.
+  useBloqueoDeActualizacion(facturando, "factura-de-pedido")
   const [facturaId, setFacturaId] = useState(null)
 
   /*

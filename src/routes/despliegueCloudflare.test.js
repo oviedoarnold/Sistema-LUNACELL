@@ -134,6 +134,12 @@ describe("Cloudflare Pages · encabezados", () => {
     }
   )
 
+  // La aplicación abierta lo consulta para saber si hay versión nueva: cacheado, nunca la vería.
+  it("/version.json no se cachea, ni en Cloudflare ni en Vercel", () => {
+    expect(reglas["/version.json"]).toEqual({ "Cache-Control": "no-store" })
+    expect(encabezadosDeVercel("/version.json")).toEqual({ "Cache-Control": "no-store" })
+  })
+
   it.each(["/icons/*", "/imagenes/*"])("%s se cachea un día", (ruta) => {
     expect(reglas[ruta]).toEqual(encabezadosDeVercel("/(icons|imagenes)/(.*)"))
   })

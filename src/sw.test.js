@@ -116,6 +116,7 @@ describe("service worker · migración de caché", () => {
       "activate",
       "fetch",
       "install",
+      "message",
     ])
   })
 
@@ -147,13 +148,21 @@ describe("service worker · migración de caché", () => {
   })
 
   /*
-    Sin skipWaiting el service worker nuevo espera a que se cierren todas
-    las pestañas del sitio para activarse, y mientras tanto el usuario
-    sigue con la versión anterior después de un despliegue.
+    La versión nueva no toma el control sola en medio de una venta: espera a
+    que la aplicación decida que es seguro y se lo pida (src/lib/actualizacion).
   */
-  it("no se queda esperando en la instalación", async () => {
+  it("se instala sin activarse sola", async () => {
     await sw.disparar("install")
 
+    expect(sw.contexto.self.skipWaitingLlamado).toBe(false)
+  })
+
+  it("se activa cuando la aplicación se lo pide, y solo con esa orden", () => {
+    sw.manejadores.message({ data: { tipo: "OTRA_COSA" } })
+    sw.manejadores.message({ data: null })
+    expect(sw.contexto.self.skipWaitingLlamado).toBe(false)
+
+    sw.manejadores.message({ data: { tipo: "ACTIVAR" } })
     expect(sw.contexto.self.skipWaitingLlamado).toBe(true)
   })
 
@@ -230,5 +239,23 @@ describe("service worker · navegación", () => {
     await sw.pedirPagina("https://lunacell.oviedoarnold.lat/pos")
 
     expect(sw.guardadas).toEqual([])
+  })
+})
+
+/*
+  La versión publicada y las funciones del servidor no pasan por la caché:
+  respondida desde ahí, la aplicación nunca vería que hay una versión nueva.
+*/
+describe("service worker · lo que siempre va a la red", () => {
+  it.each(["/version.json?t=1", "/api/health"])("%s no se responde desde la caché", async (ruta) => {
+    const sw = montarServiceWorker()
+
+    expect(await sw.pedirPagina(`https://lunacell.oviedoarnold.lat${ruta}`, "cors")).toBeUndefined()
+  })
+
+  it("los archivos de la aplicación sí", async () => {
+    const sw = montarServiceWorker()
+
+    expect(await sw.pedirPagina("https://lunacell.oviedoarnold.lat/assets/index-abc.js", "cors")).toBeDefined()
   })
 })

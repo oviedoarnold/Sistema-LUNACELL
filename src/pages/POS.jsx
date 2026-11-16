@@ -45,6 +45,7 @@ import PrecioDeLinea from "../components/pos/PrecioDeLinea"
 import OpcionesDePedido from "../components/pos/OpcionesDePedido"
 import { entregarPedido } from "../lib/api/pedidos"
 import { avisarCambioDePedidos } from "../hooks/useAvisosDePedidos"
+import { useBloqueoDeActualizacion } from "../hooks/useBloqueoDeActualizacion"
 import { esPrecioValido, necesitaMotivo, problemaDelPrecioNegociado } from "../utils/preciosNegociados"
 import PanelDeVentasLocales from "../components/sinConexion/PanelDeVentasLocales"
 import { useAuth } from "../hooks/useAuth"
@@ -241,6 +242,9 @@ function POS() {
   const [claveDeVenta, setClaveDeVenta] = useState(claveDeIdempotencia)
 
   const [facturando, setFacturando] = useState(false)
+
+  // Una venta o un pedido que se está enviando no se interrumpe por actualizar.
+  useBloqueoDeActualizacion(facturando, "venta")
   const { clients: clientesEnLinea = [], addClient } = useContext(ClientsContext)
   const clients = modoSinConexion ? clientesDeLaCopia : clientesEnLinea
 

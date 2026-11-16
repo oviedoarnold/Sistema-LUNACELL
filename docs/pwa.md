@@ -13,6 +13,8 @@
 | `display` | `standalone` |
 | Iconos | 192×192, 512×512 y 512×512 maskable |
 | Registro | `src/registrarServiceWorker.js`, llamado desde `src/main.jsx` |
+| Actualización | `src/components/AvisoDeActualizacion.jsx` y `src/lib/actualizacion/` |
+| Versión publicada | `/version.json`, sin caché |
 
 ## Estrategia principal
 
@@ -29,6 +31,51 @@ ni copia en caché, se sirve `/offline.html`.
 Como `/index.html` solo se guarda una página servida bien y sin redirección: el 307
 del middleware hacia `/login` no se guarda, porque sin red la aplicación respondería
 con esa redirección en vez de abrir.
+
+## Actualización automática
+
+Cuando se publica una versión nueva, la aplicación abierta avisa y se instala sola
+en 15 segundos. El vendedor no pulsa nada y no puede posponerla.
+
+**Cómo sabe que hay versión nueva.** La compilación escribe su versión en dos
+lugares: dentro del JavaScript y en `/version.json`. Las dos salen del mismo commit y
+con la misma forma que `/api/health` (`scripts/versionDeLaCompilacion.mjs`). La
+aplicación compara la suya con la publicada al abrir, al volver a la pestaña, al
+recuperar la conexión y cada cinco minutos con la pantalla a la vista, con un mínimo de
+un minuto entre consultas.
+
+`/version.json` se sirve con `no-store` y el service worker no lo guarda. No se usa
+`/api/health` para esto, porque revisa la base y la autenticación en cada llamada.
+
+**La cuenta.** Aparece «Hay una nueva versión de LUNACELL disponible. Se instalará
+automáticamente en 15 segundos.» y cuenta hasta cero. Al llegar a cero:
+- Si hay un service worker nuevo esperando, se le pide que se active (`{tipo: "ACTIVAR"}`).
+- La página se recarga cuando el service worker nuevo ya la controla.
+
+**Lo que no se interrumpe.** Mientras exista alguna de estas operaciones, la cuenta
+termina pero la recarga espera, con el aviso «Actualización pendiente. Se instalará
+automáticamente al finalizar la operación actual.»:
+- un carrito con productos: venta, pedido, cotización o precio negociado;
+- una venta o un pedido enviándose;
+- un abono abierto;
+- la factura de un pedido en curso;
+- una sincronización de ventas sin conexión.
+
+En cuanto termina, se instala sola. Cada pantalla marca su operación con
+`useBloqueoDeActualizacion`. Sin conexión también espera, y se instala al recuperarla.
+
+**Lo que se conserva.** La recarga no borra `localStorage`, la base local (perfil y
+ventas sin conexión) ni la sesión.
+
+**Sin ciclos.** Si después de recargar sigue la versión vieja, no vuelve a recargar
+enseguida. Espera 2, 4, 8… minutos, hasta un máximo de 30, y sigue intentándolo. El
+registro vive en `sessionStorage` y se borra al llegar a la versión buscada.
+
+**El service worker.** Ya no se activa solo al instalarse. Precarga la versión nueva y
+espera a que la aplicación le diga que es seguro. La primera instalación no espera.
+
+Los equipos que tengan abierta una versión anterior a este mecanismo lo reciben la
+próxima vez que abran o recarguen la aplicación. Desde entonces, se actualizan solos.
 
 ## Dominio oficial
 
