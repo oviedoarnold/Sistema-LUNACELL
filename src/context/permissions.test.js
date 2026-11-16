@@ -89,6 +89,15 @@ describe("los conjuntos de permisos", () => {
     permisos_usuario. Cambiarlos aquí sin tocar la base dejaría a la
     aplicación guardando secciones que la base rechaza.
   */
+  // 0045: los mismos nombres que acepta permisos_usuario, y nadie los recibe por omisión.
+  it("los privilegios de pedidos usan los nombres de la base y no vienen con un vendedor nuevo", () => {
+    expect(PERMISSIONS.ORDERS_RESOLVE).toBe("orders-resolve")
+    expect(PERMISSIONS.ORDERS_CANCEL).toBe("orders-cancel")
+    expect(SELLER_PERMISSIONS).not.toContain(PERMISSIONS.ORDERS_RESOLVE)
+    expect(SELLER_PERMISSIONS).not.toContain(PERMISSIONS.ORDERS_CANCEL)
+    expect(ADMIN_PERMISSIONS).toEqual(expect.arrayContaining([PERMISSIONS.ORDERS_RESOLVE, PERMISSIONS.ORDERS_CANCEL]))
+  })
+
   it("los permisos de inventario usan los nombres que la base acepta", () => {
     expect(PERMISSIONS.INVENTORY_OWN).toBe("inventory-own")
     expect(PERMISSIONS.INVENTORY_ALL).toBe("inventory-all")

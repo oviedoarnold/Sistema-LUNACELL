@@ -407,6 +407,24 @@ function Settings() {
       description:
         "Consultar y administrar bodegas, tiendas y camiones.",
     },
+    /*
+      Pedidos interubicación (0045). Se asignan uno por uno y valen solo para
+      pedidos de la ubicación del usuario; la base lo vuelve a comprobar.
+    */
+    {
+      id:
+        permissions.ORDERS_RESOLVE,
+      label: "Resolver pedidos interubicación",
+      description:
+        "Revisar pedidos rechazados de su ubicación y decidir si se reenvían o se facturan en origen. Las acciones se habilitan en la etapa C.",
+    },
+    {
+      id:
+        permissions.ORDERS_CANCEL,
+      label: "Autorizar cancelación de pedidos",
+      description:
+        "Autorizar o rechazar la cancelación de un pedido entregado de su ubicación, con motivo, devolución y reembolso. Las acciones se habilitan en la etapa C.",
+    },
   ]
 
   const resetUserForm =

@@ -131,6 +131,7 @@ sql_paths = [
   "./migrations/0042_precios_por_cliente.sql",
   "./migrations/0043_precios_negociados.sql",
   "./migrations/0044_porcentaje_adicional_configurable.sql",
+  "./migrations/0045_pedidos_interubicacion.sql",
   "./seed.sql",
 ]
 

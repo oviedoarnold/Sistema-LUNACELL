@@ -13,14 +13,12 @@ import { tituloDeLaRuta } from "./menuDelPanel"
   El título sale del mismo menú que dibuja la navegación, así que un
   módulo se llama igual en los dos sitios.
 
-  Lo que deliberadamente no lleva: ni campana de notificaciones ni
-  selector de ubicación. No existe ninguna de las dos cosas, y un control
-  que no hace nada es peor que no tenerlo. El hueco de la ubicación activa
-  se abrirá aquí cuando el inventario pase a contarse por ubicación.
+  Lo que deliberadamente no lleva: selector de ubicación. Un control que
+  no hace nada es peor que no tenerlo.
 */
 /*
-  `children` va a la derecha: el armazón pone ahí la cuenta, que solo se
-  ve en tableta y teléfono.
+  `children` va a la derecha: el armazón pone ahí la campanita de pedidos
+  (0045) y la cuenta, que solo se ve en tableta y teléfono.
 */
 function Topbar({ onAbrirMenu = () => {}, menuAbierto = false, children }) {
   const { pathname } = useLocation()

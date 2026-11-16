@@ -121,6 +121,8 @@ export function aVentaDeApp(fila, empresa) {
 
     locationId: fila.ubicacion_id || null,
     origin: fila.origen || "en_linea",
+    // Factura de un pedido interubicación (0045): la mercadería salió de otra ubicación.
+    pedidoId: fila.pedido_id || null,
     anulacion: aAnulacionDeApp(fila.anulaciones_venta),
 
     /*

@@ -36,6 +36,16 @@ export const PERMISSIONS = {
   */
   INVENTORY_OWN: "inventory-own",
   INVENTORY_ALL: "inventory-all",
+
+  /*
+    Pedidos interubicación (0045). No abren ninguna pantalla: autorizan
+    decisiones sobre pedidos de las ubicaciones del usuario, y la base las
+    exige con usuario_puede_resolver_pedido() y
+    usuario_puede_autorizar_cancelacion(). No se reparten solos: ni el
+    vendedor nuevo ni el contador los reciben.
+  */
+  ORDERS_RESOLVE: "orders-resolve",
+  ORDERS_CANCEL: "orders-cancel",
 }
 
 /*

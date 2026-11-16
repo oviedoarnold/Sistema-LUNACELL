@@ -10,6 +10,7 @@ import {
   FaHandHoldingUsd,
   FaHistory,
   FaHome,
+  FaInbox,
   FaTruck,
   FaUsers,
   FaWarehouse,
@@ -55,6 +56,16 @@ export const GRUPOS_DEL_MENU = [
         to: "/pos",
         label: "Facturar",
         Icono: FaCashRegister,
+        permiso: PERMISSIONS.POS,
+      },
+      /*
+        Los pedidos que otra ubicación entregó para facturar aquí, y los que
+        salieron de aquí. Los factura quien factura: mismo permiso que el POS.
+      */
+      {
+        to: "/pedidos",
+        label: "Pedidos",
+        Icono: FaInbox,
         permiso: PERMISSIONS.POS,
       },
       {

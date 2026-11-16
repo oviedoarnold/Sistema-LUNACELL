@@ -53,13 +53,14 @@ async function renderSettings({
   usuariosExtra = [],
   bloqueos = [],
   listadoCaido = null,
+  permisosExtra = [],
 } = {}) {
   const falso = montarSupabaseFalso({
     usuarios: [
       usuarioDePrueba({ rol: "admin", nombre: "Administrador" }),
       ...usuariosExtra,
     ],
-    permisos: permisosDe("u-1", ["settings"]),
+    permisos: [...permisosDe("u-1", ["settings"]), ...permisosExtra],
     sesionInicial: sesionDe("auth-1"),
     tablasExtra: {
       empresas: [
@@ -696,5 +697,65 @@ describe("Settings: el permiso «Anular ventas»", () => {
     )
     const [, { p_secciones }] = falso.rpc.mock.calls.findLast(([nombre]) => nombre === "guardar_permisos_usuario")
     expect([...p_secciones].sort()).toEqual(["sales-history", "sales-void"])
+  })
+})
+
+/*
+  0045: «Resolver pedidos interubicación» y «Autorizar cancelación de pedidos»
+  son privilegios propios del sistema de permisos. El administrador los da y
+  los quita uno por uno; ningún vendedor nuevo los trae y al contador no se le
+  ofrecen. La base los vuelve a comprobar (usuario_puede_resolver_pedido()).
+*/
+describe("Settings: los privilegios de pedidos", () => {
+  const ENCARGADO = usuarioDePrueba({ id: "u-3", authId: "auth-3", nombre: "Encargado de Bodega", email: "bodega@ferreteria.test" })
+  const casilla = (nombre) => screen.getByRole("checkbox", { name: new RegExp(`^${nombre}`, "i") })
+  const editar = async () => {
+    const fila = (await screen.findByText("Encargado de Bodega")).closest("tr")
+
+    fireEvent.click(within(fila).getByRole("button", { name: /editar/i }))
+  }
+  const seccionesGuardadas = async (falso) => {
+    await waitFor(() =>
+      expect(falso.rpc).toHaveBeenCalledWith("guardar_permisos_usuario", expect.objectContaining({ p_usuario: "u-3" }))
+    )
+
+    return [...falso.rpc.mock.calls.findLast(([nombre]) => nombre === "guardar_permisos_usuario")[1].p_secciones].sort()
+  }
+
+  it("se ofrecen a un vendedor, sin marcar, y no al contador", async () => {
+    await renderSettings()
+
+    fireEvent.click(screen.getByRole("button", { name: /nuevo usuario/i }))
+    const modal = document.querySelector(".modal")
+
+    expect(within(modal).getByRole("checkbox", { name: /^resolver pedidos interubicación/i })).not.toBeChecked()
+    expect(within(modal).getByRole("checkbox", { name: /^autorizar cancelación de pedidos/i })).not.toBeChecked()
+
+    fireEvent.change(within(modal).getByLabelText(/^rol$/i), { target: { value: "contador" } })
+
+    expect(within(modal).queryByText("Resolver pedidos interubicación")).not.toBeInTheDocument()
+    expect(within(modal).queryByText("Autorizar cancelación de pedidos")).not.toBeInTheDocument()
+  })
+
+  it("el administrador le da los dos al encargado de Bodega sin tocar sus otros permisos", async () => {
+    const falso = await renderSettings({ usuariosExtra: [ENCARGADO], permisosExtra: permisosDe("u-3", ["pos"]) })
+
+    await editar()
+    fireEvent.click(casilla("resolver pedidos interubicación"))
+    fireEvent.click(casilla("autorizar cancelación de pedidos"))
+    fireEvent.submit(document.querySelector("#form-usuario"))
+
+    expect(await seccionesGuardadas(falso)).toEqual(["orders-cancel", "orders-resolve", "pos"])
+  })
+
+  it("y se los puede retirar por separado", async () => {
+    const falso = await renderSettings({ usuariosExtra: [ENCARGADO], permisosExtra: permisosDe("u-3", ["pos", "orders-resolve", "orders-cancel"]) })
+
+    await editar()
+    expect(casilla("resolver pedidos interubicación")).toBeChecked()
+    fireEvent.click(casilla("autorizar cancelación de pedidos"))
+    fireEvent.submit(document.querySelector("#form-usuario"))
+
+    expect(await seccionesGuardadas(falso)).toEqual(["orders-resolve", "pos"])
   })
 })

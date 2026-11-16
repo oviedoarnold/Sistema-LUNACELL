@@ -19,6 +19,9 @@ export const aUbicacionDeApp = (fila) => ({
   active: fila.activa,
   // Solo la cambia un administrador (0027) y solo en camiones y bodegas (0030).
   offline: fila.vende_sin_conexion === true,
+  // Si factura, y si con numeración fiscal: deciden a dónde se puede enviar un pedido (0045).
+  sells: fila.vende !== false,
+  fiscal: fila.emite_fiscal === true,
   createdAt: fila.creada_en || "",
 })
 

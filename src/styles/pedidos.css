@@ -1,0 +1,199 @@
+/*
+  Pedidos interubicación: la bandeja y el detalle. La campanita vive en
+  shell.css, con el resto de la barra superior.
+
+  Las clases del detalle no cuelgan de .pedidos porque la ventana puede
+  dibujarse fuera de la página.
+*/
+
+.pedidos-controles {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin-bottom: var(--space-4);
+}
+
+.pedidos-vistas {
+  flex: 0 1 320px;
+}
+
+.pedidos-filtro {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.pedidos-lista {
+  list-style: none;
+  display: grid;
+  gap: var(--space-3);
+}
+
+.pedidos-tarjeta {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: var(--space-3) var(--space-4);
+  text-align: left;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
+  color: var(--text-primary);
+  cursor: pointer;
+}
+
+.pedidos-tarjeta:hover {
+  border-color: var(--border-strong);
+}
+
+.pedidos-tarjeta:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+/* Un aviso sin leer: el borde de acento a la izquierda. */
+.pedidos-tarjeta.is-nuevo {
+  border-left: 4px solid var(--primary);
+}
+
+.pedidos-tarjeta-fila {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+.pedidos-tarjeta-fila > :first-child {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.pedidos-tarjeta-fila > :last-child {
+  flex: none;
+}
+
+.pedidos-tarjeta-suave {
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.pedidos-insignias {
+  display: inline-flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--space-1);
+}
+
+.pedidos-cliente {
+  font-weight: 600;
+}
+
+/* ── DETALLE ─────────────────────────────────────────────── */
+
+.pedidos-detalle {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.pedidos-datos {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-3) var(--space-4);
+}
+
+.pedidos-dato dt {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.pedidos-dato dd {
+  margin: var(--space-1) 0 0;
+  overflow-wrap: anywhere;
+}
+
+.pedidos-subtitulo {
+  font-size: 14px;
+  font-weight: 600;
+  margin-top: var(--space-2);
+}
+
+.pedidos-productos,
+.pedidos-cobros,
+.pedidos-eventos {
+  list-style: none;
+  display: grid;
+  gap: var(--space-2);
+}
+
+.pedidos-productos li,
+.pedidos-cobros li {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding-bottom: var(--space-2);
+  border-bottom: 1px solid var(--border);
+}
+
+.pedidos-productos li > :last-child,
+.pedidos-cobros li > :last-child {
+  flex: none;
+}
+
+.pedidos-producto-nombre,
+.pedidos-cobros li > :first-child {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.pedidos-productos small,
+.pedidos-cobros small {
+  display: block;
+  font-size: 12.5px;
+  color: var(--text-muted);
+}
+
+.pedidos-precio-nota {
+  color: var(--primary-text);
+}
+
+.pedidos-eventos li {
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.pedidos-totales {
+  border-top: 1px solid var(--border);
+  padding-top: var(--space-2);
+}
+
+@media (max-width: 639px) {
+  .pedidos-vistas {
+    flex: 1 1 100%;
+  }
+
+  .pedidos-filtro {
+    flex: 1 1 100%;
+  }
+
+  .pedidos-filtro select {
+    flex: 1 1 auto;
+  }
+
+  .pedidos-datos {
+    grid-template-columns: 1fr;
+  }
+
+  .pedidos-tarjeta-suave {
+    flex-direction: column;
+    gap: 0;
+  }
+}

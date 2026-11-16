@@ -418,6 +418,146 @@ body.sin-desplazamiento {
   border-color: var(--danger);
 }
 
+/*
+  La campanita de pedidos: a la derecha, y en tableta y teléfono junto a la
+  cuenta. El número es de pedidos pendientes; en dorado si hay alguno sin leer.
+*/
+.topbar-campana {
+  position: relative;
+  margin-left: auto;
+}
+
+.topbar-campana + .topbar-cuenta {
+  margin-left: 0;
+}
+
+.topbar-campana-boton {
+  position: relative;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  background: var(--surface);
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.topbar-campana-boton:hover {
+  border-color: var(--border-strong);
+  color: var(--text-primary);
+}
+
+.topbar-campana-boton:focus-visible,
+.topbar-campana-aviso:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+.topbar-campana-boton svg {
+  width: 17px;
+  height: 17px;
+}
+
+.topbar-campana-numero {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 5px;
+  border-radius: 10px;
+  background: var(--text-secondary);
+  color: var(--surface);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 20px;
+  text-align: center;
+}
+
+.topbar-campana-numero.is-nuevo {
+  background: var(--primary);
+  color: var(--on-primary);
+}
+
+.topbar-campana-menu {
+  position: absolute;
+  top: calc(100% + var(--space-2));
+  right: 0;
+  z-index: 30;
+  width: 320px;
+  max-width: calc(100vw - 2 * var(--space-4));
+  padding: var(--space-3);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg);
+}
+
+.topbar-campana-titulo {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.topbar-campana-lista {
+  list-style: none;
+  display: grid;
+  gap: var(--space-2);
+}
+
+.topbar-campana-aviso {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--text-primary);
+  text-align: left;
+  font-size: 13px;
+}
+
+.topbar-campana-aviso.is-nuevo {
+  border-left: 4px solid var(--primary);
+}
+
+.topbar-campana-aviso-linea {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.topbar-campana-aviso-linea > :first-child {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.topbar-campana-aviso-linea > :last-child {
+  flex: none;
+}
+
+/* En el teléfono la campanita no está en la esquina: el menú se ancla a los márgenes de la pantalla. */
+@media (max-width: 639px) {
+  .topbar-campana-menu {
+    position: fixed;
+    top: calc(60px + env(safe-area-inset-top) + var(--space-2));
+    left: var(--space-4);
+    right: var(--space-4);
+    width: auto;
+    max-width: none;
+  }
+}
+
 @media (max-width: 1023px) {
   .sidebar {
     position: fixed;

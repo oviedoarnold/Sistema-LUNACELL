@@ -2,6 +2,7 @@ import { useEffect, useState } from "react"
 import { useLocation } from "react-router-dom"
 
 import MenuDeCuenta from "../components/shell/MenuDeCuenta"
+import CampanaDePedidos from "../components/pedidos/CampanaDePedidos"
 import { bloquearDesplazamiento } from "../lib/bloqueoDeDesplazamiento"
 import Sidebar from "../components/shell/Sidebar"
 import Topbar from "../components/shell/Topbar"
@@ -83,6 +84,7 @@ function MainLayout({ children }) {
           onAbrirMenu={() => setMenuAbierto(true)}
           menuAbierto={menuAbierto}
         >
+          <CampanaDePedidos />
           <MenuDeCuenta />
         </Topbar>
 

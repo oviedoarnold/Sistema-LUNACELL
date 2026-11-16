@@ -22,6 +22,7 @@ const ORIGEN_DE_VENTA = { en_linea: "", sin_conexion: "Sin conexión", conciliac
 export const CLASE_DE_MOVIMIENTO = {
   venta: "Venta",
   anulacion_venta: "Anulación de venta",
+  entrega_pedido: "Entrega de pedido",
   traslado_salida: "Traslado: salida",
   traslado_entrada: "Traslado: entrada",
   ajuste: "Ajuste",
