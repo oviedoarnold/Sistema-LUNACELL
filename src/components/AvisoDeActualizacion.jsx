@@ -97,21 +97,24 @@ function AvisoDeActualizacion({ version = VERSION_DEL_FRONTEND, instalar = insta
 
       ultima = ahora
 
-      consultar().then((publicada) => {
-        if (!vigente || !publicada) return
+      consultar()
+        .then((publicada) => {
+          if (!vigente || !publicada) return
 
-        if (!hayVersionNueva(version, publicada)) {
-          if (publicada === version) void activarServiceWorkerEnEspera()
-          return
-        }
+          if (!hayVersionNueva(version, publicada)) {
+            if (publicada === version) void activarServiceWorkerEnEspera()
+            return
+          }
 
-        if (objetivoRef.current) return
+          if (objetivoRef.current) return
 
-        objetivoRef.current = publicada
-        setObjetivo(publicada)
-        setSegundos(SEGUNDOS_DE_AVISO)
-        void buscarServiceWorkerNuevo()
-      })
+          objetivoRef.current = publicada
+          setObjetivo(publicada)
+          setSegundos(SEGUNDOS_DE_AVISO)
+          void buscarServiceWorkerNuevo()
+        })
+        // Una consulta fallida no cambia nada: se repite en la próxima ocasión.
+        .catch(() => {})
     }
 
     revisar(true)

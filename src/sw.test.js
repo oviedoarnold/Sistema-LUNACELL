@@ -157,13 +157,31 @@ describe("service worker · migración de caché", () => {
     expect(sw.contexto.self.skipWaitingLlamado).toBe(false)
   })
 
+  const ORIGEN = "https://lunacell.oviedoarnold.lat"
+
   it("se activa cuando la aplicación se lo pide, y solo con esa orden", () => {
-    sw.manejadores.message({ data: { tipo: "OTRA_COSA" } })
-    sw.manejadores.message({ data: null })
+    sw.manejadores.message({ origin: ORIGEN, data: { tipo: "OTRA_COSA" } })
+    sw.manejadores.message({ origin: ORIGEN, data: null })
     expect(sw.contexto.self.skipWaitingLlamado).toBe(false)
 
-    sw.manejadores.message({ data: { tipo: "ACTIVAR" } })
+    sw.manejadores.message({ origin: ORIGEN, data: { tipo: "ACTIVAR" } })
     expect(sw.contexto.self.skipWaitingLlamado).toBe(true)
+  })
+
+  it("también cuando el navegador no llena el origen, si la página es del mismo sitio", () => {
+    sw.manejadores.message({ origin: "", source: { url: `${ORIGEN}/pos` }, data: { tipo: "ACTIVAR" } })
+
+    expect(sw.contexto.self.skipWaitingLlamado).toBe(true)
+  })
+
+  it.each([
+    ["otro origen", { origin: "https://otro.example", data: { tipo: "ACTIVAR" } }],
+    ["una página de otro sitio sin origen", { origin: "", source: { url: "https://otro.example/x" }, data: { tipo: "ACTIVAR" } }],
+    ["un mensaje sin origen ni página", { data: { tipo: "ACTIVAR" } }],
+  ])("ignora la orden que llega de %s", (_, evento) => {
+    sw.manejadores.message(evento)
+
+    expect(sw.contexto.self.skipWaitingLlamado).toBe(false)
   })
 
   it("no borra nada cuando la única caché es la actual", async () => {

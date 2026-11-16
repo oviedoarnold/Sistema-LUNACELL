@@ -81,7 +81,24 @@ self.addEventListener("install", (event) => {
   event.waitUntil(precargar())
 })
 
+/*
+  Solo obedece a páginas de su mismo origen. Algunos navegadores no llenan
+  event.origin en los mensajes de un cliente; entonces se mira la dirección
+  de la página que lo mandó.
+*/
+function origenDelMensaje(event) {
+  if (event.origin) return event.origin
+
+  try {
+    return new URL(event.source.url).origin
+  } catch {
+    return ""
+  }
+}
+
 self.addEventListener("message", (event) => {
+  if (origenDelMensaje(event) !== self.location.origin) return
+
   if (event.data && event.data.tipo === "ACTIVAR") {
     self.skipWaiting()
   }
