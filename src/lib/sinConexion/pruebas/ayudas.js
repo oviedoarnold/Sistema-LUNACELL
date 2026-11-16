@@ -33,7 +33,7 @@ export function copiaDePrueba(cambios = {}) {
   return {
     ...DUENO,
     ubicacion: { id: UBICACION, nombre: "Camión 01", vendeSinConexion: true },
-    empresa: { tasaIsv: 15 },
+    empresa: { tasaIsv: 15, cargos: { tarjeta: 1.7, enlace: 1.7 } },
     productos: [CARGADOR, CUBO],
     existencias: { [CARGADOR.id]: 10, [CUBO.id]: 4 },
     clientes: [CLIENTE],

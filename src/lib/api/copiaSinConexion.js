@@ -19,7 +19,10 @@ import { traerTodosLosPrecios } from "./preciosPorCliente"
 */
 
 const COLUMNAS_UBICACION = "id, nombre, tipo, activa, vende, emite_fiscal, vende_sin_conexion"
-const COLUMNAS_EMPRESA = "id, nombre, direccion, telefono, moneda, tasa_isv"
+const COLUMNAS_EMPRESA = "id, nombre, direccion, telefono, moneda, tasa_isv, tasa_cargo_tarjeta, tasa_cargo_enlace"
+
+// Null si no viene: sin ella, sin conexión no se cobra con ese medio.
+const tasaDeCargo = (valor) => (valor === null || valor === undefined ? null : Number(valor))
 
 async function leerUna(consulta, queHacia) {
   const { data, error } = await consulta
@@ -79,6 +82,12 @@ export async function descargarCopia({ perfil, ahora = () => new Date() }) {
       telefono: empresa?.telefono || "",
       moneda: empresa?.moneda || "L",
       tasaIsv: Number(empresa?.tasa_isv ?? 15),
+      /*
+        El porcentaje adicional de tarjeta y enlace al tomar la copia. Una venta sin
+        conexión lo guarda con sus cobros; si el administrador lo cambia mientras
+        tanto, el servidor lo nota al sincronizar y la venta va a conciliación.
+      */
+      cargos: { tarjeta: tasaDeCargo(empresa?.tasa_cargo_tarjeta), enlace: tasaDeCargo(empresa?.tasa_cargo_enlace) },
     },
     productos: [],
     existencias: {},

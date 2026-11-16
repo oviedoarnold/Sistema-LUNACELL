@@ -339,7 +339,7 @@ describe("medios de pago del abono", () => {
     await waitFor(() => expect(rpc).toHaveBeenCalled())
     expect(rpc.mock.calls[0][1].p_cobros).toEqual([
       { medio: "efectivo", monto: 40, referencia: "" },
-      { medio: "tarjeta", monto: 60, referencia: "AUT-1", cargo: 4.2 },
+      { medio: "tarjeta", monto: 60, referencia: "AUT-1", tasa: 1.7, cargo: 1.02 },
     ])
   })
 
@@ -351,16 +351,37 @@ describe("medios de pago del abono", () => {
     escribirMonto(400)
     unico("Tarjeta")
 
-    expect(screen.getByText(/cargo por medio de pago/i).nextSibling).toHaveTextContent("L 28.00")
-    expect(screen.getByText("Total a cobrar").nextSibling).toHaveTextContent("L 428.00")
+    expect(screen.getByText("Cargo por medio de pago (1.7 %)").nextSibling).toHaveTextContent("L 6.80")
+    expect(screen.getByText("Total a cobrar").nextSibling).toHaveTextContent("L 406.80")
 
     clicConfirmar()
 
     await waitFor(() => expect(rpc).toHaveBeenCalled())
     expect(rpc.mock.calls[0][1]).toMatchObject({
       p_monto: 400,
-      p_cobros: [{ medio: "tarjeta", monto: 400, referencia: "", cargo: 28 }],
+      p_cobros: [{ medio: "tarjeta", monto: 400, referencia: "", tasa: 1.7, cargo: 6.8 }],
     })
+  })
+
+  it("si el porcentaje cambió, lo dice, no da el abono por hecho y recalcula con el vigente", async () => {
+    const { falso } = await renderCxC()
+    const rpc = responderRpc({
+      data: null,
+      error: { code: "LM007", message: "El porcentaje adicional de Tarjeta es 2 %. Revisa el total y vuelve a confirmar." },
+    })
+
+    abrirCobro()
+    escribirMonto(400)
+    unico("Tarjeta")
+
+    // El administrador lo cambió en otra pantalla.
+    falso.datos.empresas[0].tasa_cargo_tarjeta = 2
+    clicConfirmar()
+
+    await waitFor(() => expect(rpc).toHaveBeenCalled())
+    expect(await screen.findByText(/el porcentaje adicional de tarjeta es 2 %/i)).toBeInTheDocument()
+    await waitFor(() => expect(screen.getByText("Total a cobrar").nextSibling).toHaveTextContent("L 408.00"))
+    expect(screen.getByText("Cargo por medio de pago (2 %)").nextSibling).toHaveTextContent("L 8.00")
   })
 
   it("un pago mixto con un solo medio no se confirma, pero ya muestra su cargo", async () => {
@@ -372,7 +393,7 @@ describe("medios de pago del abono", () => {
     marcar("Tarjeta")
 
     expect(screen.queryByLabelText("Importe de Tarjeta")).not.toBeInTheDocument()
-    expect(screen.getByText("Total a cobrar").nextSibling).toHaveTextContent("L 107.00")
+    expect(screen.getByText("Total a cobrar").nextSibling).toHaveTextContent("L 101.70")
     expect(screen.queryByText(/importe asignado/i)).not.toBeInTheDocument()
     expect(screen.getByText("Elige 2 medios de pago.")).toBeInTheDocument()
     expect(botonConfirmar()).toBeDisabled()
@@ -407,7 +428,7 @@ describe("el monto y los medios juntos", () => {
     fireEvent.click(screen.getByRole("radio", { name: "Tarjeta" }))
     escribirMonto(250.5)
 
-    expect(screen.getByText("Total a cobrar").nextSibling).toHaveTextContent("L 268.04")
+    expect(screen.getByText("Total a cobrar").nextSibling).toHaveTextContent("L 254.76")
   })
 
   it("si el monto no vale, el botón sigue activo para explicar por qué", async () => {

@@ -217,6 +217,32 @@
   margin: 4px 0 0 26px;
 }
 
+/* ── PORCENTAJE ADICIONAL ────────────────────────────────── */
+.config-nota {
+  margin: var(--space-3) 0 0;
+}
+
+.config-historial {
+  display: grid;
+  gap: var(--space-2);
+  margin: var(--space-3) 0 0;
+  padding: 0;
+  list-style: none;
+  font-size: 13.5px;
+}
+
+.config-historial li {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px var(--space-3);
+  color: var(--text-primary);
+}
+
+.config-historial li span:first-child,
+.config-historial li span:last-child {
+  color: var(--text-muted);
+}
+
 @media (max-width: 720px) {
   .config-acciones .btn {
     width: 100%;

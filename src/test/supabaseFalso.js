@@ -528,6 +528,37 @@ export function crearSupabaseFalso({
 
   const redondear = (n) => Math.round(Number(n) * 100) / 100
 
+  /*
+    Como cargo_de_cobros_distinto() de la 0044: tarjeta y enlace tienen que venir
+    con el porcentaje vigente de la empresa y su cargo. Sin cargo ni tasa es una
+    versión anterior y pasa.
+  */
+  const cargoDistinto = (cobros) => {
+    const empresa = (datos.empresas || [])[0] || {}
+
+    for (const c of cobros || []) {
+      if (c.medio !== "tarjeta" && c.medio !== "enlace") continue
+      if (c.tasa === undefined && c.cargo === undefined) continue
+
+      const rige = Number(empresa[`tasa_cargo_${c.medio}`])
+      const cargo = Math.round((Math.round(Number(c.monto) * 100) * Math.round(rige * 100)) / 10000) / 100
+
+      if ((c.tasa !== undefined && Number(c.tasa) !== rige) || (c.cargo !== undefined && Number(c.cargo) !== cargo)) {
+        const etiqueta = c.medio === "tarjeta" ? "Tarjeta" : "Enlace de pago"
+
+        return `El porcentaje adicional de ${etiqueta} es ${rige} %. Revisa el total y vuelve a confirmar.`
+      }
+    }
+
+    return null
+  }
+
+  const tasaUnica = (cobros) => {
+    const tasas = new Set((cobros || []).filter((c) => c.medio === "tarjeta" || c.medio === "enlace").map((c) => c.tasa))
+
+    return tasas.size === 1 ? ([...tasas][0] ?? null) : null
+  }
+
   const soloDigitos = (valor, ancho) =>
     String(valor ?? "").replace(/\D/g, "").padStart(ancho, "0").slice(-ancho)
 
@@ -1222,6 +1253,11 @@ export function crearSupabaseFalso({
 
         if (falla) return Promise.resolve({ data: null, error: falla })
 
+        // Un cargo calculado con otro porcentaje que el vigente se rechaza, como desde la 0044.
+        const distinto = cargoDistinto(argumentos.p_cobros)
+
+        if (distinto) return Promise.resolve(rechazo("LM007", distinto))
+
         const respuesta = venderEnUbicacion(argumentos)
         const venta = respuesta.data && datos.ventas.find((v) => v.id === respuesta.data.venta_id)
 
@@ -1252,6 +1288,7 @@ export function crearSupabaseFalso({
 
         if (venta) {
           venta.cargo_por_medio = (argumentos.p_cobros || []).reduce((suma, c) => suma + (c.cargo || 0), 0)
+          venta.tasa_cargo = tasaUnica(argumentos.p_cobros)
 
           if (argumentos.p_con_isv === false) {
             venta.isv = 0
@@ -1261,6 +1298,43 @@ export function crearSupabaseFalso({
         }
 
         return Promise.resolve(respuesta)
+      }
+
+      // configurar_cargos_por_medio() (0044): solo un administrador, y cada cambio al historial.
+      if (nombre === "configurar_cargos_por_medio") {
+        const falla = fallaDe(nombre, "rpc")
+
+        if (falla) return Promise.resolve({ data: null, error: falla })
+
+        const usuario = (datos.usuarios || []).find((u) => u.auth_id === sesion?.user?.id && u.activo !== false)
+
+        if (usuario?.rol !== "admin") {
+          return Promise.resolve(rechazo("42501", "Solo un administrador cambia el porcentaje adicional"))
+        }
+
+        const empresa = (datos.empresas || [])[0]
+        const nuevas = { tarjeta: Number(argumentos.p_tarjeta), enlace: Number(argumentos.p_enlace) }
+
+        datos.cambios_de_cargo_por_medio = datos.cambios_de_cargo_por_medio || []
+
+        for (const medio of ["tarjeta", "enlace"]) {
+          const anterior = Number(empresa[`tasa_cargo_${medio}`])
+
+          if (anterior !== nuevas[medio]) {
+            datos.cambios_de_cargo_por_medio.push({
+              id: datos.cambios_de_cargo_por_medio.length + 1,
+              medio,
+              tasa_anterior: anterior,
+              tasa_nueva: nuevas[medio],
+              cambiado_por_nombre: usuario.nombre,
+              cambiado_en: "2026-11-16T15:00:00.000Z",
+            })
+          }
+
+          empresa[`tasa_cargo_${medio}`] = nuevas[medio]
+        }
+
+        return Promise.resolve({ data: nuevas, error: null })
       }
 
       if (nombre === "guardar_precios_de_cliente") {

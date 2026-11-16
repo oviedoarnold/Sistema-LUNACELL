@@ -230,7 +230,7 @@ describe("POS sin conexión en una ubicación habilitada", () => {
     await waitFor(() => expect(servidor.recibidas).toHaveLength(1))
     expect(servidor.recibidas[0].p_cobros).toEqual([
       { medio: "efectivo", monto: 107, referencia: "" },
-      { medio: "tarjeta", monto: 73, referencia: "AUT-1", cargo: 5.11 },
+      { medio: "tarjeta", monto: 73, referencia: "AUT-1", tasa: 1.7, cargo: 1.24 },
     ])
   })
 
@@ -247,7 +247,7 @@ describe("POS sin conexión en una ubicación habilitada", () => {
     await devolverConexion()
 
     await waitFor(() => expect(servidor.recibidas).toHaveLength(1))
-    expect(servidor.recibidas[0].p_cobros).toEqual([{ medio: "enlace", monto: 180, referencia: "", cargo: 12.6 }])
+    expect(servidor.recibidas[0].p_cobros).toEqual([{ medio: "enlace", monto: 180, referencia: "", tasa: 1.7, cargo: 3.06 }])
   })
 
   it("en un camión la casilla de ISV nace desmarcada, y sin ella sincroniza con tasa 0", async () => {
@@ -286,7 +286,7 @@ describe("POS sin conexión en una ubicación habilitada", () => {
     expect(servidor.recibidas[0]).toMatchObject({
       p_tasa_isv: 15,
       p_total_cobrado: 207,
-      p_cobros: [{ medio: "tarjeta", monto: 207, referencia: "", cargo: 14.49 }],
+      p_cobros: [{ medio: "tarjeta", monto: 207, referencia: "", tasa: 1.7, cargo: 3.52 }],
     })
   })
 

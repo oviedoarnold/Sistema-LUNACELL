@@ -41,6 +41,36 @@ const FISCAL = {
   numero: "000-001-01-00000009",
 }
 
+describe("InvoiceTemplate · cargo por medio de pago", () => {
+  it("muestra el porcentaje con que se cobró, no el vigente", () => {
+    render(<InvoiceTemplate sale={{ ...BASE, fiscal: null, cargo: 1.96, tasaCargo: 1.7 }} />)
+
+    expect(screen.getByText("Cargo por medio de pago (1.7 %)")).toBeInTheDocument()
+    expect(screen.getByText(/116\.96/)).toBeInTheDocument()
+  })
+
+  it("una venta anterior, sin porcentaje guardado, lo muestra sin porcentaje", () => {
+    render(<InvoiceTemplate sale={{ ...BASE, fiscal: null, cargo: 8.05, tasaCargo: null }} />)
+
+    expect(screen.getByText("Cargo por medio de pago")).toBeInTheDocument()
+    expect(screen.queryByText(/cargo por medio de pago \(/i)).not.toBeInTheDocument()
+  })
+
+  it("la vista previa usa los cobros que se van a enviar", () => {
+    const cobros = [{ medio: "tarjeta", monto: 115, referencia: "", tasa: 2, cargo: 2.3 }]
+
+    render(<InvoiceTemplate sale={{ ...BASE, fiscal: null, cargo: 2.3, cobros }} />)
+
+    expect(screen.getByText("Cargo por medio de pago (2 %)")).toBeInTheDocument()
+  })
+
+  it("sin cargo no hay renglón de cargo", () => {
+    render(<InvoiceTemplate sale={{ ...BASE, fiscal: null, cargo: 0 }} />)
+
+    expect(screen.queryByText(/cargo por medio de pago/i)).not.toBeInTheDocument()
+  })
+})
+
 describe("InvoiceTemplate · documento interno", () => {
   const interno = () =>
     render(<InvoiceTemplate sale={{ ...BASE, fiscal: null }} />)

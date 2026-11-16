@@ -140,10 +140,11 @@ function SelectorDeMedios({ valor, total, onCambiar }) {
 
 /*
   Por qué no se puede confirmar, cerca del botón. Sin nada que decir no ocupa sitio.
+  `tasas`: el porcentaje adicional vigente de tarjeta y enlace.
 */
-export function AvisoDeMedios({ valor, total }) {
-  const pendiente = faltaPorAsignar(cobrosDelSelector(valor, total), total)
-  const problema = total > 0 ? problemaDelSelector(valor, total) : null
+export function AvisoDeMedios({ valor, total, tasas }) {
+  const pendiente = faltaPorAsignar(cobrosDelSelector(valor, total, tasas), total)
+  const problema = total > 0 ? problemaDelSelector(valor, total, tasas) : null
   const texto = pendiente < 0 ? "El total bajó: reduce un importe." : problema
 
   if (!texto) return null

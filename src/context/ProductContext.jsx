@@ -17,6 +17,7 @@ import {
   eliminarProveedor,
   traerEmpresa,
   actualizarEmpresa,
+  configurarCargosPorMedio,
 } from "../lib/api/catalogos"
 
 function ProductProvider({ children }) {
@@ -187,6 +188,19 @@ function ProductProvider({ children }) {
     [company]
   )
 
+  /*
+    Vuelve a leer la empresa: el POS lo pide cuando el servidor dice que el
+    porcentaje adicional cambió desde que se cargó la pantalla.
+  */
+  const refrescarEmpresa = useCallback(async () => {
+    setCompanyState(await traerEmpresa())
+  }, [])
+
+  const guardarCargos = useCallback(async (tasas) => {
+    await configurarCargosPorMedio(tasas)
+    setCompanyState(await traerEmpresa())
+  }, [])
+
   const value = useMemo(
     () => ({
       products,
@@ -205,6 +219,8 @@ function ProductProvider({ children }) {
       quitarProveedor,
 
       setCompany,
+      refrescarEmpresa,
+      guardarCargos,
     }),
     [
       products,
@@ -220,6 +236,8 @@ function ProductProvider({ children }) {
       editarProveedor,
       quitarProveedor,
       setCompany,
+      refrescarEmpresa,
+      guardarCargos,
     ]
   )
 

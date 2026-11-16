@@ -1,7 +1,7 @@
 // @vitest-environment node
 import { describe, it, expect, vi } from "vitest"
 
-import { montarDatos, EMPRESA, AUTH_ID } from "../../test/pantallas"
+import { montarDatos, EMPRESA, AUTH_ID, EMPRESA_PRUEBA } from "../../test/pantallas"
 import { descargarCopia } from "./copiaSinConexion"
 
 vi.mock("../supabase", () => ({
@@ -47,7 +47,7 @@ describe("descargar la copia local", () => {
       usuarioAuth: AUTH_ID,
       ubicacionId: "camion-01",
       ubicacion: { id: "camion-01", nombre: "Camión 01", vendeSinConexion: true, emiteFiscal: false },
-      empresa: { tasaIsv: 15 },
+      empresa: { tasaIsv: 15, cargos: { tarjeta: 1.7, enlace: 1.7 } },
       existencias: { p1: 3, p2: 0 },
       clientesDisponibles: true,
       tomadaEn: "2026-10-10T12:00:00.000Z",
@@ -57,6 +57,24 @@ describe("descargar la copia local", () => {
       { id: "p1", codigo: "M-001", nombre: "Martillo", precio: 180, categoria: "Herramientas" },
     ])
     expect(copia.clientes).toEqual([{ id: "c1", nombre: "Ferremax", rtn: "0801", telefono: "9999", direccion: "SPS" }])
+  })
+
+  it("guarda el porcentaje adicional vigente de cada medio al tomar la copia", async () => {
+    montar({ empresa: { ...EMPRESA_PRUEBA, tasa_cargo_tarjeta: "2.00", tasa_cargo_enlace: "1.50" } })
+
+    const copia = await descargarCopia({ perfil: PERFIL, ahora })
+
+    expect(copia.empresa.cargos).toEqual({ tarjeta: 2, enlace: 1.5 })
+  })
+
+  it("sin el porcentaje en la base, la copia no inventa uno", async () => {
+    const sinTasas = Object.fromEntries(Object.entries(EMPRESA_PRUEBA).filter(([k]) => !k.startsWith("tasa_cargo_")))
+
+    montar({ empresa: sinTasas })
+
+    const copia = await descargarCopia({ perfil: PERFIL, ahora })
+
+    expect(copia.empresa.cargos).toEqual({ tarjeta: null, enlace: null })
   })
 
   it("trae los precios especiales por cliente, sin costos", async () => {

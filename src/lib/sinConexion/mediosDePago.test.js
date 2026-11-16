@@ -22,10 +22,19 @@ const EFECTIVO = [{ medio: "efectivo", monto: 172.5, referencia: "" }]
 const clienteDeSupabase = () => ({ rpc: vi.fn(() => Promise.resolve({ data: { estado: "registrada" }, error: null, status: 200 })) })
 
 describe("la venta en el teléfono", () => {
-  it("guarda los medios tal como se cobraron", () => {
-    const mixto = [{ medio: "efectivo", monto: 72.5, referencia: "" }, { medio: "tarjeta", monto: 100, referencia: "AUT-1" }]
+  it("guarda los medios tal como se cobraron, con el porcentaje adicional de la copia", () => {
+    const mixto = [
+      { medio: "efectivo", monto: 72.5, referencia: "" },
+      { medio: "tarjeta", monto: 100, referencia: "AUT-1", tasa: 1.7, cargo: 1.7 },
+    ]
 
     expect(venta({ cobros: mixto }).cobros).toEqual(mixto)
+  })
+
+  it("una tarjeta sin porcentaje (copia anterior a la 0044) no se guarda", () => {
+    const sinTasa = [{ medio: "efectivo", monto: 72.5, referencia: "" }, { medio: "tarjeta", monto: 100, referencia: "AUT-1" }]
+
+    expect(() => venta({ cobros: sinTasa })).toThrow(/porcentaje adicional de tarjeta/i)
   })
 
   it("no acepta medios que no suman el total", () => {

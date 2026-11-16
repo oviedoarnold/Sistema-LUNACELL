@@ -25,7 +25,14 @@ import ModalDeCliente from "../components/documents/ModalDeCliente"
 import { useCarrito } from "../hooks/useCarrito"
 import { useExistenciaDeMiUbicacion } from "../hooks/useExistenciaDeMiUbicacion"
 import SelectorDeMedios, { AvisoDeMedios } from "../components/pagos/SelectorDeMedios"
-import { TASA_DE_CARGO, cargoDeCobros, cobrosDelSelector, problemaDelSelector, selectorVacio } from "../utils/mediosDePago"
+import {
+  cargoDeCobros,
+  cobrosDelSelector,
+  etiquetaDelCargo,
+  problemaDelSelector,
+  selectorVacio,
+  textoDeTasas,
+} from "../utils/mediosDePago"
 import { tipoDeUbicacion } from "../lib/api/ubicaciones"
 import { usePreciosDeCliente } from "../hooks/usePreciosDeCliente"
 import { totalesDe } from "../lib/sinConexion/venta"
@@ -93,7 +100,7 @@ function textoDelBotonDeVenta(facturando, modoSinConexion) {
 }
 
 function POS() {
-  const { products = [], company } = useContext(ProductContext)
+  const { products = [], company, refrescarEmpresa } = useContext(ProductContext)
   const { addSale } = useContext(SalesContext)
 
   /*
@@ -152,6 +159,13 @@ function POS() {
   const tasaDeLaEmpresa = Number(
     modoSinConexion ? copiaLocal?.empresa?.tasaIsv ?? ISV_POR_OMISION : company?.taxRate ?? ISV_POR_OMISION
   )
+
+  /*
+    El porcentaje adicional de tarjeta y enlace, igual: el de la empresa, o el de
+    la copia local sin conexión. Si el administrador lo cambia, el servidor rechaza
+    lo calculado con el anterior y la pantalla lo vuelve a leer.
+  */
+  const tasasDeCargo = modoSinConexion ? copiaLocal?.empresa?.cargos : company?.cargos
 
   /*
     La casilla de ISV nace marcada solo en la tienda, y el vendedor la cambia si
@@ -440,11 +454,11 @@ function POS() {
     [cart, tasaISV]
   )
 
-  const cobrosDeLaVenta = () => (paymentType === "contado" ? cobrosDelSelector(medios, totalACobrar) : [])
+  const cobrosDeLaVenta = () => (paymentType === "contado" ? cobrosDelSelector(medios, totalACobrar, tasasDeCargo) : [])
 
   // Mientras los medios no sumen el total, la venta no se puede confirmar.
   const mediosSinCuadrar =
-    paymentType === "contado" && problemaDelSelector(medios, totalACobrar) !== null
+    paymentType === "contado" && problemaDelSelector(medios, totalACobrar, tasasDeCargo) !== null
 
   // Lo que tarjeta y enlace suman a lo que paga el comprador.
   const cargo = cargoDeCobros(cobrosDeLaVenta())
@@ -619,6 +633,7 @@ function POS() {
     taxRate: tasaISV,
     total,
     cargo,
+    cobros: cobrosDeLaVenta(),
 
     paymentType,
 
@@ -810,7 +825,7 @@ function POS() {
     }
 
     if (paymentType === "contado") {
-      const problema = problemaDelSelector(medios, totalACobrar)
+      const problema = problemaDelSelector(medios, totalACobrar, tasasDeCargo)
 
       if (problema) {
         Swal.fire({ icon: "warning", title: "Revisa el medio de pago", text: problema })
@@ -893,6 +908,19 @@ function POS() {
           void sinConexion.comprobarConexion()
           return await guardarSinConexion({ claveEnLinea: claveDeVenta })
         }
+
+        return null
+      }
+
+      // Se cobró con un porcentaje que ya no rige: se lee el vigente y el total se recalcula.
+      if (error?.motivo === "porcentaje-cambiado") {
+        await refrescarEmpresa?.().catch(() => {})
+
+        Swal.fire({
+          icon: "warning",
+          title: "El porcentaje adicional cambió",
+          text: `${error.message} El total ya muestra el porcentaje vigente.`,
+        })
 
         return null
       }
@@ -1352,7 +1380,7 @@ function POS() {
 
                 {cargo > 0 && (
                   <div className="totals-row pos-cargo">
-                    <span>Cargo por medio de pago ({TASA_DE_CARGO}%)</span>
+                    <span>{etiquetaDelCargo(textoDeTasas(cobrosDeLaVenta()))}</span>
 
                     <span className="v">{formatMoney(cargo)}</span>
                   </div>
@@ -1366,7 +1394,7 @@ function POS() {
               </div>
 
               {paymentType === "contado" && (
-                <AvisoDeMedios valor={medios} total={totalACobrar} />
+                <AvisoDeMedios valor={medios} total={totalACobrar} tasas={tasasDeCargo} />
               )}
 
               <div className="pos-acciones">

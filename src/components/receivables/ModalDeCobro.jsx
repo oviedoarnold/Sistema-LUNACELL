@@ -10,7 +10,8 @@ import {
   problemaDelSelector,
   selectorVacio,
   cargoDeCobros,
-  TASA_DE_CARGO,
+  etiquetaDelCargo,
+  textoDeTasas,
 } from "../../utils/mediosDePago"
 
 /*
@@ -28,6 +29,8 @@ import {
 function ModalDeCobro({
   cuenta,
   moneda,
+  // El porcentaje adicional vigente de tarjeta y enlace: { tarjeta, enlace }.
+  tasas,
   cobrando,
   error,
   onConfirmar,
@@ -69,7 +72,7 @@ function ModalDeCobro({
       return false
     }
 
-    const problema = problemaDelSelector(medios, montoNumero)
+    const problema = problemaDelSelector(medios, montoNumero, tasas)
 
     if (problema) {
       setAvisoLocal(problema)
@@ -88,18 +91,19 @@ function ModalDeCobro({
     if (cobrando) return
     if (!validar()) return
 
-    onConfirmar({ monto: montoNumero, nota: nota.trim(), cobros: cobrosDelSelector(medios, montoNumero) })
+    onConfirmar({ monto: montoNumero, nota: nota.trim(), cobros: cobrosDelSelector(medios, montoNumero, tasas) })
   }
 
   const aviso = avisoLocal || error
-  const cargo = Number.isFinite(montoNumero) ? cargoDeCobros(cobrosDelSelector(medios, montoNumero)) : 0
+  const cobros = Number.isFinite(montoNumero) ? cobrosDelSelector(medios, montoNumero, tasas) : []
+  const cargo = cargoDeCobros(cobros)
 
   /*
     Con un monto que no vale, el botón sigue activo para que el aviso diga cuánto
     debe el cliente. Con uno válido, se espera a que los medios lo sumen.
   */
   const montoValido = Number.isFinite(montoNumero) && montoNumero > 0 && montoNumero <= cuenta.deudaTotal
-  const mediosSinCuadrar = montoValido && problemaDelSelector(medios, montoNumero) !== null
+  const mediosSinCuadrar = montoValido && problemaDelSelector(medios, montoNumero, tasas) !== null
 
   return (
     <ModalShell
@@ -208,12 +212,12 @@ function ModalDeCobro({
           }}
         />
 
-        <AvisoDeMedios valor={medios} total={Number.isFinite(montoNumero) ? montoNumero : 0} />
+        <AvisoDeMedios valor={medios} total={Number.isFinite(montoNumero) ? montoNumero : 0} tasas={tasas} />
 
         {cargo > 0 && (
           <dl className="cobro-con-cargo">
             <div>
-              <dt>Cargo por medio de pago ({TASA_DE_CARGO}%)</dt>
+              <dt>{etiquetaDelCargo(textoDeTasas(cobros))}</dt>
               <dd>{formatMoney(cargo, moneda)}</dd>
             </div>
 

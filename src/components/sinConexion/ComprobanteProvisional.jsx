@@ -1,6 +1,6 @@
 import { formatMoney } from "../../utils/format"
 import { totalesDe } from "../../lib/sinConexion/venta"
-import { TASA_DE_CARGO, cargoDeCobros } from "../../utils/mediosDePago"
+import { cargoDeCobros, etiquetaDelCargo, textoDeTasas } from "../../utils/mediosDePago"
 
 /*
   El comprobante de una venta hecha sin conexión.
@@ -154,7 +154,7 @@ function ComprobanteProvisional({ venta, empresa = {}, vistaPrevia = false }) {
 
         {cargo > 0 && (
           <div className="inv-totals-row">
-            <span>Cargo por medio de pago ({TASA_DE_CARGO}%)</span>
+            <span>{etiquetaDelCargo(textoDeTasas(venta.cobros))}</span>
             <b>{formatMoney(cargo, moneda)}</b>
           </div>
         )}

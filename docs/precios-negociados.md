@@ -11,7 +11,7 @@ No cambia el precio general, el precio especial del cliente, el costo ni otras v
 2. El especial del cliente, si existe.
 3. El general del catálogo.
 
-El subtotal, el ISV, el cargo del 7 % y el total se calculan sobre el precio negociado.
+El subtotal, el ISV, el porcentaje adicional de tarjeta y enlace y el total se calculan sobre el precio negociado.
 La factura muestra el precio vendido.
 
 ## Reglas

@@ -7,7 +7,7 @@ import { AuthProvider } from "../context/AuthContext"
 import ProductProvider from "../context/ProductContext"
 import ClientsProvider from "../context/ClientsContext"
 import SalesProvider from "../context/SalesContext"
-import { renderizarPantalla } from "../test/pantallas"
+import { renderizarPantalla, EMPRESA_PRUEBA } from "../test/pantallas"
 import {
   CAMPOS_DEL_CLIENTE,
   abrirClienteNuevo as abrirAltaDeCliente,
@@ -62,6 +62,7 @@ function renderPOS({
   fallarEn = {},
   rolDelUsuario = "admin",
   permisosDelUsuario = [],
+  empresa,
 } = {}) {
   const entrada = saleDraft
     ? [{ pathname: "/pos", state: { saleDraft } }]
@@ -88,6 +89,7 @@ function renderPOS({
       fallarEn,
       rolDelUsuario,
       permisosDelUsuario,
+      ...(empresa ? { empresa } : {}),
       esperar: ["ventas"],
     }
   )
@@ -403,17 +405,17 @@ describe("POS: precios por cliente", () => {
     expect(filasDelCarrito()).toHaveLength(1)
   })
 
-  it("el cargo del 7 % y el ISV se calculan sobre el precio especial", async () => {
+  it("el porcentaje adicional y el ISV se calculan sobre el precio especial", async () => {
     await renderConPrecios()
     await elegirCliente("Ferremax")
     agregar("Cemento gris")
     fireEvent.click(screen.getByRole("radio", { name: "Tarjeta" }))
 
-    expect(totales().querySelector(".grand")).toHaveTextContent("L 246.10")
+    expect(totales().querySelector(".grand")).toHaveTextContent("L 233.91")
 
     fireEvent.click(screen.getByRole("checkbox", { name: /isv/i }))
 
-    expect(totales().querySelector(".grand")).toHaveTextContent("L 214.00")
+    expect(totales().querySelector(".grand")).toHaveTextContent("L 203.40")
   })
 
   it("si no se pudieron leer los precios, no deja facturar y lo dice", async () => {
@@ -641,18 +643,18 @@ describe("POS: precio negociado", () => {
     expect(screen.queryByText(/precios actualizados/i)).not.toBeInTheDocument()
   })
 
-  it("el ISV y el cargo del 7 % se calculan sobre lo negociado", async () => {
+  it("el ISV y el porcentaje adicional se calculan sobre lo negociado", async () => {
     await renderConPrecios()
 
     agregar("Cemento gris")
     negociar("Cemento gris", 180, "mayoreo")
     fireEvent.click(screen.getByRole("radio", { name: "Tarjeta" }))
 
-    expect(totales().querySelector(".grand")).toHaveTextContent("L 221.49")
+    expect(totales().querySelector(".grand")).toHaveTextContent("L 210.52")
 
     fireEvent.click(screen.getByRole("checkbox", { name: /isv/i }))
 
-    expect(totales().querySelector(".grand")).toHaveTextContent("L 192.60")
+    expect(totales().querySelector(".grand")).toHaveTextContent("L 183.06")
   })
 
   it("en pago mixto reparte el total negociado", async () => {
@@ -1072,8 +1074,8 @@ describe("POS: venta registrada por el servidor", () => {
   it.each([
     ["Efectivo", "efectivo", ""],
     ["Transferencia", "transferencia", "TRF-1"],
-    ["Tarjeta", "tarjeta", "AUT-1", 14.49],
-    ["Enlace de pago", "enlace", "LNK-1", 14.49],
+    ["Tarjeta", "tarjeta", "AUT-1", 3.52],
+    ["Enlace de pago", "enlace", "LNK-1", 3.52],
   ])("pago único con %s: manda el total, sin pedir importe", async (etiqueta, medio, ref, cargo) => {
     const { falso } = await renderPOS()
 
@@ -1094,7 +1096,7 @@ describe("POS: venta registrada por el servidor", () => {
     clicFacturar()
 
     await waitFor(() => expect(falso.datos.ventas).toHaveLength(1))
-    expect(rpcDeVenta(falso)[1].p_cobros).toEqual([{ medio, monto: 207, referencia: ref, ...(cargo ? { cargo } : {}) }])
+    expect(rpcDeVenta(falso)[1].p_cobros).toEqual([{ medio, monto: 207, referencia: ref, ...(cargo ? { tasa: 1.7, cargo } : {}) }])
   })
 
   it("sin referencia la venta sale igual, sin inventar una", async () => {
@@ -1110,7 +1112,7 @@ describe("POS: venta registrada por el servidor", () => {
     clicFacturar()
 
     await waitFor(() => expect(falso.datos.ventas).toHaveLength(1))
-    expect(rpcDeVenta(falso)[1].p_cobros).toEqual([{ medio: "tarjeta", monto: 207, referencia: "", cargo: 14.49 }])
+    expect(rpcDeVenta(falso)[1].p_cobros).toEqual([{ medio: "tarjeta", monto: 207, referencia: "", tasa: 1.7, cargo: 3.52 }])
   })
 
   it("en pago mixto tampoco pide referencia", async () => {
@@ -1126,7 +1128,7 @@ describe("POS: venta registrada por el servidor", () => {
     await waitFor(() => expect(falso.datos.ventas).toHaveLength(1))
     expect(rpcDeVenta(falso)[1].p_cobros).toEqual([
       { medio: "transferencia", monto: 100, referencia: "" },
-      { medio: "enlace", monto: 107, referencia: "", cargo: 7.49 },
+      { medio: "enlace", monto: 107, referencia: "", tasa: 1.7, cargo: 1.82 },
     ])
   })
 
@@ -1163,7 +1165,7 @@ describe("POS: venta registrada por el servidor", () => {
   ])("pago mixto con %s y %s: manda los dos, con decimales exactos", async (etiquetaA, medioA, etiquetaB, medioB) => {
     const { falso } = await renderPOS()
     const refDe = (medio) => (medio === "efectivo" ? "" : `REF-${medio}`)
-    const conCargo = (medio, cargo) => (medio === "tarjeta" || medio === "enlace" ? { cargo } : {})
+    const conCargo = (medio, cargo) => (medio === "tarjeta" || medio === "enlace" ? { tasa: 1.7, cargo } : {})
 
     agregar("Martillo de uña")
     mixto()
@@ -1179,8 +1181,8 @@ describe("POS: venta registrada por el servidor", () => {
 
     await waitFor(() => expect(falso.datos.ventas).toHaveLength(1))
     expect(rpcDeVenta(falso)[1].p_cobros).toEqual([
-      { medio: medioA, monto: 100.1, referencia: refDe(medioA), ...conCargo(medioA, 7.01) },
-      { medio: medioB, monto: 106.9, referencia: refDe(medioB), ...conCargo(medioB, 7.48) },
+      { medio: medioA, monto: 100.1, referencia: refDe(medioA), ...conCargo(medioA, 1.7) },
+      { medio: medioB, monto: 106.9, referencia: refDe(medioB), ...conCargo(medioB, 1.82) },
     ])
   })
 
@@ -1217,7 +1219,7 @@ describe("POS: venta registrada por el servidor", () => {
     expect(botonFacturar()).toBeDisabled()
   })
 
-  it.each([["Tarjeta"], ["Enlace de pago"]])("en pago mixto, elegir %s calcula el 7 %% sin escribir nada, igual que en pago único", async (medio) => {
+  it.each([["Tarjeta"], ["Enlace de pago"]])("en pago mixto, elegir %s calcula el porcentaje adicional sin escribir nada, igual que en pago único", async (medio) => {
     await renderPOS()
 
     agregar("Martillo de uña")
@@ -1225,8 +1227,8 @@ describe("POS: venta registrada por el servidor", () => {
     marcar(medio)
 
     expect(screen.queryByLabelText(`Importe de ${medio}`)).not.toBeInTheDocument()
-    expect(screen.getByText(/cargo por medio de pago/i).nextSibling).toHaveTextContent("L 14.49")
-    expect(totales().querySelector(".grand")).toHaveTextContent("L 221.49")
+    expect(screen.getByText(/cargo por medio de pago/i).nextSibling).toHaveTextContent("L 3.52")
+    expect(totales().querySelector(".grand")).toHaveTextContent("L 210.52")
     expect(screen.queryByText(/importe asignado|pendiente/i)).not.toBeInTheDocument()
   })
 
@@ -1240,19 +1242,19 @@ describe("POS: venta registrada por el servidor", () => {
 
     expect(screen.getByLabelText("Importe de Tarjeta")).toHaveValue("207.00")
     expect(screen.getByLabelText("Importe de Efectivo")).toHaveValue("")
-    expect(totales().querySelector(".grand")).toHaveTextContent("L 221.49")
+    expect(totales().querySelector(".grand")).toHaveTextContent("L 210.52")
     expect(botonFacturar()).toBeDisabled()
 
     importe("Efectivo", "107")
 
     expect(screen.getByLabelText("Importe de Tarjeta")).toHaveValue("100.00")
-    expect(totales().querySelector(".grand")).toHaveTextContent("L 214.00")
+    expect(totales().querySelector(".grand")).toHaveTextContent("L 208.70")
     expect(botonFacturar()).toBeEnabled()
 
     marcar("Efectivo")
 
     expect(screen.queryByLabelText("Importe de Tarjeta")).not.toBeInTheDocument()
-    expect(totales().querySelector(".grand")).toHaveTextContent("L 221.49")
+    expect(totales().querySelector(".grand")).toHaveTextContent("L 210.52")
   })
 
   it("un pago mixto exige importe positivo en los dos medios", async () => {
@@ -1454,8 +1456,8 @@ describe("POS: venta registrada por el servidor", () => {
 
     unico("Tarjeta")
 
-    expect(screen.getByText(/cargo por medio de pago \(7%\)/i).nextSibling).toHaveTextContent("L 14.49")
-    expect(totales().querySelector(".grand")).toHaveTextContent("L 221.49")
+    expect(screen.getByText("Cargo por medio de pago (1.7 %)").nextSibling).toHaveTextContent("L 3.52")
+    expect(totales().querySelector(".grand")).toHaveTextContent("L 210.52")
     expect(screen.getAllByText("Total")).toHaveLength(1)
 
     unico("Transferencia")
@@ -1472,15 +1474,15 @@ describe("POS: venta registrada por el servidor", () => {
     marcar("Tarjeta")
     importe("Efectivo", "107")
 
-    expect(screen.getByText(/cargo por medio de pago/i).nextSibling).toHaveTextContent("L 7.00")
-    expect(totales().querySelector(".grand")).toHaveTextContent("L 214.00")
+    expect(screen.getByText(/cargo por medio de pago/i).nextSibling).toHaveTextContent("L 1.70")
+    expect(totales().querySelector(".grand")).toHaveTextContent("L 208.70")
 
     clicFacturar()
 
     await waitFor(() => expect(falso.datos.ventas).toHaveLength(1))
     expect(rpcDeVenta(falso)[1].p_cobros).toEqual([
       { medio: "efectivo", monto: 107, referencia: "" },
-      { medio: "tarjeta", monto: 100, referencia: "", cargo: 7 },
+      { medio: "tarjeta", monto: 100, referencia: "", tasa: 1.7, cargo: 1.7 },
     ])
   })
 
@@ -1498,16 +1500,91 @@ describe("POS: venta registrada por el servidor", () => {
 
     unico("Tarjeta")
 
-    expect(totales().querySelector(".grand")).toHaveTextContent("L 192.60")
+    expect(totales().querySelector(".grand")).toHaveTextContent("L 183.06")
 
     clicFacturar()
 
     await waitFor(() => expect(falso.datos.ventas).toHaveLength(1))
     expect(rpcDeVenta(falso)[1]).toMatchObject({
       p_con_isv: false,
-      p_cobros: [{ medio: "tarjeta", monto: 180, referencia: "", cargo: 12.6 }],
+      p_cobros: [{ medio: "tarjeta", monto: 180, referencia: "", tasa: 1.7, cargo: 3.06 }],
     })
-    expect(falso.datos.ventas[0]).toMatchObject({ isv: 0, tasa_isv: 0, total: 180, cargo_por_medio: 12.6 })
+    expect(falso.datos.ventas[0]).toMatchObject({ isv: 0, tasa_isv: 0, total: 180, cargo_por_medio: 3.06, tasa_cargo: 1.7 })
+  })
+
+  it("usa el porcentaje de cada medio que configuró el administrador", async () => {
+    const { falso } = await renderPOS({ empresa: { ...EMPRESA_PRUEBA, tasa_cargo_tarjeta: 2, tasa_cargo_enlace: 1.5 } })
+
+    agregar("Martillo de uña")
+    unico("Tarjeta")
+
+    expect(screen.getByText("Cargo por medio de pago (2 %)").nextSibling).toHaveTextContent("L 4.14")
+    expect(totales().querySelector(".grand")).toHaveTextContent("L 211.14")
+
+    unico("Enlace de pago")
+
+    expect(screen.getByText("Cargo por medio de pago (1.5 %)").nextSibling).toHaveTextContent("L 3.11")
+
+    clicFacturar()
+
+    await waitFor(() => expect(falso.datos.ventas).toHaveLength(1))
+    expect(rpcDeVenta(falso)[1].p_cobros).toEqual([{ medio: "enlace", monto: 207, referencia: "", tasa: 1.5, cargo: 3.11 }])
+  })
+
+  it("en pago mixto con tarjeta y enlace a distinto porcentaje, la etiqueta dice los dos", async () => {
+    await renderPOS({ empresa: { ...EMPRESA_PRUEBA, tasa_cargo_tarjeta: 2, tasa_cargo_enlace: 1.5 } })
+
+    agregar("Martillo de uña")
+    mixto()
+    marcar("Tarjeta")
+    marcar("Enlace de pago")
+    importe("Tarjeta", "100")
+
+    expect(screen.getByText("Cargo por medio de pago (Tarjeta 2 %, Enlace de pago 1.5 %)").nextSibling).toHaveTextContent("L 3.61")
+    expect(totales().querySelector(".grand")).toHaveTextContent("L 210.61")
+  })
+
+  it("si el porcentaje cambió desde que se abrió la pantalla, no registra la venta, lee el nuevo y recalcula", async () => {
+    const { falso } = await renderPOS()
+
+    agregar("Martillo de uña")
+    unico("Tarjeta")
+
+    expect(totales().querySelector(".grand")).toHaveTextContent("L 210.52")
+
+    // El administrador lo cambia en otra pantalla.
+    falso.datos.empresas[0].tasa_cargo_tarjeta = 2
+
+    Swal.fire.mockClear()
+    clicFacturar()
+
+    await waitFor(() =>
+      expect(Swal.fire).toHaveBeenCalledWith(
+        expect.objectContaining({
+          title: "El porcentaje adicional cambió",
+          text: expect.stringMatching(/el porcentaje adicional de tarjeta es 2 %/i),
+        })
+      )
+    )
+    expect(falso.datos.ventas).toHaveLength(0)
+    await waitFor(() => expect(totales().querySelector(".grand")).toHaveTextContent("L 211.14"))
+    expect(screen.getByText("Cargo por medio de pago (2 %)")).toBeInTheDocument()
+  })
+
+  it("sin el porcentaje de la empresa no deja cobrar con tarjeta, pero sí en efectivo", async () => {
+    const sinTasas = Object.fromEntries(Object.entries(EMPRESA_PRUEBA).filter(([k]) => !k.startsWith("tasa_cargo_")))
+
+    await renderPOS({ empresa: sinTasas })
+
+    agregar("Martillo de uña")
+    unico("Tarjeta")
+
+    expect(screen.getByText(/no se pudo leer el porcentaje adicional de tarjeta/i)).toBeInTheDocument()
+    expect(botonFacturar()).toBeDisabled()
+
+    unico("Efectivo")
+
+    expect(botonFacturar()).toBeEnabled()
   })
 
   it.each([
