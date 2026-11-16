@@ -237,13 +237,17 @@
 
 /*
   Número, nombre y subtotal arriba; cantidad, precio y eliminar debajo, y bajo
-  ellos, solo si hace falta, el motivo de una rebaja. Así el subtotal nunca se
-  corta en un teléfono. Con ancho de sobra, la línea entera en una fila.
+  ellos, solo si hace falta, el motivo de una rebaja. Con ancho de sobra, la línea
+  entera en una fila.
+
+  El nombre y el subtotal van juntos en .pos-linea-cabecera, que ocupa toda la
+  primera fila: así el subtotal toma el ancho que necesita aunque la cantidad y el
+  precio llenen la segunda, y el nombre se queda con el resto.
 */
 .pos .cart-row {
   display: grid;
   grid-template-areas:
-    "numero nombre nombre subtotal subtotal"
+    "numero cabecera cabecera cabecera cabecera"
     ". cantidad precio . quitar"
     ". ajuste ajuste ajuste ajuste";
   grid-template-columns: auto auto auto minmax(0, 1fr) auto;
@@ -263,9 +267,18 @@
   color: var(--text-muted);
 }
 
+.pos .pos-linea-cabecera {
+  grid-area: cabecera;
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
 /* Ocupa su área sin ensancharla: un nombre largo no le quita sitio al subtotal. */
 .pos .cart-row .name {
   grid-area: nombre;
+  flex: 1 1 auto;
   min-width: 0;
   contain: inline-size;
   overflow-wrap: anywhere;
@@ -277,6 +290,7 @@
 
 .pos .cart-row .sub {
   grid-area: subtotal;
+  flex: none;
   align-self: start;
   width: auto;
   white-space: nowrap;
@@ -294,6 +308,11 @@
       "numero nombre cantidad precio subtotal quitar"
       ". ajuste ajuste ajuste ajuste ajuste";
     grid-template-columns: auto minmax(0, 1fr) auto auto minmax(74px, auto) auto;
+  }
+
+  /* En una fila, el nombre y el subtotal vuelven a ser celdas de la cuadrícula. */
+  .pos .pos-linea-cabecera {
+    display: contents;
   }
 }
 
