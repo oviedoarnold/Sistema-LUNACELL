@@ -23,7 +23,6 @@ export const SIN_REGISTRAR = "sin_registrar"
 export const UNICO = "unico"
 export const MIXTO = "mixto"
 export const MEDIOS_EN_MIXTO = 2
-export const TASA_DE_CARGO = 7
 
 export const etiquetaDelMedio = (medio) =>
   medio === SIN_REGISTRAR ? "Sin registrar" : MEDIO_POR_ID[medio]?.etiqueta || medio
@@ -33,20 +32,70 @@ const centavos = (valor) => Math.round(Number(valor) * 100)
 const aTexto = (cuantos) => (cuantos / 100).toFixed(2)
 
 /*
-  El 7 % que tarjeta y enlace suman a lo que paga el comprador, sobre el importe
-  de ese medio. El mismo cálculo que cargo_de_cobro() en la base, que lo comprueba.
+  El porcentaje adicional que tarjeta y enlace suman a lo que paga el comprador.
+  Lo fija el administrador en Configuración y llega con la empresa como
+  `{ tarjeta, enlace }` (0044): aquí no hay ninguno escrito. Sin él no se puede
+  cobrar con ese medio, porque el servidor rechazaría cualquier otro.
 */
-export const cargoDe = (medio, monto) =>
-  medio === "tarjeta" || medio === "enlace" ? Math.round((centavos(monto) * TASA_DE_CARGO) / 100) / 100 : 0
+export const llevaCargo = (medio) => medio === "tarjeta" || medio === "enlace"
+
+export const tasaValida = (tasa) =>
+  typeof tasa === "number" && Number.isFinite(tasa) && tasa >= 0 && tasa <= 100 && Math.round(tasa * 100) === tasa * 100
+
+/*
+  Sobre el importe de ese medio. El mismo cálculo que cargo_de_cobro() en la base,
+  que lo comprueba: en enteros, porque 115 × 1.7 en binario da 195.49999… y no 195.5.
+*/
+export const cargoDe = (medio, monto, tasa) =>
+  llevaCargo(medio) ? Math.round((centavos(monto) * Math.round(Number(tasa) * 100)) / 10000) / 100 : 0
 
 export const cargoDeCobros = (cobros) =>
   (cobros || []).reduce((suma, c) => suma + centavos(c.cargo || 0), 0) / 100
 
-/* Sin cargo el cobro no lleva el campo: es lo mismo que enviaba antes. */
-const conCargo = (cobro) => {
-  const cargo = cargoDe(cobro.medio, cobro.monto)
+// Lo escrito en Configuración: «1.7», «1,7», «2». De 0 a 100 con hasta dos decimales; null si no vale.
+export function leerPorcentaje(texto) {
+  const limpio = String(texto ?? "").trim().replace(",", ".")
 
-  return cargo > 0 ? { ...cobro, cargo } : cobro
+  if (!/^\d{1,3}(\.\d{1,2})?$/.test(limpio)) return null
+
+  const valor = Number(limpio)
+
+  return valor <= 100 ? valor : null
+}
+
+// «1.7 %», «2 %».
+export const textoDePorcentaje = (tasa) => `${Number(tasa)} %`
+
+/*
+  Qué porcentaje se cobró, para la etiqueta del cargo: uno si fue uno solo; si
+  tarjeta y enlace llevaron distintos, cada uno con su medio. Vacío si no se sabe,
+  como en lo cobrado antes de la 0044.
+*/
+export function textoDeTasas(cobros) {
+  const conCargo = (cobros || []).filter((c) => llevaCargo(c.medio) && Number(c.cargo) > 0)
+
+  if (conCargo.length === 0 || !conCargo.every((c) => tasaValida(c.tasa))) return ""
+
+  const distintas = new Set(conCargo.map((c) => c.tasa))
+
+  if (distintas.size === 1) return textoDePorcentaje(conCargo[0].tasa)
+
+  return conCargo.map((c) => `${MEDIO_POR_ID[c.medio].etiqueta} ${textoDePorcentaje(c.tasa)}`).join(", ")
+}
+
+export const etiquetaDelCargo = (tasas) => (tasas ? `Cargo por medio de pago (${tasas})` : "Cargo por medio de pago")
+
+/*
+  Tarjeta y enlace viajan con su tasa y su cargo, también si el cargo es 0: así la
+  base guarda con qué tasa se cobró. Sin una tasa válida no llevan ninguno de los
+  dos, y problemaDeCobros() impide enviarlos.
+*/
+const conCargo = (cobro, tasas) => {
+  if (!llevaCargo(cobro.medio)) return cobro
+
+  const tasa = tasas?.[cobro.medio]
+
+  return tasaValida(tasa) ? { ...cobro, tasa, cargo: cargoDe(cobro.medio, cobro.monto, tasa) } : cobro
 }
 
 const vacios = () => Object.fromEntries(MEDIOS_DE_PAGO.map((m) => [m.id, ""]))
@@ -176,18 +225,21 @@ export const escribirReferencia = (valor, medio, texto) => ({
 /*
   Lo que eligió el cajero, como lo recibe la base. En pago único el importe es
   siempre el total, aunque el total cambie después. En pago mixto, un medio sin
-  importe no viaja, y problemaDelSelector impide confirmar así.
+  importe no viaja, y problemaDelSelector impide confirmar así. `tasas` es el
+  porcentaje adicional vigente de la empresa: { tarjeta, enlace }.
 */
-export function cobrosDelSelector(valor, total) {
+export function cobrosDelSelector(valor, total, tasas) {
   const { modalidad, elegidos, referencias } = valor
 
   if (modalidad !== MIXTO) {
-    return elegidos.map((medio) => conCargo({ medio, monto: centavos(total) / 100, referencia: referencias[medio].trim() }))
+    return elegidos.map((medio) => conCargo({ medio, monto: centavos(total) / 100, referencia: referencias[medio].trim() }, tasas))
   }
 
   return elegidos
     .filter((medio) => centavos(importeDe(valor, medio, total)) > 0)
-    .map((medio) => conCargo({ medio, monto: centavos(importeDe(valor, medio, total)) / 100, referencia: referencias[medio].trim() }))
+    .map((medio) =>
+      conCargo({ medio, monto: centavos(importeDe(valor, medio, total)) / 100, referencia: referencias[medio].trim() }, tasas)
+    )
 }
 
 /* Cuánto falta por asignar; negativo si sobra porque el total bajó. */
@@ -202,7 +254,9 @@ export function problemaDeCobros(cobros, total) {
   if (cobros.length === 0) return "Elige el medio de pago."
   if (cobros.length > MEDIOS_EN_MIXTO) return `Un pago admite hasta ${MEDIOS_EN_MIXTO} medios.`
 
-  for (const { medio, monto, referencia } of cobros) {
+  for (const cobro of cobros) {
+    const { medio, monto, referencia } = cobro
+
     if (!MEDIO_POR_ID[medio]) return "Un medio de pago no es válido."
 
     const { etiqueta } = MEDIO_POR_ID[medio]
@@ -210,6 +264,10 @@ export function problemaDeCobros(cobros, total) {
     if (!Number.isFinite(monto) || monto <= 0) return `El importe de ${etiqueta} debe ser mayor que cero.`
     if (Math.abs(monto * 100 - centavos(monto)) > 1e-6) return `El importe de ${etiqueta} admite dos decimales.`
     if (referencia.length > 120) return `La referencia de ${etiqueta} es demasiado larga.`
+
+    if (llevaCargo(medio) && !tasaValida(cobro.tasa)) {
+      return `No se pudo leer el porcentaje adicional de ${etiqueta}. Actualiza la página con conexión e inténtalo de nuevo.`
+    }
   }
 
   if (faltaPorAsignar(cobros, total) !== 0) return "Los importes de los medios de pago deben sumar el total."
@@ -221,7 +279,7 @@ export function problemaDeCobros(cobros, total) {
   Lo mismo sobre el selector, que además sabe lo que un cobro no dice: que el
   pago mixto lleva dos medios y que los dos tienen importe.
 */
-export function problemaDelSelector(valor, total) {
+export function problemaDelSelector(valor, total, tasas) {
   if (valor.modalidad === MIXTO) {
     if (valor.elegidos.length !== MEDIOS_EN_MIXTO) return `Elige ${MEDIOS_EN_MIXTO} medios de pago.`
 
@@ -233,14 +291,23 @@ export function problemaDelSelector(valor, total) {
 
   }
 
-  return problemaDeCobros(cobrosDelSelector(valor, total), total)
+  return problemaDeCobros(cobrosDelSelector(valor, total, tasas), total)
 }
 
+/*
+  Cada medio con su importe y su referencia, y el cargo con la tasa con la que se
+  cobró. Lo cobrado antes de la 0044 no guarda la tasa: va solo el cargo.
+*/
 export const textoDeMedios = (medios) =>
   (medios || [])
-    .map(({ medio, monto, referencia }) => {
+    .map(({ medio, monto, referencia, cargo, tasa }) => {
       const base = `${etiquetaDelMedio(medio)} ${Number(monto).toFixed(2)}`
+      const conReferencia = referencia ? `${base} (${referencia})` : base
 
-      return referencia ? `${base} (${referencia})` : base
+      if (!(Number(cargo) > 0)) return conReferencia
+
+      const conTasa = tasaValida(tasa) ? ` al ${textoDePorcentaje(tasa)}` : ""
+
+      return `${conReferencia} + cargo ${Number(cargo).toFixed(2)}${conTasa}`
     })
     .join(", ")

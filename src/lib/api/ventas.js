@@ -110,6 +110,8 @@ export function aVentaDeApp(fila, empresa) {
     total: Number(fila.total),
     // Lo que paga el comprador es el total más este cargo, y va aparte en el documento.
     cargo: Number(fila.cargo_por_medio || 0),
+    // Con qué porcentaje se cobró (0044). Vacío en lo anterior, o si tarjeta y enlace llevaron distintos.
+    tasaCargo: fila.tasa_cargo === null || fila.tasa_cargo === undefined ? null : Number(fila.tasa_cargo),
 
     paymentType: fila.forma_pago,
     type: fila.forma_pago,
@@ -216,6 +218,7 @@ const MOTIVOS_DE_VENTA = {
   LM002: "medios-no-suman",
   LM003: "credito-con-medios",
   LM005: "clave-reusada",
+  LM007: "porcentaje-cambiado",
   LN001: "precio-negociado-invalido",
   42501: "sin-permiso",
 }

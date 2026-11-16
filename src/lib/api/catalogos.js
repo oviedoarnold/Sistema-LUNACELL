@@ -388,6 +388,9 @@ export async function eliminarProveedor(id) {
 
 // ── EMPRESA ────────────────────────────────────────────────
 
+// Null si la base no la tiene (antes de la 0044): sin ella no se cobra con ese medio.
+const tasaDeCargo = (valor) => (valor === null || valor === undefined || valor === "" ? null : Number(valor))
+
 export const aEmpresaDeApp = (fila) => ({
   id: fila.id,
   name: fila.nombre,
@@ -395,6 +398,11 @@ export const aEmpresaDeApp = (fila) => ({
   phone: fila.telefono || "",
   currency: fila.moneda || "L",
   taxRate: Number(fila.tasa_isv) || 0,
+  // El porcentaje adicional de tarjeta y enlace (0044). Lo cambia solo configurarCargosPorMedio().
+  cargos: {
+    tarjeta: tasaDeCargo(fila.tasa_cargo_tarjeta),
+    enlace: tasaDeCargo(fila.tasa_cargo_enlace),
+  },
   nextInvoice: Number(fila.proximo_correlativo_factura) || 1,
   nextQuote: Number(fila.proximo_correlativo_cotizacion) || 1,
   fiscal: {
@@ -444,6 +452,48 @@ export async function actualizarEmpresa(id, empresa) {
     .eq("id", id)
 
   if (error) fallo(error, "guardar los datos de la empresa")
+}
+
+/*
+  El porcentaje adicional de tarjeta y enlace. Lo decide la base: solo un
+  administrador lo cambia, y cada cambio queda en su historial con quién y cuándo.
+  Devuelve las tasas que quedaron.
+*/
+export async function configurarCargosPorMedio({ tarjeta, enlace }) {
+  const { data, error } = await supabase.rpc("configurar_cargos_por_medio", {
+    p_tarjeta: tarjeta,
+    p_enlace: enlace,
+  })
+
+  if (error) {
+    // Los dos rechazos de negocio ya dicen qué pasó.
+    if (error.code === "42501" || error.code === "LM006") throw new Error(`${error.message}.`)
+
+    fallo(error, "guardar el porcentaje adicional")
+  }
+
+  return { tarjeta: Number(data.tarjeta), enlace: Number(data.enlace) }
+}
+
+// Los últimos cambios del porcentaje adicional. La base solo se los muestra al administrador.
+export async function traerCambiosDeCargo({ limite = 6 } = {}) {
+  const { data, error } = await supabase
+    .from("cambios_de_cargo_por_medio")
+    .select("id, medio, tasa_anterior, tasa_nueva, cambiado_por_nombre, cambiado_en")
+    .order("cambiado_en", { ascending: false })
+    .order("id", { ascending: false })
+    .limit(limite)
+
+  if (error) fallo(error, "cargar el historial del porcentaje adicional")
+
+  return (data || []).map((fila) => ({
+    id: fila.id,
+    medio: fila.medio,
+    anterior: Number(fila.tasa_anterior),
+    nueva: Number(fila.tasa_nueva),
+    por: fila.cambiado_por_nombre,
+    en: fila.cambiado_en,
+  }))
 }
 
 // ── IMÁGENES DE PRODUCTO ───────────────────────────────────

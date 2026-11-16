@@ -6,7 +6,19 @@ import {
 import { formatDocumentNumber } from "../utils/fiscal"
 
 import { formatMoney } from "../utils/format"
-import { TASA_DE_CARGO } from "../utils/mediosDePago"
+import { etiquetaDelCargo, tasaValida, textoDePorcentaje, textoDeTasas } from "../utils/mediosDePago"
+
+/*
+  El porcentaje con el que se cobró, nunca el vigente: una venta reimpresa
+  conserva el suyo. La vista previa trae sus cobros; una venta guardada, la tasa
+  que guardó la base (vacía si tarjeta y enlace llevaron distintas, o si es
+  anterior a la 0044, y entonces la etiqueta va sin porcentaje).
+*/
+const tasasDelDocumento = (sale) => {
+  if (sale.cobros) return textoDeTasas(sale.cobros)
+
+  return tasaValida(sale.tasaCargo) ? textoDePorcentaje(sale.tasaCargo) : ""
+}
 
 /*
   Sin datos de la empresa el encabezado sale vacío, y así debe ser: el
@@ -347,7 +359,7 @@ function InvoiceTemplate({
         {Number(sale.cargo) > 0 && (
           <div className="inv-totals-row">
             <span>
-              Cargo por medio de pago ({TASA_DE_CARGO}%)
+              {etiquetaDelCargo(tasasDelDocumento(sale))}
             </span>
 
             <b>

@@ -248,17 +248,17 @@ describe("el flujo autorizado", () => {
 })
 
 describe("con las fases anteriores", () => {
-  it("el cargo del 7 % y el pago mixto se calculan sobre lo negociado", async () => {
+  it("el porcentaje adicional y el pago mixto se calculan sobre lo negociado", async () => {
     const e = await escenario()
-    const tarjeta = await vender(e.vendedor.authId, [negociado(e, 60)], [{ medio: "tarjeta", monto: 69, referencia: "", cargo: 4.83 }])
-    const mixto = await vender(e.vendedor.authId, [negociado(e, 60)], [efectivo(19), { medio: "enlace", monto: 50, referencia: "", cargo: 3.5 }])
+    const tarjeta = await vender(e.vendedor.authId, [negociado(e, 60)], [{ medio: "tarjeta", monto: 69, referencia: "", tasa: 1.7, cargo: 1.17 }])
+    const mixto = await vender(e.vendedor.authId, [negociado(e, 60)], [efectivo(19), { medio: "enlace", monto: 50, referencia: "", tasa: 1.7, cargo: 0.85 }])
 
-    expect(await laVenta(tarjeta.venta_id)).toMatchObject({ total: 69, cargo: 4.83 })
-    expect(await laVenta(mixto.venta_id)).toMatchObject({ total: 69, cargo: 3.5 })
+    expect(await laVenta(tarjeta.venta_id)).toMatchObject({ total: 69, cargo: 1.17 })
+    expect(await laVenta(mixto.venta_id)).toMatchObject({ total: 69, cargo: 0.85 })
 
     // Un cargo calculado sobre el precio anterior se rechaza.
     expect(
-      (await fallo(vender(e.vendedor.authId, [negociado(e, 60)], [{ medio: "tarjeta", monto: 69, referencia: "", cargo: 8.05 }]))).code
+      (await fallo(vender(e.vendedor.authId, [negociado(e, 60)], [{ medio: "tarjeta", monto: 69, referencia: "", tasa: 1.7, cargo: 1.96 }]))).code
     ).toBe("LM001")
   })
 

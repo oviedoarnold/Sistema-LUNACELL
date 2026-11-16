@@ -33,6 +33,7 @@ const MOTIVOS = {
   LM001: "medios-invalidos",
   LM002: "medios-no-suman",
   LM005: "clave-reusada",
+  LM007: "porcentaje-cambiado",
 }
 
 export class ErrorDeCobro extends Error {

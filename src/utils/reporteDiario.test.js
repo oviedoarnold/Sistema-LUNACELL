@@ -39,6 +39,25 @@ describe("las secciones del reporte", () => {
     expect(filas[1].celdas.at(-1)).toBe("Anulada")
   })
 
+  it("el medio de una venta lleva su cargo con el porcentaje con que se cobró", () => {
+    const conCargo = {
+      ...REPORTE,
+      medios: {
+        ...REPORTE.medios,
+        por_venta: {
+          "v-1": [
+            { medio: "efectivo", monto: 15, cargo: 0, tasa: 0, referencia: "" },
+            { medio: "tarjeta", monto: 100, cargo: 1.7, tasa: 1.7, referencia: "AUT-9" },
+          ],
+        },
+      },
+    }
+
+    expect(seccionesDelReporte(conCargo).find((s) => s.id === "operaciones").filas[0].celdas).toContain(
+      "Efectivo 15.00, Tarjeta 100.00 (AUT-9) + cargo 1.70 al 1.7 %"
+    )
+  })
+
   it("cobros sin medio dicen «Sin registrar», y una venta a crédito no lleva medio", () => {
     const sinMedios = { ...REPORTE, medios: { ...REPORTE.medios, por_venta: {}, por_abono: {}, por_anulacion: {} } }
     const operaciones = seccionesDelReporte(sinMedios).find((s) => s.id === "operaciones")

@@ -412,31 +412,37 @@ describe("abonos", () => {
   })
 })
 
-describe("el cargo del 7 %", () => {
-  const conCargo = (medio, monto, referencia = "") => ({ medio, monto, referencia, cargo: Math.round(monto * 7) / 100 })
+/*
+  Con el porcentaje que nace con la 0044 (1.7). Lo que cambia al configurarlo está en
+  porcentaje-adicional.test.mjs.
+*/
+describe("el porcentaje adicional", () => {
+  const conCargo = (medio, monto, referencia = "") => ({
+    medio, monto, referencia, tasa: 1.7, cargo: Math.round(Math.round(monto * 100) * 170 / 10000) / 100,
+  })
   const cargoDeVenta = async (id) =>
     Number((await db.query("select cargo_por_medio from ventas where id = $1", [id])).rows[0].cargo_por_medio)
   const cargos = async (id) =>
     (await db.query("select medio, monto::float8 as monto, cargo::float8 as cargo from cobros_por_medio where venta_id = $1 order by medio", [id])).rows
 
-  it.each([["tarjeta"], ["enlace"]])("%s lleva 7 %% sobre su importe, y el total de la venta no cambia", async (medio) => {
+  it.each([["tarjeta"], ["enlace"]])("%s lleva su porcentaje sobre su importe, y el total de la venta no cambia", async (medio) => {
     const e = await escenario()
     const venta = await vender(e, e.vendedor.authId, [conCargo(medio, 115)])
     const { rows } = await db.query("select total::float8 as total from ventas where id = $1", [venta.venta_id])
 
     expect(rows[0].total).toBe(115)
-    expect(await cargoDeVenta(venta.venta_id)).toBe(8.05)
-    expect(await cargos(venta.venta_id)).toEqual([{ medio, monto: 115, cargo: 8.05 }])
+    expect(await cargoDeVenta(venta.venta_id)).toBe(1.96)
+    expect(await cargos(venta.venta_id)).toEqual([{ medio, monto: 115, cargo: 1.96 }])
   })
 
   it("en pago mixto solo lleva cargo la parte de la tarjeta", async () => {
     const e = await escenario()
     const venta = await vender(e, e.vendedor.authId, [efectivo(15), conCargo("tarjeta", 100)])
 
-    expect(await cargoDeVenta(venta.venta_id)).toBe(7)
+    expect(await cargoDeVenta(venta.venta_id)).toBe(1.7)
     expect(await cargos(venta.venta_id)).toEqual([
       { medio: "efectivo", monto: 15, cargo: 0 },
-      { medio: "tarjeta", monto: 100, cargo: 7 },
+      { medio: "tarjeta", monto: 100, cargo: 1.7 },
     ])
   })
 
@@ -444,12 +450,12 @@ describe("el cargo del 7 %", () => {
     ["uno menor", 1],
     ["uno mayor", 99],
     ["cero", 0],
-  ])("rechaza %s al que da la cuenta, sin registrar la venta", async (_, cargo) => {
+  ])("rechaza %s al que da el porcentaje vigente, sin registrar la venta", async (_, cargo) => {
     const e = await escenario()
     const antes = await existencia(db, e.camion1, e.cargador.id)
     const error = await fallo(vender(e, e.vendedor.authId, [{ medio: "tarjeta", monto: 115, cargo }]))
 
-    expect(error.code).toBe("LM001")
+    expect(error.code).toBe("LM007")
     expect(await existencia(db, e.camion1, e.cargador.id)).toBe(antes)
   })
 
@@ -457,7 +463,7 @@ describe("el cargo del 7 %", () => {
     const e = await escenario()
 
     for (const medio of ["efectivo", "transferencia"]) {
-      const error = await fallo(vender(e, e.vendedor.authId, [{ medio, monto: 115, cargo: 8.05 }]))
+      const error = await fallo(vender(e, e.vendedor.authId, [{ medio, monto: 115, cargo: 1.96 }]))
 
       expect(error.code).toBe("LM001")
     }
@@ -478,7 +484,7 @@ describe("el cargo del 7 %", () => {
 
     expect(segunda.repetida).toBe(true)
     expect(segunda.venta_id).toBe(primera.venta_id)
-    expect(await cargoDeVenta(primera.venta_id)).toBe(8.05)
+    expect(await cargoDeVenta(primera.venta_id)).toBe(1.96)
     expect(await cargos(primera.venta_id)).toHaveLength(1)
 
     const error = await fallo(vender(e, e.vendedor.authId, [tarjeta(115)], { clave: "cargo-1" }))
@@ -495,7 +501,7 @@ describe("el cargo del 7 %", () => {
     const { rows } = await db.query("select monto::float8 as monto, cargo_por_medio::float8 as cargo from pagos where id = $1", [pago.pago_id])
     const { rows: abonos } = await db.query("select sum(monto)::float8 as suma from abonos where pago_id = $1", [pago.pago_id])
 
-    expect(rows[0]).toEqual({ monto: 100, cargo: 7 })
+    expect(rows[0]).toEqual({ monto: 100, cargo: 1.7 })
     expect(abonos[0].suma).toBe(100)
   })
 
@@ -517,7 +523,7 @@ describe("el cargo del 7 %", () => {
 
     expect(rows).toHaveLength(2)
     expect(rows.reduce((s, r) => s + r.monto, 0)).toBe(200)
-    expect(Math.round(rows.reduce((s, r) => s + r.cargo, 0) * 100)).toBe(1400)
+    expect(Math.round(rows.reduce((s, r) => s + r.cargo, 0) * 100)).toBe(340)
   })
 
   it("al anular con reembolso se guarda el cargo a devolver, y sale de los cobros", async () => {
@@ -534,9 +540,9 @@ describe("el cargo del 7 %", () => {
     const r = await medios(e.admin.authId)
     const d = await diario(e.admin.authId)
 
-    expect(rows[0]).toEqual({ total: 115, cargo: 8.05 })
-    expect(r.totales).toMatchObject({ total: 0, cargos: 0, cargos_a_devolver: 8.05 })
-    expect(d.indicadores.reembolsos_pendientes).toBe(123.05)
+    expect(rows[0]).toEqual({ total: 115, cargo: 1.96 })
+    expect(r.totales).toMatchObject({ total: 0, cargos: 0, cargos_a_devolver: 1.96 })
+    expect(d.indicadores.reembolsos_pendientes).toBe(116.96)
     expect(d.indicadores.cargos_total).toBe(0)
   })
 
@@ -551,12 +557,12 @@ describe("el cargo del 7 %", () => {
     const d = await diario(e.admin.authId)
 
     expect(r.totales.total).toBe(d.indicadores.cobros_total)
-    expect(r.totales).toMatchObject({ total: 215, cargos: 14, total_cobrado: 229 })
-    expect(d.indicadores).toMatchObject({ cobros_total: 215, cargos_total: 14, total_cobrado: 229 })
+    expect(r.totales).toMatchObject({ total: 215, cargos: 3.4, total_cobrado: 218.4 })
+    expect(d.indicadores).toMatchObject({ cobros_total: 215, cargos_total: 3.4, total_cobrado: 218.4 })
     expect(r.por_medio.map((m) => [m.medio, m.monto, m.cargo, m.total_cobrado])).toEqual([
       ["efectivo", 15, 0, 15],
-      ["tarjeta", 100, 7, 107],
-      ["enlace", 100, 7, 107],
+      ["tarjeta", 100, 1.7, 101.7],
+      ["enlace", 100, 1.7, 101.7],
     ])
   })
 
@@ -610,10 +616,10 @@ describe("el ISV de cada venta", () => {
 
   it("el cargo se calcula sobre el importe sin ISV", async () => {
     const e = await escenario()
-    const venta = await venderConIsv(e, [{ medio: "tarjeta", monto: 100, referencia: "", cargo: 7 }], false)
+    const venta = await venderConIsv(e, [{ medio: "tarjeta", monto: 100, referencia: "", tasa: 1.7, cargo: 1.7 }], false)
 
     expect(await laVenta(venta.venta_id)).toMatchObject({ total: 100 })
-    expect((await db.query("select cargo_por_medio::float8 as c from ventas where id = $1", [venta.venta_id])).rows[0].c).toBe(7)
+    expect((await db.query("select cargo_por_medio::float8 as c from ventas where id = $1", [venta.venta_id])).rows[0].c).toBe(1.7)
   })
 
   it("a crédito sin ISV la deuda es el total sin ISV", async () => {
@@ -657,7 +663,7 @@ describe("el ISV de cada venta", () => {
   it("sin conexión con tasa 0 entra sin ISV y sin conciliación, y un reintento no duplica", async () => {
     const e = await escenario()
     const venta = { ...ventaSinConexion(e), tasa_isv: 0, total_cobrado: 200 }
-    const cobros = [{ medio: "tarjeta", monto: 200, referencia: "", cargo: 14 }]
+    const cobros = [{ medio: "tarjeta", monto: 200, referencia: "", tasa: 1.7, cargo: 3.4 }]
     const primera = await sincronizar(e.vendedor.authId, venta, cobros)
     const segunda = await sincronizar(e.vendedor.authId, venta, cobros)
 
@@ -665,20 +671,21 @@ describe("el ISV de cada venta", () => {
     expect(segunda.estado).toBe("ya_registrada")
     expect(segunda.venta_id).toBe(primera.venta_id)
     expect(await laVenta(primera.venta_id)).toMatchObject({ subtotal: 200, isv: 0, tasa: 0, total: 200 })
-    expect((await db.query("select cargo_por_medio::float8 as c from ventas where id = $1", [primera.venta_id])).rows[0].c).toBe(14)
+    expect((await db.query("select cargo_por_medio::float8 as c from ventas where id = $1", [primera.venta_id])).rows[0].c).toBe(3.4)
   })
 
   it("una venta sin ISV que va a conciliación se aplica sin ISV y con su cargo", async () => {
     const e = await escenario()
     const venta = { ...ventaSinConexion(e), tasa_isv: 0, total_cobrado: 200 }
-    const r = await rescatar(e.admin.authId, venta, [{ medio: "enlace", monto: 200, referencia: "", cargo: 14 }])
+    const r = await rescatar(e.admin.authId, venta, [{ medio: "enlace", monto: 200, referencia: "", tasa: 1.7, cargo: 3.4 }])
 
     expect(r.estado).toBe("en_conciliacion")
 
     const aplicada = await conciliar(db, e.admin.authId, r.conciliacion_id, "aplicar")
 
     expect(await laVenta(aplicada.venta_id)).toMatchObject({ isv: 0, total: 200 })
-    expect((await db.query("select cargo_por_medio::float8 as c from ventas where id = $1", [aplicada.venta_id])).rows[0].c).toBe(14)
+    expect((await db.query("select cargo_por_medio::float8 as c, tasa_cargo::float8 as t from ventas where id = $1", [aplicada.venta_id])).rows[0])
+      .toEqual({ c: 3.4, t: 1.7 })
   })
 
   it("una tasa distinta de 0 y de la empresa sigue yendo a conciliación", async () => {
@@ -903,11 +910,11 @@ describe("anulaciones", () => {
     expect(r.por_medio.map((m) => m.medio)).toEqual(["efectivo"])
 
     // El detalle sigue diciendo con qué se había cobrado.
-    expect(r.por_venta[venta.venta_id]).toEqual([{ medio: "tarjeta", monto: 115, cargo: 0, referencia: "AUT-1" }])
+    expect(r.por_venta[venta.venta_id]).toEqual([{ medio: "tarjeta", monto: 115, cargo: 0, tasa: 0, referencia: "AUT-1" }])
 
     const { anulaciones } = await diario(e.admin.authId)
 
-    expect(r.por_anulacion[anulaciones[0].id]).toEqual([{ medio: "tarjeta", monto: 115, cargo: 0, referencia: "AUT-1" }])
+    expect(r.por_anulacion[anulaciones[0].id]).toEqual([{ medio: "tarjeta", monto: 115, cargo: 0, tasa: 0, referencia: "AUT-1" }])
   })
 
   it("los medios no impiden anular, y devolver la mercadería sigue funcionando", async () => {
@@ -997,8 +1004,8 @@ describe("el reporte", () => {
     const { abonos } = await diario(e.admin.authId)
 
     expect(r.por_abono[abonos[0].id]).toEqual([
-      { medio: "efectivo", monto: 40, cargo: 0, referencia: "" },
-      { medio: "tarjeta", monto: 60, cargo: 0, referencia: "AUT-1" },
+      { medio: "efectivo", monto: 40, cargo: 0, tasa: 0, referencia: "" },
+      { medio: "tarjeta", monto: 60, cargo: 0, tasa: 0, referencia: "AUT-1" },
     ])
   })
 })

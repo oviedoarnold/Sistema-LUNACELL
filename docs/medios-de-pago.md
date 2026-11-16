@@ -34,20 +34,49 @@ venta a crédito no lleva medios: se cobra con sus abonos.
   ya existe; con otros medios se rechaza (`LM005`, u `OF003` sin conexión).
 - **Solo se agrega.** Ni el dueño de la base cambia, borra o vacía un cobro.
 
-## Cargo del 7 %
+## Porcentaje adicional por medio de pago
 
-Tarjeta y enlace suman un 7 % a lo que paga el comprador, sobre el importe de ese
-medio, y lo calcula el sistema: L 1,000 con tarjeta son L 1,070, y L 600 en efectivo
-más L 400 con tarjeta son L 1,028.
+Tarjeta y enlace suman un porcentaje a lo que paga el comprador, sobre el importe de ese
+medio, y lo calcula el sistema. Cada medio tiene el suyo. Desde la 0044 lo fija el
+administrador en **Configuración → Porcentaje adicional por medio de pago**, y nace en
+**1.7 %** para los dos. Con 1.7 %: L 1,000 con tarjeta son L 1,017, y L 600 en efectivo
+más L 400 con tarjeta son L 1,006.80. Antes de la 0044 era un 7 % fijo.
 
 - `ventas.total` sigue siendo productos más ISV. El cargo va en `cobros_por_medio.cargo`,
   y su suma en `ventas.cargo_por_medio` o `pagos.cargo_por_medio`.
-- Lo cobrado es el total más el cargo, y el documento muestra las dos cifras.
-- En un abono de L 400 con tarjeta el comprador paga L 428, y la deuda baja L 400.
-- Al anular con reembolso pendiente, `anulaciones_venta.cargo_a_devolver` guarda lo que
-  hay que devolver además del total.
-- La base comprueba el cargo. Una versión anterior no lo manda y queda con cargo 0, así
-  que esa vía sigue abierta hasta que no queden versiones anteriores.
+- **Cada cobro guarda su tasa** (`cobros_por_medio.tasa_cargo`). La venta y el pago
+  guardan la de tarjeta y enlace si fue una sola (`tasa_cargo`), para el documento.
+  Lo cobrado antes de la 0044 no la tiene: se deja vacía, sin rellenar hacia atrás.
+- Lo cobrado es el total más el cargo, y el documento muestra las dos cifras y la tasa
+  con que se cobró, nunca la vigente.
+- En un abono de L 400 con tarjeta al 1.7 % el comprador paga L 406.80, y la deuda baja L 400.
+- Al anular con reembolso pendiente, `anulaciones_venta.cargo_a_devolver` guarda el cargo
+  que se cobró, aunque la tasa haya cambiado después.
+- Una versión anterior que no manda cargo queda con cargo 0, así que esa vía sigue
+  abierta hasta que no queden versiones anteriores.
+
+### Quién la cambia y cómo queda registrado
+
+- Solo un administrador, con `configurar_cargos_por_medio(tarjeta, enlace)`: de 0 a 100,
+  con hasta dos decimales (`LM006` si no). Al vendedor y al contador se les rechaza
+  (`42501`); el vendedor la usa y el contador la ve.
+- Cada cambio queda en `cambios_de_cargo_por_medio`: medio, tasa anterior y nueva, quién
+  y cuándo. Lo anota un disparador sobre `empresas`, así que también queda un cambio
+  hecho fuera de la aplicación (sin usuario). No se modifica ni se borra, y solo lo lee el
+  administrador de la empresa. La 0044 anota el paso de 7 a 1.7.
+
+### Quién decide el cargo
+
+El servidor. El navegador manda cada cobro con su `tasa` y su `cargo`:
+
+| Caso | Qué pasa |
+|---|---|
+| En línea, con la tasa vigente | Se registra con esa tasa |
+| En línea, con otra tasa o un cargo que no da con la vigente | `LM007` con la tasa vigente; no se registra nada y la pantalla la vuelve a leer |
+| Un cargo que no da con la tasa que declara | `LM001` |
+| Reintento de una operación ya registrada | Devuelve la que existe, aunque la tasa haya cambiado después |
+| Sin conexión, con la tasa que regía en la fecha de la venta | Se registra con esa tasa |
+| Sin conexión, con otra tasa | Va a conciliación (`precio-distinto`) y conserva lo cobrado |
 
 ## ISV por venta
 
@@ -68,6 +97,7 @@ misma transacción.
 | Queda en conciliación | Los medios esperan en `cobros_por_conciliar`, sin contar |
 | Se aplica la conciliación | Pasan a la venta, con su fecha original |
 | Se anula la conciliación | No generan cobros |
+| Copia local sin el porcentaje adicional | No se cobra con tarjeta ni enlace hasta actualizarla con conexión |
 | Rescate | Igual que la conciliación; un rechazo queda auditado |
 
 ## El reporte
@@ -106,3 +136,10 @@ en `medios_de_cobro_invalidos()` y se recrea la restricción con `not valid`, pa
 no falle por los cobros sin referencia.
 
 **Primero la 0041, después el frontend del cargo y el ISV.** Las versiones anteriores siguen funcionando con ella.
+
+**Primero la 0044, después su frontend, sin dejar tiempo entre los dos.** Entre la
+migración y el frontend, la versión publicada sigue calculando el 7 %: el servidor rechaza
+esos cobros con tarjeta o enlace (`LM007`) sin registrar nada, y efectivo, transferencia y
+crédito siguen igual. Una venta del teléfono cobrada al 7 % antes de instalar entra directo;
+una hecha después, todavía al 7 %, va a conciliación. Al revés, el frontend nuevo no
+encontraría la tasa y no dejaría cobrar con tarjeta ni enlace.

@@ -13,12 +13,18 @@ import {
   faltaPorAsignar,
   importeCalculado,
   importeDe,
+  leerPorcentaje,
   limpiarImporte,
   problemaDeCobros,
   problemaDelSelector,
   selectorVacio,
   textoDeMedios,
+  textoDeTasas,
+  etiquetaDelCargo,
 } from "./mediosDePago"
+
+// El porcentaje adicional vigente de la empresa, como llega de la base (0044).
+const TASAS = { tarjeta: 1.7, enlace: 1.7 }
 
 const marcados = (...medios) => medios.reduce((v, m) => elegirMedio(v, m), selectorVacio(MIXTO))
 
@@ -51,8 +57,8 @@ describe("pago único", () => {
 
   it("la referencia es opcional: sin ella se confirma, y no se inventa una", () => {
     for (const medio of ["efectivo", "transferencia", "tarjeta", "enlace"]) {
-      expect(problemaDelSelector(unico(medio), 100)).toBeNull()
-      expect(cobrosDelSelector(unico(medio), 100)[0].referencia).toBe("")
+      expect(problemaDelSelector(unico(medio), 100, TASAS)).toBeNull()
+      expect(cobrosDelSelector(unico(medio), 100, TASAS)[0].referencia).toBe("")
     }
   })
 
@@ -66,7 +72,7 @@ describe("pago mixto", () => {
     const uno = marcados("tarjeta")
 
     expect(importeDe(uno, "tarjeta", 120)).toBe("120.00")
-    expect(cobrosDelSelector(uno, 120)).toEqual([{ medio: "tarjeta", monto: 120, referencia: "", cargo: 8.4 }])
+    expect(cobrosDelSelector(uno, 120, TASAS)).toEqual([{ medio: "tarjeta", monto: 120, referencia: "", tasa: 1.7, cargo: 2.04 }])
     expect(problemaDelSelector(uno, 120)).toMatch(/elige 2 medios/i)
   })
 
@@ -164,62 +170,117 @@ describe("pago mixto", () => {
   it("con un importe y sin referencias, se confirma", () => {
     const valor = conImporte(100, "efectivo", "40")
 
-    expect(problemaDelSelector(valor, 100)).toBeNull()
-    expect(cobrosDelSelector(valor, 100)).toEqual([
+    expect(problemaDelSelector(valor, 100, TASAS)).toBeNull()
+    expect(cobrosDelSelector(valor, 100, TASAS)).toEqual([
       { medio: "efectivo", monto: 40, referencia: "" },
-      { medio: "tarjeta", monto: 60, referencia: "", cargo: 4.2 },
+      { medio: "tarjeta", monto: 60, referencia: "", tasa: 1.7, cargo: 1.02 },
     ])
   })
 
   it("con un importe y las referencias, se confirma", () => {
     const valor = escribirReferencia(conImporte(100, "efectivo", "40"), "tarjeta", "AUT-1")
 
-    expect(problemaDelSelector(valor, 100)).toBeNull()
-    expect(cobrosDelSelector(valor, 100)).toEqual([
+    expect(problemaDelSelector(valor, 100, TASAS)).toBeNull()
+    expect(cobrosDelSelector(valor, 100, TASAS)).toEqual([
       { medio: "efectivo", monto: 40, referencia: "" },
-      { medio: "tarjeta", monto: 60, referencia: "AUT-1", cargo: 4.2 },
+      { medio: "tarjeta", monto: 60, referencia: "AUT-1", tasa: 1.7, cargo: 1.02 },
     ])
   })
 })
 
-describe("el cargo del 7 %", () => {
+describe("el porcentaje adicional de la empresa", () => {
   const unico = (medio) => elegirMedio(selectorVacio(), medio)
   const totalDe = (cobros) => cobros.reduce((s, c) => s + c.monto, 0) + cargoDeCobros(cobros)
 
   it.each([
     ["efectivo", 1000],
     ["transferencia", 1000],
-    ["tarjeta", 1070],
-    ["enlace", 1070],
-  ])("una venta de 1,000 con %s da %d en total", (medio, total) => {
-    expect(totalDe(cobrosDelSelector(unico(medio), 1000))).toBe(total)
+    ["tarjeta", 1017],
+    ["enlace", 1017],
+  ])("al 1.7 %%, una venta de 1,000 con %s da %d en total", (medio, total) => {
+    expect(totalDe(cobrosDelSelector(unico(medio), 1000, TASAS))).toBe(total)
   })
 
-  it("600 en efectivo y 400 con tarjeta dan 1,028", () => {
-    const cobros = cobrosDelSelector(conImporte(1000, "efectivo", "600"), 1000)
+  it("600 en efectivo y 400 con tarjeta dan 1,006.80", () => {
+    const cobros = cobrosDelSelector(conImporte(1000, "efectivo", "600"), 1000, TASAS)
 
     expect(cobros).toEqual([
       { medio: "efectivo", monto: 600, referencia: "" },
-      { medio: "tarjeta", monto: 400, referencia: "", cargo: 28 },
+      { medio: "tarjeta", monto: 400, referencia: "", tasa: 1.7, cargo: 6.8 },
     ])
-    expect(cargoDeCobros(cobros)).toBe(28)
-    expect(totalDe(cobros)).toBe(1028)
+    expect(cargoDeCobros(cobros)).toBe(6.8)
+    expect(totalDe(cobros)).toBe(1006.8)
   })
 
-  it("se suma y nunca se resta, y lo que no lleva cargo no manda el campo", () => {
-    expect(cargoDe("tarjeta", 100)).toBe(7)
-    expect(cobrosDelSelector(unico("efectivo"), 100)[0]).not.toHaveProperty("cargo")
-    expect(cobrosDelSelector(unico("transferencia"), 100)[0]).not.toHaveProperty("cargo")
+  it("cada medio usa el suyo: tarjeta al 2 % y enlace al 1.5 %", () => {
+    const tasas = { tarjeta: 2, enlace: 1.5 }
+
+    expect(cobrosDelSelector(unico("tarjeta"), 1000, tasas)[0]).toMatchObject({ tasa: 2, cargo: 20 })
+    expect(cobrosDelSelector(unico("enlace"), 1000, tasas)[0]).toMatchObject({ tasa: 1.5, cargo: 15 })
+  })
+
+  it("se suma y nunca se resta, y efectivo y transferencia no mandan cargo ni tasa", () => {
+    expect(cargoDe("tarjeta", 100, 1.7)).toBe(1.7)
+    expect(cargoDe("efectivo", 100, 1.7)).toBe(0)
+
+    for (const medio of ["efectivo", "transferencia"]) {
+      expect(cobrosDelSelector(unico(medio), 100, TASAS)[0]).not.toHaveProperty("cargo")
+      expect(cobrosDelSelector(unico(medio), 100, TASAS)[0]).not.toHaveProperty("tasa")
+    }
+  })
+
+  it("con el porcentaje en 0, tarjeta viaja con tasa y cargo 0", () => {
+    expect(cobrosDelSelector(unico("tarjeta"), 100, { tarjeta: 0, enlace: 0 })[0]).toMatchObject({ tasa: 0, cargo: 0 })
   })
 
   it.each([
-    [207, 14.49],
-    [0.5, 0.04],
-    [100.1, 7.01],
-    [1150, 80.5],
-    [0.05, 0],
-  ])("redondea a centavos como la base: %d lleva %d", (monto, cargo) => {
-    expect(cargoDe("enlace", monto)).toBe(cargo)
+    [115, 1.7, 1.96],
+    [207, 1.7, 3.52],
+    [0.5, 1.7, 0.01],
+    [100.1, 1.7, 1.7],
+    [0.05, 1.7, 0],
+    [1150, 1.75, 20.13],
+    [207, 2, 4.14],
+  ])("redondea a centavos como la base: %d al %d %% lleva %d", (monto, tasa, cargo) => {
+    expect(cargoDe("enlace", monto, tasa)).toBe(cargo)
+  })
+
+  it("sin el porcentaje de la empresa no se cobra con tarjeta ni enlace, y el efectivo sigue", () => {
+    for (const tasas of [undefined, {}, { tarjeta: null, enlace: null }]) {
+      expect(cobrosDelSelector(unico("tarjeta"), 100, tasas)[0]).not.toHaveProperty("cargo")
+      expect(problemaDelSelector(unico("tarjeta"), 100, tasas)).toMatch(/porcentaje adicional de tarjeta/i)
+      expect(problemaDelSelector(unico("enlace"), 100, tasas)).toMatch(/porcentaje adicional de enlace/i)
+      expect(problemaDelSelector(unico("efectivo"), 100, tasas)).toBeNull()
+    }
+  })
+
+  it("la etiqueta dice el porcentaje con que se cobró, o ninguno si no se sabe", () => {
+    const tarjeta = { medio: "tarjeta", monto: 400, tasa: 1.7, cargo: 6.8 }
+
+    expect(textoDeTasas([{ medio: "efectivo", monto: 600 }, tarjeta])).toBe("1.7 %")
+    expect(textoDeTasas([tarjeta, { medio: "enlace", monto: 100, tasa: 1.7, cargo: 1.7 }])).toBe("1.7 %")
+    expect(textoDeTasas([{ ...tarjeta, tasa: 2, cargo: 8 }, { medio: "enlace", monto: 100, tasa: 1.5, cargo: 1.5 }]))
+      .toBe("Tarjeta 2 %, Enlace de pago 1.5 %")
+    expect(textoDeTasas([{ medio: "tarjeta", monto: 100, cargo: 7 }])).toBe("")
+    expect(textoDeTasas([])).toBe("")
+    expect(etiquetaDelCargo("1.7 %")).toBe("Cargo por medio de pago (1.7 %)")
+    expect(etiquetaDelCargo("")).toBe("Cargo por medio de pago")
+  })
+
+  it.each([
+    ["1.7", 1.7],
+    ["1,7", 1.7],
+    [" 2 ", 2],
+    ["0", 0],
+    ["100", 100],
+    ["1.75", 1.75],
+    ["100.01", null],
+    ["1.755", null],
+    ["-1", null],
+    ["", null],
+    ["abc", null],
+  ])("lee el porcentaje escrito «%s» como %s", (texto, valor) => {
+    expect(leerPorcentaje(texto)).toBe(valor)
   })
 })
 
@@ -321,8 +382,8 @@ describe("problemaDeCobros", () => {
   const efectivo = (monto) => ({ medio: "efectivo", monto, referencia: "" })
 
   it("sin problema devuelve null", () => {
-    expect(problemaDeCobros([efectivo(15), { medio: "tarjeta", monto: 100, referencia: "A" }], 115)).toBeNull()
-    expect(problemaDeCobros([efectivo(0.1), { medio: "enlace", monto: 0.2, referencia: "L" }], 0.3)).toBeNull()
+    expect(problemaDeCobros([efectivo(15), { medio: "tarjeta", monto: 100, referencia: "A", tasa: 1.7, cargo: 1.7 }], 115)).toBeNull()
+    expect(problemaDeCobros([efectivo(0.1), { medio: "enlace", monto: 0.2, referencia: "L", tasa: 1.7, cargo: 0 }], 0.3)).toBeNull()
   })
 
   it.each([
@@ -334,6 +395,7 @@ describe("problemaDeCobros", () => {
     ["más de dos decimales", [efectivo(9.999)], 10, /dos decimales/i],
     ["referencia larga", [{ medio: "tarjeta", monto: 10, referencia: "x".repeat(121) }], 10, /demasiado larga/i],
     ["no suman", [efectivo(9)], 10, /deben sumar/i],
+    ["tarjeta sin el porcentaje", [{ medio: "tarjeta", monto: 10, referencia: "" }], 10, /porcentaje adicional/i],
     ["más de dos medios", [efectivo(1), { medio: "tarjeta", monto: 1, referencia: "A" }, { medio: "enlace", monto: 1, referencia: "L" }], 3, /hasta 2 medios/i],
   ])("%s", (_, cobros, total, mensaje) => {
     expect(problemaDeCobros(cobros, total)).toMatch(mensaje)
@@ -350,5 +412,13 @@ describe("cómo se escriben", () => {
     expect(textoDeMedios([{ medio: "efectivo", monto: 15, referencia: "" }, { medio: "tarjeta", monto: 100, referencia: "AUT-1" }]))
       .toBe("Efectivo 15.00, Tarjeta 100.00 (AUT-1)")
     expect(textoDeMedios(undefined)).toBe("")
+  })
+
+  it("con el cargo y el porcentaje con que se cobró; sin porcentaje lo anterior a la 0044", () => {
+    expect(textoDeMedios([{ medio: "tarjeta", monto: 400, referencia: "AUT-1", cargo: 6.8, tasa: 1.7 }]))
+      .toBe("Tarjeta 400.00 (AUT-1) + cargo 6.80 al 1.7 %")
+    expect(textoDeMedios([{ medio: "enlace", monto: 100, referencia: "", cargo: 7, tasa: null }]))
+      .toBe("Enlace de pago 100.00 + cargo 7.00")
+    expect(textoDeMedios([{ medio: "tarjeta", monto: 100, referencia: "", cargo: 0, tasa: 1.7 }])).toBe("Tarjeta 100.00")
   })
 })

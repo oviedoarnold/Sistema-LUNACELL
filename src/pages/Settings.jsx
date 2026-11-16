@@ -10,6 +10,7 @@ import { LocationsContext } from "../context/contexts"
 import { ProductContext } from "../context/contexts"
 import { SalesContext } from "../context/contexts"
 import { useAuth } from "../hooks/useAuth"
+import PorcentajeAdicional from "../components/configuracion/PorcentajeAdicional"
 
 import { FaPlus } from "react-icons/fa"
 
@@ -1086,6 +1087,8 @@ function Settings() {
         </div>
 
       </section>
+
+      <PorcentajeAdicional />
 
       {/* =====================================
           USUARIOS

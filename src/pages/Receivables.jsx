@@ -30,7 +30,7 @@ import { formatMoney } from "../utils/format"
 function Receivables() {
   const { sales = [], cargando, refrescarVentas } = useContext(SalesContext)
   const { clients = [] } = useContext(ClientsContext)
-  const { company } = useContext(ProductContext)
+  const { company, refrescarEmpresa } = useContext(ProductContext)
 
   // El contador consulta las cuentas; no registra cobros (0036).
   const { soloLectura } = useAuth()
@@ -130,6 +130,9 @@ function Receivables() {
       setErrorDeCobro(problema.message)
 
       await refrescarVentas().catch(() => {})
+
+      // Si cambió el porcentaje adicional, el cargo se vuelve a calcular con el vigente.
+      if (problema?.motivo === "porcentaje-cambiado") await refrescarEmpresa?.().catch(() => {})
 
       return
     } finally {
@@ -278,6 +281,7 @@ function Receivables() {
           key={cuentaDelCobro.clienteId}
           cuenta={cuentaDelCobro}
           moneda={moneda}
+          tasas={company?.cargos}
           cobrando={enviando}
           error={errorDeCobro}
           onConfirmar={confirmarCobro}

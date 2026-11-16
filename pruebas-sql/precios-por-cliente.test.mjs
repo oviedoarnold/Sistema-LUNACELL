@@ -249,13 +249,13 @@ describe("el precio de cada venta", () => {
     expect(await existencia(db, e.camion1, e.cargador.id)).toBe(antes)
   })
 
-  it("se integra con el cargo del 7 %, el pago mixto y el ISV por venta", async () => {
+  it("se integra con el porcentaje adicional, el pago mixto y el ISV por venta", async () => {
     const e = await escenario()
-    const conTodo = await vender(e, e.vendedor.authId, [{ medio: "tarjeta", monto: 92, referencia: "", cargo: 6.44 }], { cliente: e.clienteA })
-    const sinIsv = await vender(e, e.vendedor.authId, [efectivo(30), { medio: "enlace", monto: 50, referencia: "", cargo: 3.5 }], { cliente: e.clienteA, conIsv: false })
+    const conTodo = await vender(e, e.vendedor.authId, [{ medio: "tarjeta", monto: 92, referencia: "", tasa: 1.7, cargo: 1.56 }], { cliente: e.clienteA })
+    const sinIsv = await vender(e, e.vendedor.authId, [efectivo(30), { medio: "enlace", monto: 50, referencia: "", tasa: 1.7, cargo: 0.85 }], { cliente: e.clienteA, conIsv: false })
 
-    expect(await laVenta(conTodo.venta_id)).toMatchObject({ total: 92, cargo: 6.44 })
-    expect(await laVenta(sinIsv.venta_id)).toMatchObject({ subtotal: 80, isv: 0, total: 80, cargo: 3.5 })
+    expect(await laVenta(conTodo.venta_id)).toMatchObject({ total: 92, cargo: 1.56 })
+    expect(await laVenta(sinIsv.venta_id)).toMatchObject({ subtotal: 80, isv: 0, total: 80, cargo: 0.85 })
   })
 
   it("a crédito la deuda es el total con su precio, y el abono la cubre", async () => {
