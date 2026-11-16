@@ -1278,34 +1278,41 @@ function POS() {
                         {/* Solo se ve aquí: no cambia el orden ni los datos de la factura. */}
                         <span className="pos-linea-numero">{indice + 1}.</span>
 
-                        <div className="name">
-                          {item.name}
+                        {/* El nombre y el subtotal: en un teléfono comparten la primera fila sin cortarse. */}
+                        <div className="pos-linea-cabecera">
+                          <div className="name">
+                            {item.name}
 
-                          {!puedeNegociar && <small>{formatMoney(item.price)} c/u</small>}
+                            {!puedeNegociar && <small>{formatMoney(item.price)} c/u</small>}
 
-                          {item.negociado && (
-                            <small className="pos-precio-especial">
-                              Precio negociado · antes{" "}
-                              <span className="pos-importe">{formatMoney(item.precioReferencia)}</span>
-                              {puedeNegociar && (
-                                <>
-                                  {" · "}
-                                  <button
-                                    type="button"
-                                    className="pos-precio-enlace"
-                                    aria-label={`Restaurar el precio de ${item.name}`}
-                                    onClick={() => restaurarPrecio(item.id)}
-                                  >
-                                    Restaurar
-                                  </button>
-                                </>
-                              )}
-                            </small>
-                          )}
+                            {item.negociado && (
+                              <small className="pos-precio-especial">
+                                Precio negociado · antes{" "}
+                                <span className="pos-importe">{formatMoney(item.precioReferencia)}</span>
+                                {puedeNegociar && (
+                                  <>
+                                    {" · "}
+                                    <button
+                                      type="button"
+                                      className="pos-precio-enlace"
+                                      aria-label={`Restaurar el precio de ${item.name}`}
+                                      onClick={() => restaurarPrecio(item.id)}
+                                    >
+                                      Restaurar
+                                    </button>
+                                  </>
+                                )}
+                              </small>
+                            )}
 
-                          {!item.negociado && item.precioEspecial && (
-                            <small className="pos-precio-especial">Precio especial</small>
-                          )}
+                            {!item.negociado && item.precioEspecial && (
+                              <small className="pos-precio-especial">Precio especial</small>
+                            )}
+                          </div>
+
+                          <div className="sub">
+                            {formatMoney(item.price * item.quantity)}
+                          </div>
                         </div>
 
                         <div className="stepper">
@@ -1336,10 +1343,6 @@ function POS() {
                             onMotivo={(motivo) => elegirMotivo(item.id, motivo)}
                           />
                         )}
-
-                        <div className="sub">
-                          {formatMoney(item.price * item.quantity)}
-                        </div>
 
                         <button
                           type="button"
