@@ -13,8 +13,17 @@ import { useAuth } from "../hooks/useAuth"
 import { avisarCambioDePedidos } from "../hooks/useAvisosDePedidos"
 import { useBloqueoDeActualizacion } from "../hooks/useBloqueoDeActualizacion"
 import { useSinConexion } from "../hooks/useSinConexion"
-import { ESTADOS_DE_PEDIDO, facturarPedido, marcarPedidoLeido, traerBandeja, traerDetalleDePedido } from "../lib/api/pedidos"
+import {
+  ESTADOS_DE_PEDIDO,
+  facturarPedido,
+  marcarPedidoLeido,
+  rechazarPedido,
+  resolverPedido,
+  traerBandeja,
+  traerDetalleDePedido,
+} from "../lib/api/pedidos"
 import { fechaYHora, formatMoney } from "../utils/format"
+import { claveDeIdempotencia } from "../utils/ids"
 import "../styles/pedidos.css"
 
 /*
@@ -22,8 +31,8 @@ import "../styles/pedidos.css"
   facturar, y los que salieron de ella.
 
   Abrir un pedido marca su aviso como leído; eso no lo factura ni cambia su
-  estado. Facturar lo decide y lo hace el servidor, una sola vez. Todo necesita
-  conexión.
+  estado. Facturar, rechazar y resolver los decide y los hace el servidor, una
+  sola vez. Todo necesita conexión.
 */
 
 const VISTAS = [
@@ -50,12 +59,48 @@ const CLASE_DEL_ESTADO = {
   la factura es por el total y ese pago ya está aplicado, no se cobra otra vez.
   Sin anticipo, la confirmación breve de siempre.
 */
-function textoDeLaConfirmacion(pedido) {
-  const factura = `Se emitirá una factura de ${pedido.destino} por ${formatMoney(pedido.total)} a nombre de ${pedido.cliente}. El inventario ya salió de ${pedido.origen}.`
+function textoDeLaConfirmacion(pedido, dondeFactura = pedido.destino) {
+  const factura = `Se emitirá una factura de ${dondeFactura} por ${formatMoney(pedido.total)} a nombre de ${pedido.cliente}. El inventario ya salió de ${pedido.origen}.`
 
   if (pedido.formaPago !== "credito" || !(pedido.cobrado > 0)) return factura
 
   return `Total del pedido: ${formatMoney(pedido.total)}. Pago recibido en ${pedido.origen}: ${formatMoney(pedido.cobrado)}. Saldo pendiente del cliente: ${formatMoney(pedido.saldo)}. ${factura} El pago ya recibido no se cobra otra vez.`
+}
+
+// Facturar en origen: lo mismo, y que no queda nada por liquidar con quien lo rechazó.
+const textoDeFacturarEnOrigen = (pedido) =>
+  `${textoDeLaConfirmacion(pedido, pedido.origen)} ${pedido.origen} cobró y factura: no queda nada que liquidar con ${pedido.destino}.`
+
+/*
+  Sin respuesta del servidor, la operación pudo hacerse o no. Se ofrece
+  reintentar con la misma clave, que nunca la repite. null si se desiste.
+*/
+async function conReintento(llamada, queSePudoHacer) {
+  for (;;) {
+    try {
+      return await llamada()
+    } catch (problema) {
+      if (problema.motivo !== "sin-respuesta") throw problema
+
+      const otraVez = await Swal.fire({
+        icon: "warning",
+        title: "No hubo respuesta del servidor",
+        text: `${queSePudoHacer} Reintentar es seguro: el servidor no lo hace dos veces.`,
+        showCancelButton: true,
+        confirmButtonText: "Reintentar",
+        cancelButtonText: "Cancelar",
+      })
+
+      if (!otraVez.isConfirmed) return null
+    }
+  }
+}
+
+function etiquetaDeLaRuta(pedido) {
+  if (pedido.origenId === pedido.destinoId) return `Facturado en ${pedido.origen}`
+  if (pedido.estado === "por_resolver") return `${pedido.origen} → rechazado por ${pedido.destino}`
+
+  return `${pedido.origen} → ${pedido.destino}`
 }
 
 function Pedidos() {
@@ -68,10 +113,12 @@ function Pedidos() {
   const [parametros, setParametros] = useSearchParams()
   const [vista, setVista] = useState("recibidos")
   const [estado, setEstado] = useState("pendiente")
-  const [facturando, setFacturando] = useState(false)
 
-  // Facturar un pedido no se interrumpe por actualizar.
-  useBloqueoDeActualizacion(facturando, "factura-de-pedido")
+  // La operación en curso: facturar, rechazar, reenviar o facturar_en_origen.
+  const [operando, setOperando] = useState(null)
+
+  // Una operación de pedido no se interrumpe por actualizar.
+  useBloqueoDeActualizacion(Boolean(operando), "operacion-de-pedido")
   const [facturaId, setFacturaId] = useState(null)
 
   /*
@@ -153,8 +200,47 @@ function Pedidos() {
   const abrir = (id) => setAbiertoId(id)
   const cerrar = () => setAbiertoId(null)
 
+  /*
+    Todas las operaciones siguen el mismo camino: una a la vez, con reintento
+    seguro, avisando a la campanita y cerrando el pedido al terminar. Si el
+    servidor la rechaza, se dice por qué y se vuelve a cargar el pedido.
+  */
+  const operar = async (tipo, { llamada, sinRespuesta, tituloDelError, alTerminar }) => {
+    setOperando(tipo)
+
+    try {
+      const resultado = await conReintento(llamada, sinRespuesta)
+
+      if (!resultado) return
+
+      avisarCambioDePedidos()
+      cerrar()
+      setVersionLista((v) => v + 1)
+      await alTerminar(resultado)
+    } catch (problema) {
+      Swal.fire({ icon: "error", title: tituloDelError, text: problema.message })
+      setVersionDetalle((v) => v + 1)
+    } finally {
+      setOperando(null)
+    }
+  }
+
+  // La factura emitida: se refrescan las ventas y se muestra para imprimir.
+  const mostrarFactura = async (resultado, yaEstaba) => {
+    await refrescarVentas?.().catch(() => {})
+    setFacturaId(resultado.ventaId)
+
+    Swal.fire({
+      icon: yaEstaba ? "info" : "success",
+      title: yaEstaba ? "El pedido ya estaba facturado" : `Factura ${resultado.numeroFactura}`,
+      text: yaEstaba
+        ? `Otro dispositivo lo facturó antes: ${resultado.numeroFactura}. No se emitió otra factura.`
+        : `Pedido ${resultado.numero} facturado en ${resultado.destino}. No se descontó inventario ni se cobró de nuevo.`,
+    })
+  }
+
   const facturar = async () => {
-    if (!detalle || facturando) return
+    if (!detalle || operando) return
 
     const confirmacion = await Swal.fire({
       icon: "question",
@@ -167,50 +253,106 @@ function Pedidos() {
 
     if (!confirmacion.isConfirmed) return
 
-    setFacturando(true)
+    await operar("facturar", {
+      llamada: () => facturarPedido(detalle.id),
+      sinRespuesta: "La factura pudo haberse emitido o no.",
+      tituloDelError: "No se pudo facturar",
+      alTerminar: (resultado) => mostrarFactura(resultado, resultado.yaFacturado),
+    })
+  }
 
-    try {
-      let resultado
+  const rechazar = async () => {
+    if (!detalle || operando) return
 
-      for (;;) {
-        try {
-          resultado = await facturarPedido(detalle.id)
-          break
-        } catch (problema) {
-          if (problema.motivo !== "sin-respuesta") throw problema
+    const respuesta = await Swal.fire({
+      icon: "warning",
+      title: `¿Rechazar el pedido ${detalle.numero}?`,
+      text: `Volverá a ${detalle.origen} para que decida quién lo factura. No se devuelve inventario ni dinero y no se emite factura.`,
+      input: "textarea",
+      inputLabel: "Motivo del rechazo",
+      inputPlaceholder: `Por ejemplo: este cliente se factura en ${detalle.origen}`,
+      inputAttributes: { maxlength: "500", "aria-label": "Motivo del rechazo" },
+      inputValidator: (valor) => ((valor || "").trim().length < 5 ? "Escribe el motivo (al menos 5 caracteres)." : undefined),
+      showCancelButton: true,
+      confirmButtonText: "Rechazar pedido",
+      cancelButtonText: "Volver",
+    })
 
-          const otraVez = await Swal.fire({
-            icon: "warning",
-            title: "No hubo respuesta del servidor",
-            text: "La factura pudo haberse emitido o no. Reintentar es seguro: este pedido nunca se factura dos veces.",
-            showCancelButton: true,
-            confirmButtonText: "Reintentar",
-            cancelButtonText: "Cancelar",
-          })
+    if (!respuesta.isConfirmed) return
 
-          if (!otraVez.isConfirmed) return
-        }
-      }
+    const motivo = respuesta.value.trim()
+    const clave = claveDeIdempotencia()
 
-      avisarCambioDePedidos()
-      await refrescarVentas?.().catch(() => {})
-      cerrar()
-      setVersionLista((v) => v + 1)
-      setFacturaId(resultado.ventaId)
+    await operar("rechazar", {
+      llamada: () => rechazarPedido(detalle.id, motivo, clave),
+      sinRespuesta: "El rechazo pudo haberse registrado o no.",
+      tituloDelError: "No se pudo rechazar",
+      alTerminar: (resultado) =>
+        Swal.fire({
+          icon: "success",
+          title: `Pedido ${resultado.numero} rechazado`,
+          text: `${resultado.origen} recibió el aviso para resolverlo. No se movió inventario ni dinero.`,
+        }),
+    })
+  }
 
-      Swal.fire({
-        icon: resultado.yaFacturado ? "info" : "success",
-        title: resultado.yaFacturado ? `El pedido ya estaba facturado` : `Factura ${resultado.numeroFactura}`,
-        text: resultado.yaFacturado
-          ? `Otro dispositivo lo facturó antes: ${resultado.numeroFactura}. No se emitió otra factura.`
-          : `Pedido ${resultado.numero} facturado en ${resultado.destino}. No se descontó inventario ni se cobró de nuevo.`,
-      })
-    } catch (problema) {
-      Swal.fire({ icon: "error", title: "No se pudo facturar", text: problema.message })
-      setVersionDetalle((v) => v + 1)
-    } finally {
-      setFacturando(false)
-    }
+  const reenviar = async () => {
+    if (!detalle || operando) return
+
+    const respuesta = await Swal.fire({
+      icon: "question",
+      title: `¿A qué ubicación se envía el pedido ${detalle.numero}?`,
+      text: `El mismo pedido queda pendiente de facturar en la ubicación que elijas. No se descuenta inventario ni se cobra otra vez. El efectivo cobrado en ${detalle.origen} se le deberá a esa ubicación.`,
+      input: "select",
+      inputOptions: Object.fromEntries(detalle.destinosParaReenviar.map((d) => [d.id, d.nombre])),
+      inputPlaceholder: "Elige la ubicación",
+      inputAttributes: { "aria-label": "Ubicación que facturará el pedido" },
+      inputValidator: (valor) => (valor ? undefined : "Elige la ubicación que facturará el pedido."),
+      showCancelButton: true,
+      confirmButtonText: "Enviar pedido",
+      cancelButtonText: "Volver",
+    })
+
+    if (!respuesta.isConfirmed) return
+
+    const destinoId = respuesta.value
+    const clave = claveDeIdempotencia()
+
+    await operar("reenviar", {
+      llamada: () => resolverPedido(detalle.id, { decision: "reenviar", destinoId }, clave),
+      sinRespuesta: "El envío pudo haberse registrado o no.",
+      tituloDelError: "No se pudo enviar el pedido",
+      alTerminar: (resultado) =>
+        Swal.fire({
+          icon: "success",
+          title: `Pedido enviado a ${resultado.destino}`,
+          text: `${resultado.numero} quedó pendiente de facturar en ${resultado.destino}, que recibió el aviso. No se descontó inventario ni se cobró de nuevo.`,
+        }),
+    })
+  }
+
+  const facturarEnOrigen = async () => {
+    if (!detalle || operando) return
+
+    const confirmacion = await Swal.fire({
+      icon: "question",
+      title: `¿Facturar el pedido ${detalle.numero} en ${detalle.origen}?`,
+      text: textoDeFacturarEnOrigen(detalle),
+      showCancelButton: true,
+      confirmButtonText: `Facturar en ${detalle.origen}`,
+      cancelButtonText: "Volver",
+    })
+
+    if (!confirmacion.isConfirmed) return
+
+    const clave = claveDeIdempotencia()
+
+    await operar("facturar_en_origen", {
+      llamada: () => resolverPedido(detalle.id, { decision: "facturar_en_origen" }, clave),
+      sinRespuesta: "La factura pudo haberse emitido o no.",
+      tituloDelError: "No se pudo facturar",
+      alTerminar: (resultado) => mostrarFactura(resultado, resultado.repetido),
+    })
   }
 
   const factura = facturaId ? getSaleById?.(facturaId) : null
@@ -221,7 +363,7 @@ function Pedidos() {
 
       {sinConexion && (
         <p className="alert-banner" role="alert">
-          Sin conexión con el servidor. Los pedidos se revisan y se facturan con conexión.
+          Sin conexión con el servidor. Los pedidos se revisan, se facturan, se rechazan y se resuelven con conexión.
         </p>
       )}
 
@@ -259,44 +401,51 @@ function Pedidos() {
 
       {pedidos.length > 0 && (
         <ul className="pedidos-lista">
-          {pedidos.map((pedido) => (
-            <li key={pedido.id}>
-              <button
-                type="button"
-                className={!pedido.leido && vista === "recibidos" && pedido.estado === "pendiente" ? "pedidos-tarjeta is-nuevo" : "pedidos-tarjeta"}
-                onClick={() => abrir(pedido.id)}
-                aria-label={`Abrir el pedido ${pedido.numero} de ${pedido.cliente}`}
-              >
-                <span className="pedidos-tarjeta-fila">
-                  <b>{pedido.numero}</b>
-                  <span className="pedidos-insignias">
-                    {!pedido.leido && vista === "recibidos" && pedido.estado === "pendiente" && <span className="badge badge-credit">Nuevo</span>}
-                    <span className={CLASE_DEL_ESTADO[pedido.estado] || "badge"}>{ESTADOS_DE_PEDIDO[pedido.estado] || pedido.estado}</span>
+          {pedidos.map((pedido) => {
+            // Nuevo: el pendiente que llegó aquí, o el rechazado que volvió aquí.
+            const nuevo =
+              !pedido.leido &&
+              ((vista === "recibidos" && pedido.estado === "pendiente") || (vista === "enviados" && pedido.estado === "por_resolver"))
+
+            return (
+              <li key={pedido.id}>
+                <button
+                  type="button"
+                  className={nuevo ? "pedidos-tarjeta is-nuevo" : "pedidos-tarjeta"}
+                  onClick={() => abrir(pedido.id)}
+                  aria-label={`Abrir el pedido ${pedido.numero} de ${pedido.cliente}`}
+                >
+                  <span className="pedidos-tarjeta-fila">
+                    <b>{pedido.numero}</b>
+                    <span className="pedidos-insignias">
+                      {nuevo && <span className="badge badge-credit">Nuevo</span>}
+                      <span className={CLASE_DEL_ESTADO[pedido.estado] || "badge"}>{ESTADOS_DE_PEDIDO[pedido.estado] || pedido.estado}</span>
+                    </span>
                   </span>
-                </span>
-                <span className="pedidos-tarjeta-fila">
-                  <span className="pedidos-cliente">{pedido.cliente}</span>
-                  <span className="pos-importe">{formatMoney(pedido.total)}</span>
-                </span>
-                {pedido.estado !== "facturado" && (
+                  <span className="pedidos-tarjeta-fila">
+                    <span className="pedidos-cliente">{pedido.cliente}</span>
+                    <span className="pos-importe">{formatMoney(pedido.total)}</span>
+                  </span>
+                  {pedido.estado !== "facturado" && (
+                    <span className="pedidos-tarjeta-fila pedidos-tarjeta-suave">
+                      <span>
+                        Pagado {formatMoney(pedido.cobrado)}
+                        {pedido.cobrado > 0 ? ` en ${pedido.origen}` : ""}
+                      </span>
+                      <span>Pendiente {formatMoney(pedido.saldo)}</span>
+                    </span>
+                  )}
                   <span className="pedidos-tarjeta-fila pedidos-tarjeta-suave">
                     <span>
-                      Pagado {formatMoney(pedido.cobrado)}
-                      {pedido.cobrado > 0 ? ` en ${pedido.origen}` : ""}
+                      {etiquetaDeLaRuta(pedido)} · {pedido.formaPago === "credito" ? "Crédito" : "Contado"}
+                      {pedido.numeroFactura ? ` · ${pedido.numeroFactura}` : ""}
                     </span>
-                    <span>Pendiente {formatMoney(pedido.saldo)}</span>
+                    <span>{fechaYHora(pedido.entregadoEn)}</span>
                   </span>
-                )}
-                <span className="pedidos-tarjeta-fila pedidos-tarjeta-suave">
-                  <span>
-                    {pedido.origen} → {pedido.destino} · {pedido.formaPago === "credito" ? "Crédito" : "Contado"}
-                    {pedido.numeroFactura ? ` · ${pedido.numeroFactura}` : ""}
-                  </span>
-                  <span>{fechaYHora(pedido.entregadoEn)}</span>
-                </span>
-              </button>
-            </li>
-          ))}
+                </button>
+              </li>
+            )
+          })}
         </ul>
       )}
 
@@ -305,9 +454,12 @@ function Pedidos() {
           pedido={detalle}
           cargando={cargandoDetalle}
           error={errorDetalle}
-          facturando={facturando}
+          operando={operando}
           sinConexion={sinConexion}
           onFacturar={facturar}
+          onRechazar={rechazar}
+          onReenviar={reenviar}
+          onFacturarEnOrigen={facturarEnOrigen}
           onCerrar={cerrar}
         />
       )}

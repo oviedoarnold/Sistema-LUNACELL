@@ -168,6 +168,29 @@
 .pedidos-eventos li {
   font-size: 13px;
   color: var(--text-secondary);
+  overflow-wrap: anywhere;
+}
+
+.pedidos-evento-motivo {
+  display: block;
+  color: var(--text-muted);
+}
+
+/* El rechazo vigente: quién, por qué y quién decide (etapa C1). */
+.pedidos-rechazo {
+  display: grid;
+  gap: var(--space-1);
+  margin-bottom: var(--space-3);
+  padding: var(--space-3);
+  border: 1px solid var(--warning);
+  border-radius: var(--radius-sm);
+  background: var(--warning-soft);
+  color: var(--text-primary);
+  overflow-wrap: anywhere;
+}
+
+.pedidos-rechazo small {
+  color: var(--text-secondary);
 }
 
 .pedidos-totales {

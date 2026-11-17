@@ -23,6 +23,9 @@ const MOTIVOS = {
   PI008: "no-facturable",
   PI009: "isv-obligatorio",
   PI010: "prima-invalida",
+  PI011: "clave-reusada",
+  PI012: "estado-no-permite",
+  PI013: "liquidacion-registrada",
   LM001: "medios-invalidos",
   LM002: "medios-no-cuadran",
   LM007: "porcentaje-cambiado",
@@ -93,6 +96,9 @@ export const aPedidoDeApp = (fila) => ({
   numeroFactura: fila.numero_factura || null,
   ventaId: fila.venta_id || null,
   leido: Boolean(fila.leido),
+  // En la campanita, el rechazo que espera decisión.
+  motivo: fila.motivo || "",
+  rechazadoEn: fila.rechazado_en || null,
 })
 
 const aDetalleDeApp = (fila) => ({
@@ -108,6 +114,15 @@ const aDetalleDeApp = (fila) => ({
   facturadoPor: fila.facturado_por || "",
   destinoEmiteFiscal: Boolean(fila.destino_emite_fiscal),
   puedeFacturar: Boolean(fila.puede_facturar),
+  puedeRechazar: Boolean(fila.puede_rechazar),
+  puedeResolver: Boolean(fila.puede_resolver),
+  puedeFacturarEnOrigen: Boolean(fila.puede_facturar_en_origen),
+  facturaEnOrigen: Boolean(fila.factura_en_origen),
+  bloqueoPorLiquidacion: fila.bloqueo_por_liquidacion || null,
+  rechazo: fila.rechazo
+    ? { motivo: fila.rechazo.motivo || "", usuario: fila.rechazo.usuario || "", ubicacion: fila.rechazo.ubicacion || "", fecha: fila.rechazo.fecha }
+    : null,
+  destinosParaReenviar: (fila.destinos_para_reenviar || []).map((d) => ({ id: d.id, nombre: d.nombre })),
   productos: (fila.productos || []).map((p) => ({
     id: p.producto_id,
     codigo: p.codigo || "",
@@ -131,7 +146,16 @@ const aDetalleDeApp = (fila) => ({
     ubicacion: c.ubicacion || "",
     fecha: c.fecha,
   })),
-  eventos: (fila.eventos || []).map((e) => ({ tipo: e.tipo, usuario: e.usuario, motivo: e.motivo || "", fecha: e.fecha })),
+  eventos: (fila.eventos || []).map((e) => ({
+    tipo: e.tipo,
+    usuario: e.usuario,
+    motivo: e.motivo || "",
+    fecha: e.fecha,
+    ubicacion: e.ubicacion || "",
+    rechazadoEn: e.rechazado_en || "",
+    desde: e.desde || "",
+    hacia: e.hacia || "",
+  })),
 })
 
 /*
@@ -171,6 +195,34 @@ export async function facturarPedido(pedidoId) {
   return { ...aPedidoDeApp(data), yaFacturado: Boolean(data.ya_facturado), esFiscal: Boolean(data.es_fiscal) }
 }
 
+/*
+  Rechazar (destino) y resolver (origen), etapa C1: antes de facturar, sin tocar
+  inventario, cobros ni liquidaciones. La clave es la del intento: un reintento
+  sin respuesta con la misma clave devuelve lo que ya se hizo.
+*/
+export async function rechazarPedido(pedidoId, motivo, clave) {
+  const data = await llamar("rechazar_pedido", { p_pedido: pedidoId, p_motivo: motivo, p_clave_idempotencia: clave }, "rechazar el pedido")
+
+  return { ...aPedidoDeApp(data), repetido: Boolean(data.repetido) }
+}
+
+// `decision`: "reenviar" (con `destinoId`) o "facturar_en_origen", que emite la factura en la misma operación.
+export async function resolverPedido(pedidoId, { decision, destinoId = null, nota = "" }, clave) {
+  const data = await llamar(
+    "resolver_pedido",
+    {
+      p_pedido: pedidoId,
+      p_decision: decision,
+      p_destino: decision === "reenviar" ? destinoId : null,
+      p_nota: nota,
+      p_clave_idempotencia: clave,
+    },
+    decision === "reenviar" ? "enviar el pedido a otra ubicación" : "facturar el pedido"
+  )
+
+  return { ...aPedidoDeApp(data), repetido: Boolean(data.repetido) }
+}
+
 export async function traerBandeja({ vista = "recibidos", estado = "pendiente" } = {}) {
   const data = await llamar("bandeja_de_pedidos", { p_vista: vista, p_estado: estado }, "cargar los pedidos")
 
@@ -191,6 +243,8 @@ export async function traerAvisosDePedidos() {
   return {
     pendientes: Number(data?.pendientes || 0),
     sinLeer: Number(data?.sin_leer || 0),
+    porResolver: Number(data?.por_resolver || 0),
+    porResolverSinLeer: Number(data?.por_resolver_sin_leer || 0),
     ultimos: (data?.ultimos || []).map(aPedidoDeApp),
   }
 }

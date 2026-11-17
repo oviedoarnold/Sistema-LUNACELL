@@ -416,7 +416,7 @@ function Settings() {
         permissions.ORDERS_RESOLVE,
       label: "Resolver pedidos interubicación",
       description:
-        "Revisar pedidos rechazados de su ubicación y decidir si se reenvían o se facturan en origen. Las acciones se habilitan en la etapa C.",
+        "Resolver los pedidos que entregó su ubicación y que otra rechazó: facturarlos allí mismo o enviarlos a otra ubicación. Para facturarlos necesita también «Facturar».",
     },
     {
       id:

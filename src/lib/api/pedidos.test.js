@@ -5,6 +5,8 @@ import {
   entregarPedido,
   facturarPedido,
   marcarPedidoLeido,
+  rechazarPedido,
+  resolverPedido,
   traerAvisosDePedidos,
   traerBandeja,
   traerDetalleDePedido,
@@ -200,5 +202,79 @@ describe("facturar, la bandeja, el detalle y los avisos", () => {
       ["avisos_de_pedidos", {}],
     ])
     expect(avisos).toMatchObject({ pendientes: 3, sinLeer: 1, ultimos: [expect.objectContaining({ numero: "PED-000001" })] })
+  })
+})
+
+describe("rechazar y resolver (0048)", () => {
+  it("rechazar manda el pedido, el motivo y la clave del intento", async () => {
+    const llamadas = montar({ rechazar_pedido: () => ({ data: { ...RESUMEN, estado: "por_resolver", repetido: false }, error: null }) })
+    const r = await rechazarPedido("ped-1", "No es de esta ruta", "clave-1")
+
+    expect(llamadas).toEqual([["rechazar_pedido", { p_pedido: "ped-1", p_motivo: "No es de esta ruta", p_clave_idempotencia: "clave-1" }]])
+    expect(r).toMatchObject({ estado: "por_resolver", repetido: false })
+  })
+
+  it("reenviar manda el destino elegido; facturar en origen no manda ninguno", async () => {
+    const llamadas = montar({ resolver_pedido: () => ({ data: { ...RESUMEN, venta_id: "v-9", numero_factura: "VTA-000009", repetido: true }, error: null }) })
+
+    await resolverPedido("ped-1", { decision: "reenviar", destinoId: "camion-02", nota: "" }, "clave-2")
+    const f = await resolverPedido("ped-1", { decision: "facturar_en_origen", destinoId: "camion-02" }, "clave-3")
+
+    expect(llamadas).toEqual([
+      ["resolver_pedido", { p_pedido: "ped-1", p_decision: "reenviar", p_destino: "camion-02", p_nota: "", p_clave_idempotencia: "clave-2" }],
+      ["resolver_pedido", { p_pedido: "ped-1", p_decision: "facturar_en_origen", p_destino: null, p_nota: "", p_clave_idempotencia: "clave-3" }],
+    ])
+    expect(f).toMatchObject({ ventaId: "v-9", numeroFactura: "VTA-000009", repetido: true })
+  })
+
+  it.each([
+    ["PI011", "clave-reusada"],
+    ["PI012", "estado-no-permite"],
+    ["PI013", "liquidacion-registrada"],
+  ])("el rechazo %s llega como «%s» con el mensaje del servidor", async (code, motivo) => {
+    montar({ rechazar_pedido: () => ({ data: null, error: { code, message: "Mensaje del servidor" } }) })
+
+    await expect(rechazarPedido("ped-1", "Motivo", "c")).rejects.toMatchObject({ motivo, codigo: code, message: "Mensaje del servidor" })
+  })
+
+  it("el detalle trae qué puede hacer quien mira, el rechazo, los destinos y la historia completa", async () => {
+    montar({
+      detalle_de_pedido: () => ({
+        data: {
+          ...RESUMEN,
+          estado: "por_resolver",
+          puede_resolver: true,
+          puede_facturar_en_origen: true,
+          bloqueo_por_liquidacion: null,
+          rechazo: { motivo: "No es de aquí", usuario: "Vendedor", ubicacion: "Camión 01", fecha: "2026-11-17T15:00:00Z" },
+          destinos_para_reenviar: [{ id: "camion-02", nombre: "Camión 02" }],
+          productos: [],
+          cobros: [],
+          eventos: [{ tipo: "reenviado", usuario: "Encargado", motivo: "", fecha: "2026-11-17T16:00:00Z", ubicacion: "Bodega", desde: "Camión 01", hacia: "Camión 02" }],
+        },
+        error: null,
+      }),
+    })
+
+    const d = await traerDetalleDePedido("ped-1")
+
+    expect(d).toMatchObject({ puedeRechazar: false, puedeResolver: true, puedeFacturarEnOrigen: true, bloqueoPorLiquidacion: null, facturaEnOrigen: false })
+    expect(d.rechazo).toMatchObject({ motivo: "No es de aquí", ubicacion: "Camión 01" })
+    expect(d.destinosParaReenviar).toEqual([{ id: "camion-02", nombre: "Camión 02" }])
+    expect(d.eventos[0]).toMatchObject({ desde: "Camión 01", hacia: "Camión 02", ubicacion: "Bodega" })
+  })
+
+  it("los avisos cuentan también los rechazados por resolver", async () => {
+    montar({
+      avisos_de_pedidos: () => ({
+        data: { pendientes: 0, sin_leer: 0, por_resolver: 2, por_resolver_sin_leer: 1, ultimos: [{ ...RESUMEN, estado: "por_resolver", motivo: "No es de aquí" }] },
+        error: null,
+      }),
+    })
+
+    const avisos = await traerAvisosDePedidos()
+
+    expect(avisos).toMatchObject({ porResolver: 2, porResolverSinLeer: 1 })
+    expect(avisos.ultimos[0]).toMatchObject({ estado: "por_resolver", motivo: "No es de aquí" })
   })
 })

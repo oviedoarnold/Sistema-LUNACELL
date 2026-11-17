@@ -57,6 +57,63 @@ En la base se llama «prima»; en pantalla, **pago parcial**. Solo cambia la pre
 
 **Cobros posteriores.** Un pago registrado después en «Por cobrar» sigue la regla general: se aplica primero a las facturas más antiguas del cliente. Elegir una factura específica se evaluará por separado.
 
+## Rechazo y resolución (etapa C1)
+
+Migración: [`0048_rechazo_resolucion_pedidos.sql`](../supabase/migrations/0048_rechazo_resolucion_pedidos.sql). Todo se hace desde el detalle del pedido en «Pedidos», con conexión.
+
+### Rechazar
+
+- **Quién:** quien tiene «Facturar» en la ubicación destino, o el administrador.
+- **Qué pide:** el motivo (de 5 a 500 caracteres) y la confirmación, en un solo diálogo.
+- **Qué hace** `rechazar_pedido()`:
+  - el pedido pasa de `pendiente` a `por_resolver`; nadie puede facturarlo mientras tanto;
+  - queda el evento `rechazado` con el motivo, el usuario, su ubicación, la fecha y la ubicación que rechazó;
+  - el aviso vuelve a quedar sin leer, y la campanita de la ubicación que lo entregó lo muestra con el motivo.
+- **Qué no hace:** no devuelve inventario ni dinero, no factura, no toca cobros, pagos ni liquidaciones y no crea otro pedido. Rechazar no es cancelar.
+
+### Resolver
+
+Lo resuelve quien tiene «Resolver pedidos interubicación» en la ubicación que **entregó** el pedido, o el administrador. La ubicación de la factura siempre sale del pedido o de la lista de la empresa, nunca de la ubicación del administrador.
+
+- **«Facturar en _origen_»** (`resolver_pedido(…, 'facturar_en_origen')`):
+  - en la misma operación, el pedido pasa a ser de su origen y se emite su única factura con `facturar_pedido()`;
+  - necesita también «Facturar»;
+  - conserva productos, precios, ISV, cobros, cargos, el pago parcial y el inventario que salió al entregar;
+  - no queda ningún momento en que otra ubicación pueda facturarlo.
+- **«Enviar a otra ubicación»** (`resolver_pedido(…, 'reenviar', destino)`):
+  - el mismo pedido, con el mismo número, vuelve a `pendiente` en la ubicación elegida, que recibe el aviso y lo factura como cualquier otro;
+  - el destino debe ser otra ubicación activa de la empresa que factura, que no sea el origen ni la que lo rechazó; si emite facturas fiscales, el pedido debe llevar ISV (`PI009`);
+  - la ubicación que lo rechazó deja de verlo.
+- **Nota:** opcional, queda en la historia junto a quién resolvió.
+
+Un pedido puede rechazarse y reenviarse varias veces: la historia conserva cada rechazo, cada envío (de dónde a dónde) y la factura.
+
+### El dinero sigue al destino final
+
+| Caso | Factura | Liquidación |
+|---|---|---|
+| Facturado en origen | De la ubicación que entregó, con el pago parcial ya aplicado | Ninguna: cobró y factura la misma ubicación |
+| Enviado a otra ubicación | De la ubicación nueva | El efectivo cobrado en origen se le debe a la ubicación nueva |
+| Por resolver | Ninguna todavía | Su efectivo no se puede liquidar: no se sabe a quién se le debe |
+
+Lo electrónico (transferencia, tarjeta, enlace y su cargo) sigue sin liquidarse entre ubicaciones.
+
+**Bloqueo por liquidaciones.** Si el efectivo del pedido ya está en una liquidación por confirmar o confirmada, el pedido no se rechaza ni cambia de ubicación (`PI013`). Si está por confirmar, quien la recibe puede rechazarla en Liquidaciones y después rechazar el pedido. Si ya está confirmada, ajustarla corresponde a la etapa C2. Las liquidaciones rechazadas no bloquean.
+
+### Seguridad
+
+- Las dos funciones toman primero el candado del par de ubicaciones (el mismo de `registrar_liquidacion()`) y después la fila del pedido: una liquidación no puede meter su efectivo mientras se rechaza o se resuelve, y dos personas que resuelven a la vez quedan en fila (la segunda recibe `PI012`).
+- Las dos llevan clave de idempotencia. Un reintento con la misma clave devuelve lo hecho; la clave usada para otra operación da `PI011`.
+- Las únicas transiciones posibles son `pendiente → facturado`, `pendiente → por_resolver` (solo cambia el estado) y `por_resolver → pendiente` (solo cambian el estado y el destino, siempre a otra ubicación). Un pedido facturado o cancelado ya no cambia.
+- Origen y destino solo coinciden en un pedido facturado en origen. Un disparador diferido lo revisa al confirmar la transacción: un pedido pendiente para su propia ubicación no puede quedar guardado.
+
+### Cómo se integró sin reescribir lo publicado
+
+`saldos_de_pedidos()`, `detalle_de_pedido()`, `avisos_de_pedidos()`, `reporte_diario_de_caja()` y `reporte_medios_de_caja()` se renombraron con el sufijo `_base` sin cambiar su código. Las funciones con el nombre de siempre las llaman y agregan lo nuevo:
+
+- `saldos_de_pedidos()` deja fuera los pedidos facturados en origen y los que están por resolver;
+- los reportes de caja siguen contando el cobro de un pedido facturado en origen en su ubicación, su día y su medio, pero ya no como «cobrado por cuenta de otra ubicación».
+
 ## Quién puede
 
 - Entrega quien tiene «Facturar» y una ubicación asignada; el pedido sale de esa ubicación.
@@ -73,7 +130,7 @@ En la base se llama «prima»; en pantalla, **pago parcial**. Solo cambia la pre
 - Al contador no se le ofrecen, y la base no se los reconoce aunque se le marquen por SQL.
 - Valen solo para pedidos de la ubicación del usuario (origen o destino). La base los comprueba con `usuario_puede_resolver_pedido()` y `usuario_puede_autorizar_cancelacion()`.
 
-En esta etapa no habilitan ninguna acción: las funciones de la etapa C los exigirán.
+Desde la etapa C1, «Resolver pedidos interubicación» permite resolver los pedidos rechazados, y solo en la ubicación que los entregó. «Autorizar cancelación de pedidos» todavía no habilita ninguna acción: es de la etapa C2.
 
 ## Lo que queda para después
 
@@ -81,10 +138,10 @@ En esta etapa no habilitan ninguna acción: las funciones de la etapa C los exig
   - La caja por ubicación, lo cobrado por cuenta de otra ubicación, los reportes y las liquidaciones.
   - Hasta entonces, los reportes de siempre cuentan la factura de un pedido en la ubicación y el día en que se facturó, y su dinero aparece como «sin registrar». Lo cobrado en origen ya queda guardado con su ubicación, usuario y fecha en `cobros_por_medio.pedido_id`, que es lo que usará la etapa B.
 - **Etapa C**
-  - Rechazo, resolución y reenvío, cancelación autorizada, anulación, devoluciones y reembolsos.
-  - El estado `por_resolver`, la tabla `eventos_de_pedido` y los dos privilegios ya existen.
+  - C1 (0048): rechazo y resolución antes de facturar. Hecho; ver arriba.
+  - C2 y siguientes: cancelación autorizada, anulación de facturas de pedido, devoluciones, reembolsos y ajustes de liquidaciones ya registradas.
   - Una factura de pedido no se anula con la anulación actual: `anular_venta()` la rechaza y la pantalla explica por qué.
-- **Sin conexión**: los pedidos se crean, revisan y facturan solo con conexión. La venta sin conexión de siempre no cambió.
+- **Sin conexión**: los pedidos se crean, revisan, facturan, rechazan y resuelven solo con conexión. La venta sin conexión de siempre no cambió.
 
 ## Errores
 
@@ -100,3 +157,6 @@ En esta etapa no habilitan ninguna acción: las funciones de la etapa C los exig
 | `PI008` | El pedido no existe o no se puede facturar |
 | `PI009` | ISV obligatorio en un destino fiscal |
 | `PI010` | Prima igual o mayor que el total |
+| `PI011` | Clave usada para otra operación (rechazar o resolver) |
+| `PI012` | El pedido no está en el estado que la operación necesita, o cambió mientras se revisaba |
+| `PI013` | El efectivo del pedido ya está en una liquidación por confirmar o confirmada |

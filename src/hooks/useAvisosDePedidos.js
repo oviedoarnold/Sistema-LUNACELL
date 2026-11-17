@@ -20,7 +20,7 @@ export const CADA_CUANTO = 60000
 
 export const avisarCambioDePedidos = () => window.dispatchEvent(new Event(EVENTO_PEDIDOS_CAMBIARON))
 
-const VACIO = { pendientes: 0, sinLeer: 0, ultimos: [] }
+const VACIO = { pendientes: 0, sinLeer: 0, porResolver: 0, porResolverSinLeer: 0, ultimos: [] }
 
 export function useAvisosDePedidos({ activo = true } = {}) {
   const [avisos, setAvisos] = useState(VACIO)
