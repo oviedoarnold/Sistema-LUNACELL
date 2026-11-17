@@ -23,10 +23,24 @@ const FUENTE = readFileSync("public/sw.js", "utf8")
 const CACHE_ACTUAL = "lunacell-v1"
 const CACHE_HEREDADO = "ferreteria-v1"
 
-function montarServiceWorker({ cachesExistentes = [], fetch: pedir } = {}) {
+function montarServiceWorker({ cachesExistentes = [], fetch: pedir, activa = null, ventanas = [] } = {}) {
   const borradas = []
   const guardadas = []
   const manejadores = {}
+  const reloj = { ahora: 1_000_000, pendientes: [] }
+
+  // Corre los temporizadores en orden, adelantando la hora, hasta que no quede nada.
+  const correrReloj = async (vueltas = 2000) => {
+    for (let i = 0; i < vueltas; i++) {
+      for (let j = 0; j < 5; j++) await new Promise((r) => globalThis.setTimeout(r, 0))
+      const vivos = reloj.pendientes.filter((p) => !p.hecho).sort((a, b) => a.cuando - b.cuando)
+      if (!vivos.length) return
+      const siguiente = vivos[0]
+      siguiente.hecho = true
+      reloj.ahora = Math.max(reloj.ahora, siguiente.cuando)
+      siguiente.fn()
+    }
+  }
 
   const cacheFalso = {
     add: () => Promise.resolve(),
@@ -45,6 +59,16 @@ function montarServiceWorker({ cachesExistentes = [], fetch: pedir } = {}) {
     Set,
     Promise,
     fetch: pedir || (() => Promise.resolve({ ok: true, clone: () => ({}) })),
+    Map,
+    // Un reloj propio: cada espera adelanta la hora sin esperar de verdad.
+    Date: { now: () => reloj.ahora },
+    setTimeout: (fn, ms = 0) => {
+      reloj.pendientes.push({ cuando: reloj.ahora + ms, fn })
+      return reloj.pendientes.length
+    },
+    clearTimeout: (n) => {
+      if (reloj.pendientes[n - 1]) reloj.pendientes[n - 1].hecho = true
+    },
 
     caches: {
       open: () => Promise.resolve(cacheFalso),
@@ -65,11 +89,14 @@ function montarServiceWorker({ cachesExistentes = [], fetch: pedir } = {}) {
         contexto.self.skipWaitingLlamado = true
         return Promise.resolve()
       },
+      registration: { active: activa },
       clients: {
         claim: () => {
           contexto.self.claimLlamado = true
           return Promise.resolve()
         },
+        matchAll: () => Promise.resolve([...ventanas]),
+        get: (id) => Promise.resolve(ventanas.find((v) => v.id === id) || null),
       },
       skipWaitingLlamado: false,
       claimLlamado: false,
@@ -99,7 +126,19 @@ function montarServiceWorker({ cachesExistentes = [], fetch: pedir } = {}) {
     return respuesta
   }
 
-  return { contexto, borradas, guardadas, manejadores, disparar, pedirPagina }
+  // Una petición de una página ya abierta: devuelve lo que el service worker dejó pendiente.
+  const peticionDe = (clientId, url, method = "GET") => {
+    const trabajos = []
+    manejadores.fetch({
+      clientId,
+      request: { url, mode: "cors", method },
+      respondWith: () => {},
+      waitUntil: (p) => trabajos.push(p),
+    })
+    return Promise.all(trabajos)
+  }
+
+  return { contexto, borradas, guardadas, manejadores, disparar, pedirPagina, peticionDe, reloj, correrReloj }
 }
 
 describe("service worker · migración de caché", () => {
@@ -151,7 +190,7 @@ describe("service worker · migración de caché", () => {
     La versión nueva no toma el control sola en medio de una venta: espera a
     que la aplicación decida que es seguro y se lo pida (src/lib/actualizacion).
   */
-  it("se instala sin activarse sola", async () => {
+  it("se instala sin activarse sola (la primera vez, sin versión anterior)", async () => {
     await sw.disparar("install")
 
     expect(sw.contexto.self.skipWaitingLlamado).toBe(false)
@@ -275,5 +314,131 @@ describe("service worker · lo que siempre va a la red", () => {
     const sw = montarServiceWorker()
 
     expect(await sw.pedirPagina("https://lunacell.oviedoarnold.lat/assets/index-abc.js", "cors")).toBeDefined()
+  })
+})
+
+/*
+  Las instalaciones anteriores al PR #89: su código no sabe pedirle al service
+  worker que se active ni buscar versiones. El service worker las reconoce porque
+  no contestan, y las recarga cuando pasan a segundo plano.
+*/
+describe("service worker · instalaciones anteriores al aviso de actualización", () => {
+  const ORIGEN = "https://lunacell.oviedoarnold.lat"
+  const DATOS = "https://qlzkriyibpbnesidtiiy.supabase.co/rest/v1/productos"
+
+  // Una ventana: las actuales contestan a IDENTIFICATE; las antiguas, no.
+  const ventana = (id, { actual = false, visible = true } = {}) => {
+    const v = {
+      id,
+      type: "window",
+      url: `${ORIGEN}/pos`,
+      visibilityState: visible ? "visible" : "hidden",
+      navegadaEn: null,
+      navigate: () => {
+        v.navegadaEn = v.sw.reloj.ahora
+        return Promise.resolve(v)
+      },
+      postMessage: (mensaje) => {
+        if (actual && mensaje.tipo === "IDENTIFICATE") {
+          v.sw.manejadores.message({ origin: ORIGEN, source: v, data: { tipo: "SOY_ACTUAL" } })
+        }
+      },
+    }
+    return v
+  }
+
+  const montarCon = (ventanas) => {
+    const sw = montarServiceWorker({ activa: { state: "activated" }, ventanas })
+    for (const v of ventanas) v.sw = sw
+    return sw
+  }
+
+  it("si ninguna página abierta sabe pedirlo, se activa sola: si no, se quedaría esperando para siempre", async () => {
+    const sw = montarCon([ventana("vieja")])
+    const instalando = sw.disparar("install")
+
+    await sw.correrReloj()
+    await instalando
+    expect(sw.contexto.self.skipWaitingLlamado).toBe(true)
+  })
+
+  it("si hay una página actual abierta, espera su orden: esa protege su carrito", async () => {
+    const sw = montarCon([ventana("vieja"), ventana("nueva", { actual: true })])
+    const instalando = sw.disparar("install")
+
+    await sw.correrReloj()
+    await instalando
+    expect(sw.contexto.self.skipWaitingLlamado).toBe(false)
+  })
+
+  it("una página antigua se recarga cuando pasa a segundo plano, nunca a la vista", async () => {
+    const vieja = ventana("vieja")
+    const sw = montarCon([vieja])
+    const vigilando = sw.peticionDe("vieja", DATOS)
+
+    await sw.correrReloj(20)
+    expect(vieja.navegadaEn).toBeNull()
+
+    vieja.visibilityState = "hidden"
+    await sw.correrReloj()
+    await vigilando
+    expect(vieja.navegadaEn).not.toBeNull()
+  })
+
+  it("una página actual nunca se recarga desde aquí: contesta, o consulta /version.json", async () => {
+    const contesta = ventana("contesta", { actual: true })
+    const consulta = ventana("consulta")
+    const sw = montarCon([contesta, consulta])
+
+    await sw.peticionDe("consulta", `${ORIGEN}/version.json?t=1`)
+    const pendientes = Promise.all([sw.peticionDe("contesta", DATOS), sw.peticionDe("consulta", DATOS)])
+
+    contesta.visibilityState = "hidden"
+    consulta.visibilityState = "hidden"
+    await sw.correrReloj()
+    await pendientes
+    expect(contesta.navegadaEn).toBeNull()
+    expect(consulta.navegadaEn).toBeNull()
+  })
+
+  it("no recarga mientras hay una escritura reciente (una venta o un cobro enviándose)", async () => {
+    const vieja = ventana("vieja")
+    const sw = montarCon([vieja])
+    const vigilando = sw.peticionDe("vieja", DATOS)
+
+    await sw.correrReloj(3)
+    await sw.peticionDe("vieja", "https://qlzkriyibpbnesidtiiy.supabase.co/rest/v1/rpc/registrar_venta_con_medios", "POST")
+    const escribio = sw.reloj.ahora
+    vieja.visibilityState = "hidden"
+
+    await sw.correrReloj()
+    await vigilando
+    expect(vieja.navegadaEn - escribio).toBeGreaterThan(15000)
+  })
+
+  it("una página oculta no se juzga: podría estar congelada por el sistema y no contestar", async () => {
+    const oculta = ventana("oculta", { visible: false })
+    const sw = montarCon([oculta])
+    const pendiente = sw.peticionDe("oculta", DATOS)
+
+    await sw.correrReloj()
+    await pendiente
+    expect(oculta.navegadaEn).toBeNull()
+  })
+
+  it("si estaba en segundo plano al activarse, se recarga en cuanto vuelve a abrirse", async () => {
+    const vieja = ventana("vieja", { visible: false })
+    const sw = montarCon([vieja])
+    const activando = sw.disparar("activate")
+
+    await sw.correrReloj()
+    await activando
+
+    vieja.visibilityState = "visible"
+    const vuelta = sw.peticionDe("vieja", DATOS)
+
+    await sw.correrReloj(20)
+    await vuelta
+    expect(vieja.navegadaEn).not.toBeNull()
   })
 })

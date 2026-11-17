@@ -74,8 +74,42 @@ registro vive en `sessionStorage` y se borra al llegar a la versión buscada.
 **El service worker.** Ya no se activa solo al instalarse. Precarga la versión nueva y
 espera a que la aplicación le diga que es seguro. La primera instalación no espera.
 
-Los equipos que tengan abierta una versión anterior a este mecanismo lo reciben la
-próxima vez que abran o recarguen la aplicación. Desde entonces, se actualizan solos.
+### Instalaciones anteriores al aviso (antes del PR #89)
+
+Una PWA instalada casi nunca se recarga. Al tocar el ícono, el sistema retoma la ventana
+que estaba en segundo plano, con el JavaScript que ya tenía. El código anterior al PR #89
+no sabe buscar versiones ni pedirle al service worker que se active. Por eso esas
+instalaciones seguían en la versión vieja aunque el navegador ya mostrara la nueva: abrir
+la dirección en el navegador es siempre una navegación nueva, y retomar la PWA no.
+
+El service worker las recarga él mismo:
+
+- **Reconoce las páginas antiguas.** Pregunta a cada ventana `{tipo: "IDENTIFICATE"}`.
+  Las actuales contestan `{tipo: "SOY_ACTUAL"}` (`src/registrarServiceWorker.js`) o
+  consultan `/version.json`, y nunca se recargan desde ahí: se actualizan con su
+  propio aviso.
+- **Se activa aunque nadie se lo pida.** Si ninguna página abierta contesta, se activa
+  solo al instalarse, porque nadie le pediría hacerlo. Si hay una página actual abierta,
+  espera su orden, que protege el carrito.
+- **Juzga solo con la página a la vista.** Una página oculta puede estar congelada por el
+  sistema y no contestar.
+- **Recarga en un momento seguro.** Una página antigua se recarga cuando pasa a segundo
+  plano, nunca mientras se usa, y solo si no envió nada (una venta, un cobro) en los
+  últimos 15 segundos. Si ya estaba en segundo plano cuando se activó la versión nueva,
+  se recarga en cuanto vuelve a abrirse.
+- **Conserva los datos.** La recarga no borra la sesión, `localStorage` ni la base local
+  con las ventas sin conexión.
+
+**Límites:**
+
+- **Cuándo llega la versión nueva.** El navegador revisa el service worker al navegar o,
+  como máximo, una vez cada 24 horas mientras la aplicación hace peticiones. Una
+  instalación que solo se retoma recibe la versión nueva dentro de ese plazo.
+- **Carrito en memoria.** El código anterior al PR #89 no avisa de su carrito. Si una
+  venta quedó a medio armar y la app pasa a segundo plano, al recargarse se pierde ese
+  carrito no enviado. Lo que se guardó, incluidas las ventas sin conexión, se conserva.
+
+Desde que corre el código nuevo, cada actualización usa el aviso de 15 segundos.
 
 ## Dominio oficial
 
