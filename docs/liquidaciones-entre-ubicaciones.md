@@ -27,6 +27,13 @@ El cobro se guarda una sola vez (0045). La 0046 no lo duplica ni lo cambia.
 - `liquidado`: lo confirmado.
 - `pendiente = efectivo − por_confirmar − liquidado`. Una entrega rechazada deja de restar.
 
+Desde la 0048 (etapa C1), el efectivo se le debe al **destino final** del pedido:
+
+- un pedido enviado a otra ubicación pasa al par nuevo (origen → ubicación nueva);
+- un pedido facturado en su origen no aparece: cobró y factura la misma ubicación;
+- un pedido por resolver tampoco: mientras no se sepa quién lo factura, su efectivo no se liquida;
+- un pedido con efectivo en una liquidación por confirmar o confirmada no se rechaza ni cambia de ubicación (`PI013`).
+
 Estados que muestra la pantalla:
 
 | Estado | Cuándo |
@@ -95,14 +102,15 @@ Con solo ventas normales, los reportes de caja dan exactamente lo mismo que los 
 
 En producción, el reporte diario de caja del 16/11/2026 mostraba la fila «Sin ubicación» con cobros que no eran suyos. Esa fila existe por un abono antiguo sin ubicación, y recibía las facturas y los cobros de pedidos de todas las ubicaciones. La 0047 separa `sumar_de()` en dos firmas (todo, o una ubicación comparada tal cual) sin cambiar el código de los reportes: los totales, las demás filas y el reporte de medios no cambian.
 
-## Pendiente para la etapa C
+## Pendiente para la etapa C2
 
-Anular o cancelar un pedido cuyo efectivo ya se liquidó exige revertir o ajustar esa liquidación. La 0046 no tiene esa operación:
+Anular o cancelar un pedido cuyo efectivo ya se liquidó exige revertir o ajustar esa liquidación. Ni la 0046 ni la 0048 tienen esa operación:
 
 - una liquidación confirmada no se modifica;
-- un pedido no puede cancelarse todavía.
+- un pedido no puede cancelarse todavía;
+- por eso la 0048 bloquea el rechazo y la resolución de un pedido con efectivo ya liquidado o por confirmar.
 
-La etapa C debe definir:
+La etapa C2 debe definir:
 
 - un ajuste o contraliquidación con su propio registro;
 - qué pasa con lo pendiente y con lo entregado por confirmar de un pedido cancelado;

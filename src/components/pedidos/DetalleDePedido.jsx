@@ -11,17 +11,30 @@ import { fechaYHora, formatMoney } from "../../utils/format"
 
   Facturar crea UNA factura con estos mismos datos. No descuenta inventario ni
   vuelve a cobrar: eso pasó en origen al entregar.
+
+  Etapa C1: el destino puede rechazarlo, y la ubicación que lo entregó lo
+  resuelve aquí mismo: lo factura ella o lo envía a otra ubicación. Cada botón
+  aparece solo si el servidor dice que quien mira puede usarlo.
 */
 
 const EVENTOS = {
   entregado: "Entregado en origen",
   facturado: "Facturado",
   rechazado: "Rechazado",
-  reenviado: "Reenviado",
+  reenviado: "Enviado a otra ubicación",
   facturar_en_origen: "Se factura en origen",
   cancelacion_solicitada: "Cancelación solicitada",
   cancelacion_autorizada: "Cancelación autorizada",
   cancelacion_rechazada: "Cancelación rechazada",
+}
+
+// Lo que dice la historia de cada paso, con el cambio de ubicación cuando lo hubo.
+function textoDelEvento(evento) {
+  if (evento.tipo === "rechazado") return `Rechazado en ${evento.rechazadoEn || evento.ubicacion}`
+  if (evento.tipo === "reenviado") return `Enviado de ${evento.desde} a ${evento.hacia}`
+  if (evento.tipo === "facturar_en_origen") return `Se factura en ${evento.hacia} (lo rechazó ${evento.desde})`
+
+  return EVENTOS[evento.tipo] || evento.tipo
 }
 
 function PrecioDelProducto({ producto }) {
@@ -41,8 +54,49 @@ function PrecioDelProducto({ producto }) {
   return null
 }
 
-function DetalleDePedido({ pedido, cargando, error, facturando, sinConexion, onFacturar, onCerrar }) {
+function AccionesDelPedido({ pedido, operando, sinConexion, onFacturar, onRechazar, onReenviar, onFacturarEnOrigen }) {
+  if (!pedido) return null
+
+  const ocupado = Boolean(operando) || sinConexion
+  const bloqueado = Boolean(pedido.bloqueoPorLiquidacion)
+
+  return (
+    <>
+      {pedido.puedeRechazar && (
+        <button type="button" className="btn btn-secondary" disabled={ocupado || bloqueado} onClick={onRechazar}>
+          {operando === "rechazar" ? "Rechazando…" : "Rechazar"}
+        </button>
+      )}
+
+      {pedido.puedeFacturar && (
+        <button type="button" className="btn btn-primary" disabled={ocupado} onClick={onFacturar}>
+          {operando === "facturar" ? "Facturando…" : "Facturar"}
+        </button>
+      )}
+
+      {pedido.puedeResolver && (
+        <button
+          type="button"
+          className="btn btn-secondary"
+          disabled={ocupado || bloqueado || pedido.destinosParaReenviar.length === 0}
+          onClick={onReenviar}
+        >
+          {operando === "reenviar" ? "Enviando…" : "Enviar a otra ubicación"}
+        </button>
+      )}
+
+      {pedido.puedeFacturarEnOrigen && (
+        <button type="button" className="btn btn-primary" disabled={ocupado || bloqueado} onClick={onFacturarEnOrigen}>
+          {operando === "facturar_en_origen" ? "Facturando…" : `Facturar en ${pedido.origen}`}
+        </button>
+      )}
+    </>
+  )
+}
+
+function DetalleDePedido({ pedido, cargando, error, operando, sinConexion, onFacturar, onRechazar, onReenviar, onFacturarEnOrigen, onCerrar }) {
   const titulo = pedido ? `Pedido ${pedido.numero}` : "Pedido"
+  const opera = Boolean(pedido && (pedido.puedeFacturar || pedido.puedeRechazar || pedido.puedeResolver))
 
   const acciones = (
     <>
@@ -50,11 +104,15 @@ function DetalleDePedido({ pedido, cargando, error, facturando, sinConexion, onF
         Cerrar
       </button>
 
-      {pedido?.puedeFacturar && (
-        <button type="button" className="btn btn-primary" disabled={facturando || sinConexion} onClick={onFacturar}>
-          {facturando ? "Facturando…" : "Facturar"}
-        </button>
-      )}
+      <AccionesDelPedido
+        pedido={pedido}
+        operando={operando}
+        sinConexion={sinConexion}
+        onFacturar={onFacturar}
+        onRechazar={onRechazar}
+        onReenviar={onReenviar}
+        onFacturarEnOrigen={onFacturarEnOrigen}
+      />
     </>
   )
 
@@ -66,9 +124,27 @@ function DetalleDePedido({ pedido, cargando, error, facturando, sinConexion, onF
 
         {pedido && (
           <>
-            {pedido.puedeFacturar && sinConexion && (
+            {opera && sinConexion && (
               <p className="alert-banner" role="alert">
-                Facturar un pedido necesita conexión. Podrás hacerlo cuando vuelva.
+                Facturar, rechazar o resolver un pedido necesita conexión. Podrás hacerlo cuando vuelva.
+              </p>
+            )}
+
+            {pedido.rechazo && (
+              <div className="pedidos-rechazo" role="note">
+                <b>Rechazado por {pedido.rechazo.ubicacion}</b>
+                <span>«{pedido.rechazo.motivo}»</span>
+                <small>
+                  {pedido.rechazo.usuario} · {fechaYHora(pedido.rechazo.fecha)}
+                  {pedido.puedeResolver ? ` · decide quién lo factura: ${pedido.origen} u otra ubicación.` : ` · espera que ${pedido.origen} lo resuelva.`}
+                </small>
+              </div>
+            )}
+
+            {pedido.bloqueoPorLiquidacion && opera && (
+              <p className="alert-banner" role="alert">
+                El efectivo de este pedido ya está en la liquidación {pedido.bloqueoPorLiquidacion}. Mientras siga ahí, no se puede rechazar ni
+                cambiar de ubicación.
               </p>
             )}
 
@@ -77,7 +153,14 @@ function DetalleDePedido({ pedido, cargando, error, facturando, sinConexion, onF
                 ["Estado", ESTADOS_DE_PEDIDO[pedido.estado] || pedido.estado],
                 ["Cliente", `${pedido.cliente}${pedido.rtn ? ` · RTN ${pedido.rtn}` : ""}`],
                 ["Entregó", `${pedido.origen} · ${pedido.entregadoPor || "—"} · ${fechaYHora(pedido.entregadoEn)}`],
-                ["Factura", pedido.numeroFactura ? `${pedido.destino} · ${pedido.numeroFactura} · ${fechaYHora(pedido.facturadoEn)}` : pedido.destino],
+                [
+                  "Factura",
+                  pedido.numeroFactura
+                    ? `${pedido.destino} · ${pedido.numeroFactura} · ${fechaYHora(pedido.facturadoEn)}`
+                    : pedido.estado === "por_resolver"
+                      ? `Por decidir (lo rechazó ${pedido.destino})`
+                      : pedido.destino,
+                ],
                 ["Forma de pago", pedido.formaPago === "credito" ? `Crédito${pedido.fechaVencimiento ? ` · vence ${pedido.fechaVencimiento}` : ""}` : "Contado"],
                 ["Nota", pedido.nota || "—"],
               ].map(([termino, valor]) => (
@@ -161,11 +244,19 @@ function DetalleDePedido({ pedido, cargando, error, facturando, sinConexion, onF
               </p>
             )}
 
+            {pedido.puedeResolver && (
+              <p className="crud-nota">
+                Resolver no cambia productos, precios ni pagos, y no descuenta inventario. «Facturar en {pedido.origen}» emite aquí la única
+                factura; «Enviar a otra ubicación» deja el mismo pedido pendiente en la que elijas.
+              </p>
+            )}
+
             <h3 className="pedidos-subtitulo">Historia</h3>
             <ul className="pedidos-eventos">
-              {pedido.eventos.map((evento) => (
-                <li key={`${evento.tipo}-${evento.fecha}`}>
-                  {EVENTOS[evento.tipo] || evento.tipo} · {evento.usuario} · {fechaYHora(evento.fecha)}
+              {pedido.eventos.map((evento, indice) => (
+                <li key={`${indice}-${evento.tipo}`}>
+                  {textoDelEvento(evento)} · {evento.usuario} · {fechaYHora(evento.fecha)}
+                  {evento.motivo && <span className="pedidos-evento-motivo">«{evento.motivo}»</span>}
                 </li>
               ))}
             </ul>

@@ -546,6 +546,13 @@ body.sin-desplazamiento {
   flex: none;
 }
 
+/* El motivo de un pedido rechazado, en la campanita de quien lo entregó. */
+.topbar-campana-aviso-motivo {
+  font-size: 12.5px;
+  color: var(--text-muted);
+  overflow-wrap: anywhere;
+}
+
 /* En el teléfono la campanita no está en la esquina: el menú se ancla a los márgenes de la pantalla. */
 @media (max-width: 639px) {
   .topbar-campana-menu {
