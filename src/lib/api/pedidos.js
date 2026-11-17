@@ -30,6 +30,8 @@ const MOTIVOS = {
   42501: "sin-permiso",
 }
 
+const MENSAJE_DEL_PAGO_PARCIAL = "El pago parcial debe ser menor que el total del pedido. Si el cliente paga todo, envíalo al contado."
+
 export class ErrorDePedido extends Error {
   constructor(mensaje, motivo, codigo) {
     super(mensaje)
@@ -51,6 +53,9 @@ async function llamar(funcion, argumentos, queHacia) {
   if (!error) return data
 
   const motivo = MOTIVOS[error.code]
+
+  // En la base se llama «prima»; en pantalla, «pago parcial».
+  if (error.code === "PI010") throw new ErrorDePedido(MENSAJE_DEL_PAGO_PARCIAL, motivo, error.code)
 
   if (motivo) throw new ErrorDePedido(error.message, motivo, error.code)
 
@@ -131,7 +136,7 @@ const aDetalleDeApp = (fila) => ({
 
 /*
   Entrega en la ubicación del usuario y envía el pedido. `cobros`: al contado,
-  los medios del total; a crédito, la prima o nada.
+  los medios del total; a crédito, el pago parcial («prima» en la base) o nada.
 */
 export async function entregarPedido(pedido, clave) {
   const data = await llamar(

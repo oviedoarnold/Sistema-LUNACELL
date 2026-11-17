@@ -466,7 +466,8 @@
   }
 
   .pos .totals-row.grand,
-  .pos .totals-row.pos-cargo {
+  .pos .totals-row.pos-cargo,
+  .pos .totals-row.pos-pago-parcial-fila {
     grid-column: 1 / -1;
   }
 }
@@ -487,6 +488,24 @@
   width: 16px;
   height: 16px;
   margin: 0;
+}
+
+/* «Hacer pago parcial»: la casilla y, al marcarla, el monto y sus avisos. */
+.pos .pos-pago-parcial {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.pos .pos-pago-parcial-casilla {
+  font-size: 14px;
+  font-weight: 600;
+  min-height: 32px;
+}
+
+.pos .pos-pago-parcial-contado {
+  display: block;
+  margin-top: var(--space-1);
 }
 
 .pos .medios-de-pago-cuadre {

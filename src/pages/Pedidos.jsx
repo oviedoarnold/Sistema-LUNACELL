@@ -45,6 +45,19 @@ const CLASE_DEL_ESTADO = {
   cancelado: "badge badge-neutral",
 }
 
+/*
+  Lo que se dice antes de facturar. Con un pago parcial, el resumen completo:
+  la factura es por el total y ese pago ya está aplicado, no se cobra otra vez.
+  Sin anticipo, la confirmación breve de siempre.
+*/
+function textoDeLaConfirmacion(pedido) {
+  const factura = `Se emitirá una factura de ${pedido.destino} por ${formatMoney(pedido.total)} a nombre de ${pedido.cliente}. El inventario ya salió de ${pedido.origen}.`
+
+  if (pedido.formaPago !== "credito" || !(pedido.cobrado > 0)) return factura
+
+  return `Total del pedido: ${formatMoney(pedido.total)}. Pago recibido en ${pedido.origen}: ${formatMoney(pedido.cobrado)}. Saldo pendiente del cliente: ${formatMoney(pedido.saldo)}. ${factura} El pago ya recibido no se cobra otra vez.`
+}
+
 function Pedidos() {
   const { user, soloLectura } = useAuth()
   const { refrescarVentas, getSaleById } = useContext(SalesContext)
@@ -146,7 +159,7 @@ function Pedidos() {
     const confirmacion = await Swal.fire({
       icon: "question",
       title: `¿Facturar el pedido ${detalle.numero}?`,
-      text: `Se emitirá una factura de ${detalle.destino} por ${formatMoney(detalle.total)} a nombre de ${detalle.cliente}. El inventario ya salió de ${detalle.origen}.`,
+      text: textoDeLaConfirmacion(detalle),
       showCancelButton: true,
       confirmButtonText: "Facturar",
       cancelButtonText: "Cancelar",
@@ -265,6 +278,15 @@ function Pedidos() {
                   <span className="pedidos-cliente">{pedido.cliente}</span>
                   <span className="pos-importe">{formatMoney(pedido.total)}</span>
                 </span>
+                {pedido.estado !== "facturado" && (
+                  <span className="pedidos-tarjeta-fila pedidos-tarjeta-suave">
+                    <span>
+                      Pagado {formatMoney(pedido.cobrado)}
+                      {pedido.cobrado > 0 ? ` en ${pedido.origen}` : ""}
+                    </span>
+                    <span>Pendiente {formatMoney(pedido.saldo)}</span>
+                  </span>
+                )}
                 <span className="pedidos-tarjeta-fila pedidos-tarjeta-suave">
                   <span>
                     {pedido.origen} → {pedido.destino} · {pedido.formaPago === "credito" ? "Crédito" : "Contado"}

@@ -113,7 +113,6 @@ describe("entregar un pedido", () => {
     ["PI005", "clave-reusada"],
     ["PI003", "destino-invalido"],
     ["PI009", "isv-obligatorio"],
-    ["PI010", "prima-invalida"],
     ["LM007", "porcentaje-cambiado"],
     ["LN001", "precio-negociado-invalido"],
     ["42501", "sin-permiso"],
@@ -124,6 +123,17 @@ describe("entregar un pedido", () => {
 
     expect(error).toBeInstanceOf(ErrorDePedido)
     expect(error).toMatchObject({ motivo, codigo: code, message: "Mensaje del servidor" })
+  })
+
+  // En la base se llama «prima»; en pantalla, «pago parcial».
+  it("un rechazo PI010 llega como «prima-invalida» y habla de pago parcial", async () => {
+    montar({ entregar_pedido: () => ({ data: null, error: { code: "PI010", message: "La prima debe ser menor que el total del pedido" } }) })
+
+    const error = await entregarPedido(PEDIDO, "clave-3").catch((e) => e)
+
+    expect(error).toMatchObject({ motivo: "prima-invalida", codigo: "PI010" })
+    expect(error.message).toBe("El pago parcial debe ser menor que el total del pedido. Si el cliente paga todo, envíalo al contado.")
+    expect(error.message).not.toMatch(/prima/i)
   })
 
   it("sin respuesta del servidor dice que reintentar es seguro", async () => {
