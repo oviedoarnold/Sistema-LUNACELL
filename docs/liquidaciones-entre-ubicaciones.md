@@ -91,6 +91,10 @@ Parten de `reporte_diario()` y `reporte_medios_de_pago()`, que no cambian, y sol
 
 Con solo ventas normales, los reportes de caja dan exactamente lo mismo que los de siempre. Hay una prueba que lo comprueba.
 
+## Corrección 0047
+
+En producción, el reporte diario de caja del 16/11/2026 mostraba la fila «Sin ubicación» con cobros que no eran suyos. Esa fila existe por un abono antiguo sin ubicación, y recibía las facturas y los cobros de pedidos de todas las ubicaciones. La 0047 compara la ubicación tal cual en las filas: los totales, las demás filas y el reporte de medios no cambian.
+
 ## Pendiente para la etapa C
 
 Anular o cancelar un pedido cuyo efectivo ya se liquidó exige revertir o ajustar esa liquidación. La 0046 no tiene esa operación:

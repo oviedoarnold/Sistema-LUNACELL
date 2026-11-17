@@ -12,7 +12,7 @@ import { randomUUID } from "node:crypto"
 import { describe, it, expect, beforeAll, afterAll } from "vitest"
 
 import { levantarBase, consultarComo, enDosSesiones } from "./arnes.mjs"
-import { crearEmpresa, crearCliente, crearVendedor, contar } from "./fixtures.mjs"
+import { crearEmpresa, crearCliente, crearVendedor, crearFactura, crearAbonoLegado, contar } from "./fixtures.mjs"
 
 let base
 let db
@@ -650,6 +650,31 @@ describe("la caja por ubicación", () => {
 
     // Filtrado por una ubicación ajena al par, no aparece.
     expect((await diario(e, e.camion2)).saldos_por_liquidar).toEqual([])
+  })
+
+  // Como en producción: un abono antiguo sin ubicación hace que el reporte tenga una fila «Sin ubicación».
+  it("la fila «Sin ubicación» no recibe los cobros ni las facturas de pedidos de las demás", async () => {
+    const e = await escenario()
+    const vieja = await crearFactura(db, { empresa: e.empresa, clienteId: e.cliente, total: 500 })
+
+    await crearAbonoLegado(db, { empresa: e.empresa, ventaId: vieja, monto: 100 })
+
+    const p = await pedido(e)
+
+    await facturar(e, p.pedido_id)
+
+    const d = await diario(e)
+    const b = await diarioBase(e)
+    const sinUbicacion = d.por_ubicacion.find((u) => u.ubicacion_id === null)
+
+    expect(b.por_ubicacion.find((u) => u.ubicacion_id === null)).toMatchObject({ abonos_total: 100, cobros_total: 100 })
+    expect([num(sinUbicacion.cobros_total), num(sinUbicacion.abonos_total), num(sinUbicacion.cobros_por_cuenta_de_otras)]).toEqual([100, 100, 0])
+    expect(num(deUbicacion(d.por_ubicacion, e.bodega).cobros_total)).toBe(230)
+    expect(num(deUbicacion(d.por_ubicacion, e.camion1).cobros_total)).toBe(0)
+
+    // Las filas suman lo mismo que el total.
+    expect(d.por_ubicacion.reduce((t, u) => t + num(u.cobros_total), 0)).toBe(num(d.indicadores.cobros_total))
+    expect(d.por_ubicacion.reduce((t, u) => t + num(u.cobros_por_cuenta_de_otras), 0)).toBe(num(d.indicadores.cobros_por_cuenta_de_otras))
   })
 
   it("los reportes de caja son solo para administradores", async () => {

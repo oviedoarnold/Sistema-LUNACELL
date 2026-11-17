@@ -133,6 +133,7 @@ sql_paths = [
   "./migrations/0044_porcentaje_adicional_configurable.sql",
   "./migrations/0045_pedidos_interubicacion.sql",
   "./migrations/0046_liquidaciones_entre_ubicaciones.sql",
+  "./migrations/0047_caja_fila_sin_ubicacion.sql",
   "./seed.sql",
 ]
 
