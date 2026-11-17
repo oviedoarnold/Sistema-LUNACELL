@@ -124,11 +124,11 @@ function DetalleDePedido({ pedido, cargando, error, facturando, sinConexion, onF
                 </div>
               )}
               <div className="totals-row">
-                <span>{pedido.formaPago === "credito" ? "Prima cobrada en origen" : "Cobrado en origen"}</span>
+                <span>{pedido.formaPago === "credito" ? `Pago parcial recibido en ${pedido.origen}` : `Cobrado en ${pedido.origen}`}</span>
                 <span className="v">{formatMoney(pedido.cobrado)}</span>
               </div>
               <div className="totals-row">
-                <span>{pedido.formaPago === "credito" ? "Queda a crédito" : "Saldo"}</span>
+                <span>{pedido.formaPago === "credito" ? "Saldo pendiente del cliente" : "Saldo"}</span>
                 <span className="v">{formatMoney(pedido.saldo)}</span>
               </div>
             </div>

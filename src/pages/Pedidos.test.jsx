@@ -159,12 +159,62 @@ describe("Pedidos: la bandeja", () => {
     expect(within(ventana).getByText(/Negociado · antes L 100.00 · Compra al por mayor/)).toBeInTheDocument()
     expect(within(ventana).getByText(/Precio especial · general L 50.00/)).toBeInTheDocument()
     expect(within(ventana).getByText(/entregado en Bodega: 2/)).toBeInTheDocument()
-    expect(within(ventana).getByText("Prima cobrada en origen").nextSibling).toHaveTextContent("L 80.00")
-    expect(within(ventana).getByText("Queda a crédito").nextSibling).toHaveTextContent("L 150.00")
+    expect(within(ventana).getByText("Pago parcial recibido en Bodega").nextSibling).toHaveTextContent("L 80.00")
+    expect(within(ventana).getByText("Saldo pendiente del cliente").nextSibling).toHaveTextContent("L 150.00")
+    expect(within(ventana).queryByText(/prima/i)).not.toBeInTheDocument()
     expect(within(ventana).getByText(/Tarjeta/)).toBeInTheDocument()
 
     await waitFor(() => expect(llamadas.leer).toEqual([{ p_pedido: "ped-1" }]))
     expect(llamadas.facturar).toHaveLength(0)
+  })
+
+  it("la tarjeta muestra el total, lo pagado en origen y lo pendiente", async () => {
+    await renderPedidos({
+      rpcs: { bandeja: () => [fila(), fila({ pedido_id: "ped-2", numero: "PED-000002", forma_pago: "credito", total: 1000, cobrado: 0, saldo: 1000 })] },
+    })
+
+    const conPago = await screen.findByRole("button", { name: "Abrir el pedido PED-000001 de Ferremax" })
+    const sinPago = screen.getByRole("button", { name: "Abrir el pedido PED-000002 de Ferremax" })
+
+    expect(within(conPago).getByText("L 230.00")).toBeInTheDocument()
+    expect(within(conPago).getByText(/Pagado L 80.00 en Bodega/)).toBeInTheDocument()
+    expect(within(conPago).getByText("Pendiente L 150.00")).toBeInTheDocument()
+    expect(within(sinPago).getByText(/^Pagado L 0.00$/)).toBeInTheDocument()
+    expect(within(sinPago).getByText("Pendiente L 1,000.00")).toBeInTheDocument()
+  })
+
+  it("con pago parcial, antes de facturar resume el total, lo pagado y el saldo; la factura es una sola", async () => {
+    const { llamadas } = await renderPedidos()
+
+    fireEvent.click(await screen.findByRole("button", { name: "Abrir el pedido PED-000001 de Ferremax" }))
+    const ventana = await screen.findByRole("dialog", { name: "Pedido PED-000001" })
+
+    Swal.fire.mockResolvedValueOnce({ isConfirmed: true })
+    fireEvent.click(within(ventana).getByRole("button", { name: "Facturar" }))
+
+    await waitFor(() => expect(llamadas.facturar).toEqual([{ p_pedido: "ped-1" }]))
+    expect(Swal.fire).toHaveBeenCalledWith(
+      expect.objectContaining({
+        title: "¿Facturar el pedido PED-000001?",
+        text: expect.stringMatching(/^Total del pedido: L 230.00\. Pago recibido en Bodega: L 80.00\. Saldo pendiente del cliente: L 150.00\..*no se cobra otra vez/),
+      })
+    )
+  })
+
+  it("sin anticipo, la confirmación es la breve de siempre", async () => {
+    await renderPedidos({
+      rpcs: { detalle: () => detalle({ cobrado: 0, saldo: 230, cargo: 0, tasa_cargo: null, cobros: [] }) },
+    })
+
+    fireEvent.click(await screen.findByRole("button", { name: "Abrir el pedido PED-000001 de Ferremax" }))
+    const ventana = await screen.findByRole("dialog", { name: "Pedido PED-000001" })
+
+    fireEvent.click(within(ventana).getByRole("button", { name: "Facturar" }))
+    await paso()
+
+    expect(Swal.fire).toHaveBeenCalledWith(
+      expect.objectContaining({ text: "Se emitirá una factura de Camión 01 por L 230.00 a nombre de Ferremax. El inventario ya salió de Bodega." })
+    )
   })
 
   it("Facturar pide confirmación y llama una sola vez", async () => {

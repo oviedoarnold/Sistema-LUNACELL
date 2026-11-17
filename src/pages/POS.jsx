@@ -43,6 +43,7 @@ import ComprobanteProvisional from "../components/sinConexion/ComprobanteProvisi
 import EstadoSinConexion from "../components/sinConexion/EstadoSinConexion"
 import PrecioDeLinea from "../components/pos/PrecioDeLinea"
 import OpcionesDePedido from "../components/pos/OpcionesDePedido"
+import PagoParcialDelPedido from "../components/pos/PagoParcialDelPedido"
 import { entregarPedido } from "../lib/api/pedidos"
 import { avisarCambioDePedidos } from "../hooks/useAvisosDePedidos"
 import { useBloqueoDeActualizacion } from "../hooks/useBloqueoDeActualizacion"
@@ -98,7 +99,7 @@ function motivoDelBloqueo(copia) {
   return "Sin conexión con el servidor. Esta ubicación no está habilitada para vender sin conexión: podrás facturar cuando vuelva la conexión."
 }
 
-// Una prima escrita a mano: vacía es cero; con más de dos decimales no vale.
+// El pago parcial escrito a mano: vacío es cero; con más de dos decimales no vale.
 function leerPrima(texto) {
   const limpio = String(texto || "").trim()
 
@@ -202,6 +203,8 @@ function POS() {
   const [operacion, setOperacion] = useState("venta")
   const [destinoId, setDestinoId] = useState("")
   const [primaTexto, setPrimaTexto] = useState("")
+  // «Hacer pago parcial»: sin marcarla, el pedido a crédito no lleva ningún cobro.
+  const [pagoParcial, setPagoParcial] = useState(false)
   const destinos = useMemo(
     () => locations.filter((u) => u.active && u.sells && String(u.id) !== String(ubicacionId)),
     [locations, ubicacionId]
@@ -495,10 +498,11 @@ function POS() {
   )
 
   /*
-    Un pedido a crédito puede llevar una prima cobrada aquí: los medios se
-    reparten la prima y no el total. Sin prima, no lleva medios.
+    Un pedido a crédito puede llevar un pago parcial cobrado aquí (en la base,
+    la «prima»): los medios se reparten ese pago y no el total. Solo cuenta con
+    la casilla marcada; sin ella, no lleva medios ni cobros.
   */
-  const prima = esPedido && paymentType === "credito" ? leerPrima(primaTexto) : 0
+  const prima = esPedido && paymentType === "credito" && pagoParcial ? leerPrima(primaTexto) : 0
   const conPrima = esPedido && paymentType === "credito" && prima > 0
   const llevaMedios = paymentType === "contado" || conPrima
   const totalDeLosMedios = conPrima ? prima : totalACobrar
@@ -521,7 +525,10 @@ function POS() {
     setPaymentType(type)
     setMedios(selectorVacio())
     setPrimaTexto("")
-    handleClearClient()
+    setPagoParcial(false)
+
+    // En un pedido el cliente siempre es uno registrado: vale para las dos formas.
+    if (!esPedido) handleClearClient()
 
     if (type === "credito") {
       setDueDate(toISODateInDays(30))
@@ -638,8 +645,9 @@ function POS() {
 
     if (!destino) problema = ["Ubicación requerida", "Elige la ubicación que va a facturar el pedido."]
     else if (!selectedClient) problema = ["Cliente requerido", "Un pedido para otra ubicación necesita un cliente registrado."]
-    else if (prima === null) problema = ["Prima no válida", "Escribe la prima con hasta dos decimales, o déjala vacía."]
-    else if (prima >= totalACobrar) problema = ["Prima no válida", "La prima debe ser menor que el total. Si paga todo, envíalo al contado."]
+    else if (prima === null) problema = ["Pago parcial no válido", "Escribe el monto del pago parcial con hasta dos decimales."]
+    else if (pagoParcial && paymentType === "credito" && prima === 0) problema = ["Falta el pago parcial", "Escribe cuánto entrega el cliente, o desmarca «Hacer pago parcial»."]
+    else if (prima >= totalACobrar) problema = ["Pago parcial no válido", "El pago parcial debe ser menor que el total. Si el cliente paga todo, envíalo al contado."]
 
     if (problema) Swal.fire({ icon: "warning", title: problema[0], text: problema[1] })
 
@@ -797,6 +805,7 @@ function POS() {
     setMedios(selectorVacio())
     setIsvElegido(null)
     setOperacion("venta")
+    setPagoParcial(false)
     setDestinoId("")
     setPrimaTexto("")
     setAvisoDePrecios("")
@@ -1302,6 +1311,8 @@ function POS() {
                   onCambiar={(pedido) => {
                     setOperacion(pedido ? "pedido" : "venta")
                     setIsvElegido(null)
+                    setPagoParcial(false)
+                    setPrimaTexto("")
                   }}
                   destinos={destinos}
                   destinoId={destinoId}
@@ -1411,23 +1422,28 @@ function POS() {
               )}
 
               {esPedido && paymentType === "credito" && (
-                <div className="field pos-campo">
-                  <label htmlFor="pos-prima-del-pedido">
-                    Prima cobrada aquí <span className="etiqueta-suave">(opcional)</span>
-                  </label>
-
-                  <input
-                    id="pos-prima-del-pedido"
-                    type="text"
-                    inputMode="decimal"
-                    placeholder="0.00"
-                    value={primaTexto}
-                    onChange={(event) => {
-                      setPrimaTexto(event.target.value)
-                      setMedios(selectorVacio())
-                    }}
-                  />
-                </div>
+                <PagoParcialDelPedido
+                  activo={pagoParcial}
+                  onActivar={(activo) => {
+                    setPagoParcial(activo)
+                    setPrimaTexto("")
+                    setMedios(selectorVacio())
+                  }}
+                  montoTexto={primaTexto}
+                  onMonto={(texto) => {
+                    setPrimaTexto(texto)
+                    setMedios(selectorVacio())
+                  }}
+                  monto={leerPrima(primaTexto)}
+                  total={totalACobrar}
+                  nombreDeAqui={nombreDeAqui}
+                  onPasarAContado={() => {
+                    // El cliente paga todo: mismo cliente, productos y medios; sin crédito.
+                    setPaymentType("contado")
+                    setPagoParcial(false)
+                    setPrimaTexto("")
+                  }}
+                />
               )}
 
               {llevaMedios && (
@@ -1578,7 +1594,7 @@ function POS() {
                   <span className="v">{formatMoney(tax)}</span>
                 </div>
 
-                {cargo > 0 && (
+                {cargo > 0 && !conPrima && (
                   <div className="totals-row pos-cargo">
                     <span>{etiquetaDelCargo(textoDeTasas(cobrosDeLaVenta()))}</span>
 
@@ -1587,21 +1603,36 @@ function POS() {
                 )}
 
                 <div className="totals-row grand">
-                  <span>Total</span>
+                  <span>{conPrima ? "Total del pedido" : "Total"}</span>
 
                   <span className="v">{formatMoney(conPrima ? total : total + cargo)}</span>
                 </div>
 
+                {/* El cargo se suma a lo que entrega el cliente; no reduce el saldo. */}
                 {conPrima && (
                   <>
-                    <div className="totals-row">
-                      <span>Prima a cobrar aquí</span>
+                    <div className="totals-row pos-pago-parcial-fila">
+                      <span>Pago parcial</span>
+
+                      <span className="v">{formatMoney(prima)}</span>
+                    </div>
+
+                    {cargo > 0 && (
+                      <div className="totals-row pos-pago-parcial-fila">
+                        <span>{etiquetaDelCargo(textoDeTasas(cobrosDeLaVenta()))}</span>
+
+                        <span className="v">{formatMoney(cargo)}</span>
+                      </div>
+                    )}
+
+                    <div className="totals-row pos-pago-parcial-fila">
+                      <span>El cliente entrega aquí</span>
 
                       <span className="v">{formatMoney(prima + cargo)}</span>
                     </div>
 
-                    <div className="totals-row">
-                      <span>Queda a crédito</span>
+                    <div className="totals-row pos-pago-parcial-fila">
+                      <span>Saldo pendiente del crédito</span>
 
                       <span className="v">{formatMoney(total - prima)}</span>
                     </div>

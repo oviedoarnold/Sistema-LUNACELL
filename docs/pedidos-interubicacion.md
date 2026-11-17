@@ -30,6 +30,33 @@ Los porcentajes y cargos se validan al entregar con la tasa vigente (`LM007`). S
 
 Si el destino emite facturas fiscales, el pedido lleva ISV (`PI009`).
 
+## Pago parcial en pantalla
+
+En la base se llama «prima»; en pantalla, **pago parcial**. Solo cambia la presentación: `entregar_pedido()` y `facturar_pedido()` son las mismas.
+
+- **Dónde:** en el POS, «Enviar pedido» → Crédito. Aparece la casilla **«Hacer pago parcial»**, desmarcada por defecto.
+- **Desmarcada:** el pedido se envía como siempre, sin monto ni medios. No viaja ningún cobro.
+- **Marcada:** se piden el monto, el método (el selector de siempre, con mixto y referencia según las reglas vigentes) y se ve dónde se recibe el dinero. El resumen muestra:
+  - total del pedido;
+  - pago parcial;
+  - cargo de tarjeta o enlace, si aplica;
+  - lo que entrega el cliente;
+  - el saldo pendiente del crédito.
+
+  El cargo se suma a lo que entrega el cliente y no reduce el saldo.
+- **Desmarcarla** borra el monto y los medios.
+- **Montos no válidos:**
+  - mayor que el total: no se envía;
+  - igual al total: se avisa que va al contado y un botón lo pasa, conservando cliente, productos y medios. Nunca se cambia solo.
+- **El cliente:** en modo pedido, cambiar entre Contado y Crédito ya no lo suelta. En las ventas normales sigue soltándose, como antes.
+- **En el destino:**
+  - cada tarjeta pendiente muestra lo pagado en origen y lo pendiente;
+  - con pago parcial, la confirmación de «Facturar» resume el total, el pago recibido y el saldo.
+
+  La factura es por el total y el pago se aplica una sola vez.
+
+**Cobros posteriores.** Un pago registrado después en «Por cobrar» sigue la regla general: se aplica primero a las facturas más antiguas del cliente. Elegir una factura específica se evaluará por separado.
+
 ## Quién puede
 
 - Entrega quien tiene «Facturar» y una ubicación asignada; el pedido sale de esa ubicación.
