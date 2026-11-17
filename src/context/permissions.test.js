@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest"
 
 import {
   ADMIN_PERMISSIONS,
+  CONTADOR_PERMISSIONS,
   PERMISSIONS,
   SELLER_PERMISSIONS,
   concedePermiso,
@@ -96,6 +97,17 @@ describe("los conjuntos de permisos", () => {
     expect(SELLER_PERMISSIONS).not.toContain(PERMISSIONS.ORDERS_RESOLVE)
     expect(SELLER_PERMISSIONS).not.toContain(PERMISSIONS.ORDERS_CANCEL)
     expect(ADMIN_PERMISSIONS).toEqual(expect.arrayContaining([PERMISSIONS.ORDERS_RESOLVE, PERMISSIONS.ORDERS_CANCEL]))
+  })
+
+  it("las liquidaciones: operar incluye consultar, el contador solo puede consultar y nadie las recibe solo", () => {
+    expect(PERMISSIONS.SETTLEMENTS_VIEW).toBe("settlements-view")
+    expect(PERMISSIONS.SETTLEMENTS_MANAGE).toBe("settlements-manage")
+    expect(concedePermiso([PERMISSIONS.SETTLEMENTS_MANAGE], PERMISSIONS.SETTLEMENTS_VIEW)).toBe(true)
+    expect(concedePermiso([PERMISSIONS.SETTLEMENTS_VIEW], PERMISSIONS.SETTLEMENTS_MANAGE)).toBe(false)
+    expect(SELLER_PERMISSIONS).not.toContain(PERMISSIONS.SETTLEMENTS_VIEW)
+    expect(SELLER_PERMISSIONS).not.toContain(PERMISSIONS.SETTLEMENTS_MANAGE)
+    expect(CONTADOR_PERMISSIONS).toContain(PERMISSIONS.SETTLEMENTS_VIEW)
+    expect(CONTADOR_PERMISSIONS).not.toContain(PERMISSIONS.SETTLEMENTS_MANAGE)
   })
 
   it("los permisos de inventario usan los nombres que la base acepta", () => {

@@ -26,6 +26,7 @@ export const config = {
     "/suppliers",
     "/sales-history",
     "/receivables",
+    "/liquidaciones",
     "/quotes",
     "/locations",
     "/settings",

@@ -176,3 +176,70 @@ describe("el PDF", () => {
     expect(nombreDelArchivo(REPORTE, "pdf")).toBe("reporte-diario-2026-03-10.pdf")
   })
 })
+
+/*
+  La caja por ubicación (0046): el cobro de un pedido es de la ubicación que
+  recibió el dinero; la venta, de la que factura.
+*/
+describe("los pedidos y las liquidaciones", () => {
+  const CON_PEDIDOS = {
+    ...REPORTE,
+    indicadores: { ...REPORTE.indicadores, cobros_por_cuenta_de_otras: 220, cobros_por_cuenta_de_otras_cantidad: 1 },
+    ventas: [
+      { ...REPORTE.ventas[0], id: "v-ped", numero: "VTA-000023", pedido: "PED-000001", cobrado_en: "Lunacell Bodega", origen: "en_linea" },
+    ],
+    cobros_de_pedidos: [
+      {
+        id: "c-1", fecha: "2026-03-10T16:00:00Z", ubicacion_id: "bodega", ubicacion: "Lunacell Bodega", medio: "efectivo", monto: 220, cargo: 0,
+        pedido: "PED-000001", destino: "Ruta local", cliente: "Ferremax", factura: "VTA-000023",
+      },
+      {
+        id: "c-2", fecha: "2026-03-10T17:00:00Z", ubicacion_id: "bodega", ubicacion: "Lunacell Bodega", medio: "tarjeta", monto: 100, cargo: 1.7,
+        pedido: "PED-000003", destino: "Ruta local", cliente: "Ana", factura: null,
+      },
+    ],
+    saldos_por_liquidar: [
+      { origen_id: "bodega", origen: "Lunacell Bodega", destino_id: "ruta", destino: "Ruta local", efectivo: 410, pendiente: 210, por_confirmar: 100, liquidado: 100 },
+    ],
+    liquidaciones_del_dia: [
+      { id: "l-1", numero: "LIQ-000001", origen: "Lunacell Bodega", destino: "Ruta local", metodo: "entrega_en_efectivo", referencia: "Sobre 3", registrada_por: "Encargado", estado: "por_confirmar", monto: 100 },
+    ],
+  }
+
+  it("un indicador dice cuánto se cobró por cuenta de otra ubicación", () => {
+    const indicador = indicadoresDelReporte(CON_PEDIDOS).find((i) => i.id === "por-cuenta-de-otras")
+
+    expect(indicador).toMatchObject({ etiqueta: "Cobrado por cuenta de otra ubicación", valor: 220, detalle: "1 cobro de pedidos que factura otra ubicación" })
+    expect(indicadoresDelReporte(REPORTE).find((i) => i.id === "por-cuenta-de-otras").valor).toBe(0)
+  })
+
+  it("los cobros de pedidos llevan quién cobró, para quién, el medio real y si ya se facturó", () => {
+    const { filas } = seccion("cobros-de-pedidos", CON_PEDIDOS)
+
+    expect(filas.map((f) => f.celdas.slice(1))).toEqual([
+      ["PED-000001", "Lunacell Bodega", "Ruta local: VTA-000023", "Ferremax", "Efectivo", 220, 0],
+      ["PED-000003", "Lunacell Bodega", "Ruta local: sin facturar", "Ana", "Tarjeta", 100, 1.7],
+    ])
+  })
+
+  it("la factura de un pedido dice de qué pedido sale y dónde se cobró", () => {
+    expect(seccion("operaciones", CON_PEDIDOS).filas[0].celdas.at(-1)).toBe("Pagada · pedido PED-000001, cobrado en Lunacell Bodega")
+  })
+
+  it("muestra lo pendiente, lo por confirmar y lo liquidado, y las liquidaciones del día", () => {
+    expect(seccion("saldos-por-liquidar", CON_PEDIDOS).filas[0].celdas).toEqual(["Lunacell Bodega", "Ruta local", 410, 210, 100, 100])
+    expect(seccion("liquidaciones", CON_PEDIDOS).filas[0].celdas).toEqual([
+      "LIQ-000001", "Lunacell Bodega", "Ruta local", "Entrega en efectivo", "Sobre 3", "Encargado", "Pendiente de confirmación", 100,
+    ])
+  })
+
+  it("sin datos de pedidos, las secciones quedan vacías y el CSV las incluye", () => {
+    expect(seccion("cobros-de-pedidos").filas).toEqual([])
+    expect(seccion("saldos-por-liquidar").filas).toEqual([])
+
+    const csv = reporteEnCsv(CON_PEDIDOS, "Todas")
+
+    expect(csv).toContain("Cobros por cuenta de otra ubicación (pedidos)")
+    expect(csv).toContain("LIQ-000001")
+  })
+})

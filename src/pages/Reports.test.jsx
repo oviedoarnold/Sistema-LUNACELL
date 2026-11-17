@@ -33,7 +33,7 @@ const montar = ({
     {
       ubicaciones: UBICACIONES,
       esperar: ["ubicaciones"],
-      rpcsExtra: { reporte_diario: reporteDiario, reporte_medios_de_pago: medios },
+      rpcsExtra: { reporte_diario_de_caja: reporteDiario, reporte_medios_de_caja: medios },
       ...extra,
     }
   ).then((resultado) => ({ ...resultado, reporteDiario, medios }))

@@ -14,6 +14,7 @@ import Inventory from "../pages/Inventory"
 import Transfers from "../pages/Transfers"
 import POS from "../pages/POS"
 import Pedidos from "../pages/Pedidos"
+import Liquidaciones from "../pages/Liquidaciones"
 import Quotes from "../pages/Quotes"
 import SalesHistory from "../pages/SalesHistory"
 import Reports from "../pages/Reports"
@@ -169,6 +170,18 @@ function AppRouter() {
             <ProtectedRoute permission={PERMISSIONS.SALES_HISTORY}>
               <MainLayout>
                 <Receivables />
+              </MainLayout>
+            </ProtectedRoute>
+          }
+        />
+
+        {/* LIQUIDACIONES ENTRE UBICACIONES */}
+        <Route
+          path="/liquidaciones"
+          element={
+            <ProtectedRoute permission={PERMISSIONS.SETTLEMENTS_VIEW}>
+              <MainLayout>
+                <Liquidaciones />
               </MainLayout>
             </ProtectedRoute>
           }

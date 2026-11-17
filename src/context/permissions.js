@@ -46,6 +46,16 @@ export const PERMISSIONS = {
   */
   ORDERS_RESOLVE: "orders-resolve",
   ORDERS_CANCEL: "orders-cancel",
+
+  /*
+    Liquidaciones entre ubicaciones (0046). Consultar y operar van aparte:
+    consultar abre la pantalla con los saldos de las ubicaciones del usuario;
+    operar registra la entrega del efectivo (en la ubicación que lo cobró) y
+    confirma o rechaza su recepción (en la que lo recibe). La base lo vuelve a
+    comprobar en cada función. Nadie los recibe solos.
+  */
+  SETTLEMENTS_VIEW: "settlements-view",
+  SETTLEMENTS_MANAGE: "settlements-manage",
 }
 
 /*
@@ -65,6 +75,7 @@ export const PERMISSIONS = {
 const IMPLICA = {
   [PERMISSIONS.INVENTORY_ALL]: [PERMISSIONS.INVENTORY_OWN],
   [PERMISSIONS.PRODUCTS]: [PERMISSIONS.PRODUCTS_READ],
+  [PERMISSIONS.SETTLEMENTS_MANAGE]: [PERMISSIONS.SETTLEMENTS_VIEW],
 }
 
 /*
@@ -113,6 +124,7 @@ export const CONTADOR_PERMISSIONS = [
   PERMISSIONS.SALES_HISTORY,
   PERMISSIONS.INVENTORY_OWN,
   PERMISSIONS.INVENTORY_ALL,
+  PERMISSIONS.SETTLEMENTS_VIEW,
 ]
 
 /*

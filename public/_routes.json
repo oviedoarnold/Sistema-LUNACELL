@@ -13,6 +13,7 @@
     "/suppliers",
     "/sales-history",
     "/receivables",
+    "/liquidaciones",
     "/quotes",
     "/locations",
     "/settings",

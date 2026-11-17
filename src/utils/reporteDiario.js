@@ -10,6 +10,7 @@
 import { textoDelTratamiento } from "./anulacion"
 import { formatMoney } from "./format"
 import { etiquetaDelMedio, textoDeMedios } from "./mediosDePago"
+import { ESTADO_DE_LIQUIDACION, METODOS } from "./liquidaciones"
 
 const ZONA = "America/Tegucigalpa"
 
@@ -53,11 +54,16 @@ const SIN_MEDIO = "Sin registrar"
 const medioDeVenta = ({ forma_pago }, cobros) =>
   textoDeMedios(cobros) || (forma_pago === "credito" ? "" : SIN_MEDIO)
 
+/*
+  Una factura de pedido dice de qué pedido sale y quién cobró: el dinero
+  está en la caja de esa otra ubicación, no en la de quien factura.
+*/
 const conEstado = (venta) => {
   const origen = ORIGEN_DE_VENTA[venta.origen]
   const estado = ESTADO_DE_VENTA[venta.estado] || venta.estado
+  const conOrigen = origen ? `${estado} (${origen})` : estado
 
-  return origen ? `${estado} (${origen})` : estado
+  return venta.pedido ? `${conOrigen} · pedido ${venta.pedido}, cobrado en ${venta.cobrado_en}` : conOrigen
 }
 
 const productosDe = (venta) =>
@@ -84,7 +90,8 @@ export function indicadoresDelReporte({ indicadores: i, moneda, medios }) {
     { id: "ticket", etiqueta: "Ticket promedio", valor: i.ticket_promedio, tipo: "dinero" },
     { id: "contado", etiqueta: "Ventas al contado", valor: i.contado_total, tipo: "dinero", detalle: cuantas(i.contado_cantidad, "venta", "ventas") },
     { id: "credito", etiqueta: "Ventas al crédito", valor: i.credito_total, tipo: "dinero", detalle: cuantas(i.credito_cantidad, "venta", "ventas") },
-    { id: "cobros", etiqueta: "Cobros recibidos", valor: i.cobros_total, tipo: "dinero", detalle: "Contado válido más abonos del día" },
+    { id: "cobros", etiqueta: "Cobros recibidos", valor: i.cobros_total, tipo: "dinero", detalle: "Contado válido, abonos y cobros de pedidos del día, en la ubicación que recibió el dinero" },
+    { id: "por-cuenta-de-otras", etiqueta: "Cobrado por cuenta de otra ubicación", valor: i.cobros_por_cuenta_de_otras ?? 0, tipo: "dinero", detalle: `${cuantas(i.cobros_por_cuenta_de_otras_cantidad ?? 0, "cobro", "cobros")} de pedidos que factura otra ubicación` },
     { id: "sin-registrar", etiqueta: "Cobros sin medio registrado", valor: t.sin_registrar, tipo: "dinero", detalle: "Registrados antes de los medios de pago" },
     { id: "cargos", etiqueta: "Cargos por medio de pago", valor: t.cargos, tipo: "dinero", detalle: `Tarjeta y enlace, sumados al comprador. A devolver por anulaciones: ${formatMoney(t.cargos_a_devolver, moneda)}` },
     { id: "total-cobrado", etiqueta: "Total cobrado con cargos", valor: t.total_cobrado, tipo: "dinero" },
@@ -116,10 +123,44 @@ export function seccionesDelReporte(reporte) {
       id: "medios-por-ubicacion",
       titulo: "Cobros por ubicación y medio de pago",
       vacio: "No hubo cobros este día.",
-      columnas: [texto("Ubicación"), dinero("Efectivo"), dinero("Transferencia"), dinero("Tarjeta"), dinero("Enlace de pago"), dinero("Sin registrar"), dinero("Total"), dinero("Cargo")],
+      columnas: [texto("Ubicación"), dinero("Efectivo"), dinero("Transferencia"), dinero("Tarjeta"), dinero("Enlace de pago"), dinero("Sin registrar"), dinero("Total"), dinero("Cargo"), dinero("Por cuenta de otra")],
       filas: medios.por_ubicacion.map((u) => ({
         clave: u.ubicacion_id || "sin-ubicacion",
-        celdas: [u.ubicacion, u.efectivo, u.transferencia, u.tarjeta, u.enlace, u.sin_registrar, u.total, u.cargo],
+        celdas: [u.ubicacion, u.efectivo, u.transferencia, u.tarjeta, u.enlace, u.sin_registrar, u.total, u.cargo, u.por_cuenta_de_otras ?? 0],
+      })),
+    },
+    /*
+      El dinero que una ubicación recibió en pedidos que factura otra. El
+      efectivo queda por liquidar; lo electrónico, en la cuenta de la empresa.
+    */
+    {
+      id: "cobros-de-pedidos",
+      titulo: "Cobros por cuenta de otra ubicación (pedidos)",
+      vacio: "No se cobraron pedidos de otra ubicación este día.",
+      columnas: [texto("Fecha y hora"), texto("Pedido"), texto("Cobró"), texto("Factura"), texto("Cliente"), texto("Medio de pago"), dinero("Monto"), dinero("Cargo")],
+      filas: (reporte.cobros_de_pedidos ?? []).map((c) => ({
+        clave: c.id,
+        celdas: [fechaYHoraEnHonduras(c.fecha), c.pedido, c.ubicacion, c.factura ? `${c.destino}: ${c.factura}` : `${c.destino}: sin facturar`, c.cliente, etiquetaDelMedio(c.medio), c.monto, c.cargo],
+      })),
+    },
+    {
+      id: "saldos-por-liquidar",
+      titulo: "Efectivo entre ubicaciones (al consultar)",
+      vacio: "No hay efectivo cobrado para otra ubicación.",
+      columnas: [texto("Entrega"), texto("Recibe"), dinero("Efectivo cobrado"), dinero("Pendiente"), dinero("Por confirmar"), dinero("Liquidado")],
+      filas: (reporte.saldos_por_liquidar ?? []).map((s) => ({
+        clave: `${s.origen_id}-${s.destino_id}`,
+        celdas: [s.origen, s.destino, s.efectivo, s.pendiente, s.por_confirmar, s.liquidado],
+      })),
+    },
+    {
+      id: "liquidaciones",
+      titulo: "Liquidaciones del día",
+      vacio: "No hubo liquidaciones con fecha de este día.",
+      columnas: [texto("Número"), texto("Entrega"), texto("Recibe"), texto("Cómo"), texto("Referencia"), texto("Registró"), texto("Estado"), dinero("Monto")],
+      filas: (reporte.liquidaciones_del_dia ?? []).map((l) => ({
+        clave: l.id,
+        celdas: [l.numero, l.origen, l.destino, METODOS[l.metodo] || l.metodo, l.referencia, l.registrada_por, ESTADO_DE_LIQUIDACION[l.estado] || l.estado, l.monto],
       })),
     },
     {
