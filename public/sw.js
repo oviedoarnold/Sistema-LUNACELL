@@ -76,9 +76,21 @@ async function precargar() {
   sin venta ni pedido en envío, sin abono abierto y con conexión. Entonces
   le manda {tipo: "ACTIVAR"} y recarga. La primera instalación no espera:
   no hay versión anterior a la que reemplazar.
+
+  Tampoco espera si ninguna página abierta sabe pedírselo: son instalaciones
+  anteriores al aviso de actualización (antes del PR #89), cuyo código nunca
+  manda la orden. Esperarlas sería dejarlas en la versión vieja para siempre.
+  Activarse no recarga nada; lo que las lleva a la versión nueva es
+  vigilarSiEsAntigua(), más abajo.
 */
 self.addEventListener("install", (event) => {
-  event.waitUntil(precargar())
+  event.waitUntil(
+    precargar().then(async () => {
+      if (self.registration.active && !(await hayPaginaActual())) {
+        await self.skipWaiting()
+      }
+    })
+  )
 })
 
 /*
@@ -103,7 +115,135 @@ self.addEventListener("message", (event) => {
   if (event.data && event.data.tipo === "ACTIVAR") {
     self.skipWaiting()
   }
+
+  if (event.data && event.data.tipo === "SOY_ACTUAL" && event.source) {
+    marcarActual(event.source.id)
+  }
 })
+
+/*
+  ── Las instalaciones anteriores al aviso de actualización ──
+
+  Una PWA instalada casi nunca se recarga: al tocar el ícono, el sistema
+  retoma la ventana que estaba en segundo plano, con el JavaScript que
+  tenía. El código anterior al PR #89 no sabe buscar versiones nuevas, así
+  que se quedaba en la versión vieja indefinidamente, aunque el navegador
+  ya mostrara la nueva.
+
+  Este service worker reconoce esas ventanas y las recarga él mismo, en
+  cuanto pasan a segundo plano:
+  - Una página actual contesta {tipo: "SOY_ACTUAL"} cuando se le pregunta, o
+    consulta /version.json por su cuenta. Esas se actualizan solas con su
+    aviso de 15 segundos y nunca se recargan desde aquí.
+  - Solo se decide que una página es antigua si se le preguntó estando a la
+    vista y no contestó: una oculta puede estar congelada por el sistema.
+  - Se recarga solo cuando está oculta (el vendedor no la está usando) y sin
+    escrituras en los últimos 15 segundos (una venta o un cobro enviándose).
+    Recargar no borra el almacenamiento: la sesión y las ventas sin conexión
+    guardadas siguen ahí.
+*/
+const ACTUALES = new Set()
+const VIGILADAS = new Set()
+const OCULTAS_AL_ACTIVAR = new Set()
+const ULTIMA_ESCRITURA = new Map()
+const PREGUNTAS = new Map()
+
+const PLAZO_DE_RESPUESTA = 3000
+const SIN_ESCRITURAS = 15000
+const CADA_CUANTO_SE_MIRA = 3000
+const VIGILANCIA_MAXIMA = 4 * 60 * 1000
+
+const pausa = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
+
+function marcarActual(id) {
+  if (!id) return
+
+  ACTUALES.add(id)
+  const respuesta = PREGUNTAS.get(id)
+
+  if (respuesta) respuesta(true)
+}
+
+function preguntarSiEsActual(cliente) {
+  if (ACTUALES.has(cliente.id)) return Promise.resolve(true)
+
+  return new Promise((resolve) => {
+    const terminar = (valor) => {
+      clearTimeout(plazo)
+      PREGUNTAS.delete(cliente.id)
+      resolve(valor)
+    }
+    const plazo = setTimeout(() => terminar(false), PLAZO_DE_RESPUESTA)
+
+    PREGUNTAS.set(cliente.id, terminar)
+
+    try {
+      cliente.postMessage({ tipo: "IDENTIFICATE" })
+    } catch {
+      terminar(false)
+    }
+  })
+}
+
+async function hayPaginaActual() {
+  const clientes = await self.clients.matchAll({ type: "window", includeUncontrolled: true })
+  const respuestas = await Promise.all(clientes.map(preguntarSiEsActual))
+
+  return respuestas.some(Boolean)
+}
+
+/*
+  Las ventanas que estaban en segundo plano cuando esta versión se activó.
+  Si una resulta antigua, su primera petición a la vista es la de alguien
+  que acaba de volver a abrir la app: se recarga ahí mismo, para que vea la
+  versión nueva sin esperar a dejarla otra vez.
+*/
+async function anotarOcultasAlActivar() {
+  const clientes = await self.clients.matchAll({ type: "window" })
+
+  for (const cliente of clientes) {
+    if (cliente.visibilityState === "hidden") OCULTAS_AL_ACTIVAR.add(cliente.id)
+  }
+}
+
+const sinEscriturasRecientes = (id) => Date.now() - (ULTIMA_ESCRITURA.get(id) || 0) > SIN_ESCRITURAS
+
+async function vigilarSiEsAntigua(id) {
+  if (!id || ACTUALES.has(id) || VIGILADAS.has(id)) return
+
+  VIGILADAS.add(id)
+
+  try {
+    const cliente = await self.clients.get(id)
+
+    if (!cliente || cliente.type !== "window" || cliente.visibilityState !== "visible") return
+    if (await preguntarSiEsActual(cliente)) return
+
+    if (OCULTAS_AL_ACTIVAR.delete(id) && sinEscriturasRecientes(id)) {
+      await cliente.navigate(cliente.url).catch(() => {})
+      return
+    }
+
+    const hasta = Date.now() + VIGILANCIA_MAXIMA
+
+    while (Date.now() < hasta) {
+      await pausa(CADA_CUANTO_SE_MIRA)
+
+      if (ACTUALES.has(id)) return
+
+      const ahora = await self.clients.get(id)
+
+      if (!ahora) return
+
+      if (ahora.visibilityState === "hidden" && sinEscriturasRecientes(id)) {
+        await ahora.navigate(ahora.url).catch(() => {})
+        return
+      }
+    }
+  } finally {
+    VIGILADAS.delete(id)
+  }
+}
 
 /*
   Borra los archivos con hash de compilaciones anteriores.
@@ -156,6 +296,7 @@ self.addEventListener("activate", (event) => {
       )
       .then(limpiarAssetsViejos)
       .then(() => self.clients.claim())
+      .then(anotarOcultasAlActivar)
   )
 })
 
@@ -238,14 +379,35 @@ async function responderNavegacion(request) {
   }
 }
 
+/*
+  Cada petición de una página dice algo de ella: si escribe (una venta, un
+  cobro), si consulta /version.json (es actual) y, si nada de eso la
+  identifica todavía, se averigua si es una instalación antigua.
+*/
+function observarPagina(event, url) {
+  const id = event.clientId
+
+  if (!id) return
+
+  if (event.request.method !== "GET") ULTIMA_ESCRITURA.set(id, Date.now())
+
+  if (esArchivoPropio(url) && url.pathname === "/version.json") {
+    marcarActual(id)
+    return
+  }
+
+  event.waitUntil(vigilarSiEsAntigua(id))
+}
+
 self.addEventListener("fetch", (event) => {
   const { request } = event
+  const url = new URL(request.url)
+
+  observarPagina(event, url)
 
   if (request.method !== "GET") {
     return
   }
-
-  const url = new URL(request.url)
 
   if (!esArchivoPropio(url) || vaSiempreALaRed(url)) {
     return
