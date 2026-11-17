@@ -22,13 +22,13 @@ async function foto() {
     datos[tabla] = (await contexto.db.query(`select to_jsonb(x) as fila from ${tabla} x order by to_jsonb(x)::text`)).rows
   }
 
-  // Todas las funciones salvo las dos que la 0047 crea o reemplaza.
+  // Todas las funciones salvo sumar_de(), que la 0047 rehace.
   datos.funciones = (
     await contexto.db.query(`
       select p.oid::regprocedure::text as firma, md5(p.prosrc) as cuerpo, p.proconfig as config
         from pg_proc p
        where p.pronamespace = 'public'::regnamespace
-         and p.proname not in ('reporte_diario_de_caja', 'sumar_de_la_ubicacion')
+         and p.proname <> 'sumar_de'
        order by 1`)
   ).rows
 
@@ -90,12 +90,16 @@ describe("la 0047 sobre una base con la 0046 y operaciones", () => {
     expect([Number(despues.cobros_total), Number(despues.abonos_total), Number(despues.cobros_por_cuenta_de_otras)]).toEqual([40, 40, 0])
   })
 
-  it("anon no ejecuta la función nueva", async () => {
-    const { rows } = await contexto.db.query(
-      "select has_function_privilege('anon', 'public.sumar_de_la_ubicacion(jsonb, text, text)', 'execute') as anon, has_function_privilege('anon', 'public.reporte_diario_de_caja(date, uuid)', 'execute') as reporte"
-    )
+  it("anon no ejecuta ninguna de las dos sumas; los usuarios autenticados, sí", async () => {
+    const { rows } = await contexto.db.query(`
+      select has_function_privilege('anon', 'public.sumar_de(jsonb, text)', 'execute') as anon_dos,
+             has_function_privilege('anon', 'public.sumar_de(jsonb, text, text)', 'execute') as anon_tres,
+             has_function_privilege('authenticated', 'public.sumar_de(jsonb, text)', 'execute') as auth_dos,
+             has_function_privilege('authenticated', 'public.sumar_de(jsonb, text, text)', 'execute') as auth_tres,
+             (select count(*)::int from pg_proc where proname = 'sumar_de' and pronamespace = 'public'::regnamespace) as versiones,
+             (select count(*)::int from pg_proc where pronamespace = 'public'::regnamespace and proname = 'sumar_de' and pronargdefaults > 0) as con_omision`)
 
-    expect(rows[0]).toEqual({ anon: false, reporte: false })
+    expect(rows[0]).toEqual({ anon_dos: false, anon_tres: false, auth_dos: true, auth_tres: true, versiones: 2, con_omision: 0 })
   })
 
   it("aplicarla otra vez no cambia nada", async () => {

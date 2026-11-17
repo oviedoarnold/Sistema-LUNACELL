@@ -93,7 +93,7 @@ Con solo ventas normales, los reportes de caja dan exactamente lo mismo que los 
 
 ## Corrección 0047
 
-En producción, el reporte diario de caja del 16/11/2026 mostraba la fila «Sin ubicación» con cobros que no eran suyos. Esa fila existe por un abono antiguo sin ubicación, y recibía las facturas y los cobros de pedidos de todas las ubicaciones. La 0047 compara la ubicación tal cual en las filas: los totales, las demás filas y el reporte de medios no cambian.
+En producción, el reporte diario de caja del 16/11/2026 mostraba la fila «Sin ubicación» con cobros que no eran suyos. Esa fila existe por un abono antiguo sin ubicación, y recibía las facturas y los cobros de pedidos de todas las ubicaciones. La 0047 separa `sumar_de()` en dos firmas (todo, o una ubicación comparada tal cual) sin cambiar el código de los reportes: los totales, las demás filas y el reporte de medios no cambian.
 
 ## Pendiente para la etapa C
 
