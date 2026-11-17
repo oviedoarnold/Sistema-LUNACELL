@@ -1,0 +1,222 @@
+/*
+  Liquidaciones entre ubicaciones: saldos, pedidos e historial. Tarjetas en una
+  columna; las cifras se acomodan solas según el ancho, sin tablas que obliguen
+  a desplazarse de lado en el teléfono.
+
+  Las clases de la ventana de entrega no cuelgan de .liquidaciones porque la
+  ventana se dibuja fuera de la página.
+*/
+
+.liquidaciones-controles {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin-bottom: var(--space-4);
+}
+
+.liquidaciones-vistas {
+  flex: 0 1 360px;
+}
+
+.liquidaciones-filtros {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+}
+
+.liquidaciones-filtros label {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.liquidaciones-aviso {
+  margin-bottom: var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--warning);
+  border-radius: var(--radius-md);
+  background: var(--warning-soft);
+  color: var(--warning);
+  font-size: 14px;
+}
+
+.liquidaciones-resumen {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--space-3);
+  margin-bottom: var(--space-4);
+}
+
+.liquidaciones-resumen .liquidaciones-cifra {
+  padding: var(--space-3);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
+}
+
+.liquidaciones-lista {
+  list-style: none;
+  display: grid;
+  gap: var(--space-3);
+}
+
+.liquidaciones-tarjeta {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-4);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
+  color: var(--text-primary);
+}
+
+/* Una entrega que le toca confirmar a quien mira. */
+.liquidaciones-tarjeta.is-por-confirmar {
+  border-left: 4px solid var(--warning);
+}
+
+.liquidaciones-tarjeta-fila {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+.liquidaciones-tarjeta-fila > :first-child {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.liquidaciones-tarjeta-fila > :last-child {
+  flex: none;
+}
+
+.liquidaciones-suave {
+  font-size: 13px;
+  color: var(--text-muted);
+  overflow-wrap: anywhere;
+}
+
+.liquidaciones-rechazo {
+  font-size: 13px;
+  color: var(--danger);
+  overflow-wrap: anywhere;
+}
+
+.liquidaciones-cifras {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: var(--space-2) var(--space-3);
+  padding-top: var(--space-2);
+  border-top: 1px solid var(--border);
+}
+
+.liquidaciones-cifra {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.liquidaciones-cifra span {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.liquidaciones-cifra b {
+  font-size: 15px;
+}
+
+.liquidaciones-cifra.is-destacada b {
+  color: var(--primary-text);
+}
+
+.liquidaciones-accion {
+  align-self: flex-end;
+}
+
+.liquidaciones-botones {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--space-2);
+}
+
+/* ── VENTANA DE ENTREGA ──────────────────────────────────── */
+
+.liquidaciones-entrega {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.liquidaciones-entrega-par {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1) var(--space-2);
+  align-items: baseline;
+}
+
+/*
+  Una opción larga del pedido (número, cliente y monto) no puede ensanchar la
+  ventana: la columna de la cuadrícula se queda en el ancho disponible.
+*/
+.liquidaciones-entrega .form-grid > .field {
+  min-width: 0;
+}
+
+.liquidaciones-entrega .field select,
+.liquidaciones-entrega .field input {
+  width: 100%;
+  min-width: 0;
+}
+
+.liquidaciones-entrega-nota {
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.liquidaciones-entrega-par span {
+  flex: 1 1 100%;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+@media (max-width: 639px) {
+  .liquidaciones-vistas,
+  .liquidaciones-filtros,
+  .liquidaciones-filtros label {
+    flex: 1 1 100%;
+  }
+
+  .liquidaciones-filtros select {
+    flex: 1 1 auto;
+  }
+
+  .liquidaciones-resumen {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .liquidaciones-cifras {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .liquidaciones-tarjeta-fila.liquidaciones-suave {
+    flex-direction: column;
+    gap: 0;
+  }
+
+  .liquidaciones-accion,
+  .liquidaciones-botones .btn {
+    flex: 1 1 auto;
+    align-self: stretch;
+  }
+}

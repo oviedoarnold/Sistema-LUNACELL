@@ -425,6 +425,24 @@ function Settings() {
       description:
         "Autorizar o rechazar la cancelación de un pedido entregado de su ubicación, con motivo, devolución y reembolso. Las acciones se habilitan en la etapa C.",
     },
+    /*
+      Liquidaciones entre ubicaciones (0046). Consultar no deja registrar
+      nada; registrar y confirmar ya incluye consultar.
+    */
+    {
+      id:
+        permissions.SETTLEMENTS_VIEW,
+      label: "Consultar liquidaciones",
+      description:
+        "Ver el efectivo que su ubicación cobró para otra o que otra cobró para ella, lo pendiente, lo entregado y lo confirmado.",
+    },
+    {
+      id:
+        permissions.SETTLEMENTS_MANAGE,
+      label: "Registrar y confirmar liquidaciones",
+      description:
+        "Registrar la entrega del efectivo cobrado para otra ubicación y confirmar o rechazar el que recibe la suya. Incluye consultar.",
+    },
   ]
 
   const resetUserForm =

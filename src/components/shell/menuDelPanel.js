@@ -11,6 +11,7 @@ import {
   FaHistory,
   FaHome,
   FaInbox,
+  FaMoneyBillWave,
   FaTruck,
   FaUsers,
   FaWarehouse,
@@ -150,6 +151,17 @@ export const GRUPOS_DEL_MENU = [
         label: "Por cobrar",
         Icono: FaHandHoldingUsd,
         permiso: PERMISSIONS.SALES_HISTORY,
+      },
+      /*
+        El efectivo que una ubicación cobró para otra en los pedidos, y su
+        entrega. Basta con consultar para verla; registrar y confirmar lo
+        decide la base con settlements-manage.
+      */
+      {
+        to: "/liquidaciones",
+        label: "Liquidaciones",
+        Icono: FaMoneyBillWave,
+        permiso: PERMISSIONS.SETTLEMENTS_VIEW,
       },
       {
         to: "/sales-history",

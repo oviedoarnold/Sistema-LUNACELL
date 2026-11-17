@@ -24,6 +24,7 @@
 /suppliers/*  /  200
 /sales-history/*  /  200
 /receivables/*  /  200
+/liquidaciones/*  /  200
 /quotes/*  /  200
 /locations/*  /  200
 /settings/*  /  200
