@@ -26,6 +26,8 @@ const MOTIVOS = {
   PI011: "clave-reusada",
   PI012: "estado-no-permite",
   PI013: "liquidacion-registrada",
+  PI014: "recepcion-invalida",
+  PI015: "reembolso-invalido",
   LM001: "medios-invalidos",
   LM002: "medios-no-cuadran",
   LM007: "porcentaje-cambiado",
@@ -221,6 +223,116 @@ export async function resolverPedido(pedidoId, { decision, destinoId = null, not
   )
 
   return { ...aPedidoDeApp(data), repetido: Boolean(data.repetido) }
+}
+
+/*
+  Cancelar antes de facturar (0049, etapa C2a). Tres hechos aparte: la
+  cancelación, los productos que vuelven y el dinero que se devuelve. Los dos
+  últimos pueden ir con la cancelación o registrarse después.
+*/
+const aCancelacionDeApp = (fila) => ({
+  puedeCancelar: Boolean(fila.puede_cancelar),
+  puedeRegistrar: Boolean(fila.puede_registrar),
+  esAdmin: Boolean(fila.es_admin),
+  bloqueoPorLiquidacion: fila.bloqueo_por_liquidacion || null,
+  cancelacion: fila.cancelacion
+    ? {
+        motivo: fila.cancelacion.motivo,
+        usuario: fila.cancelacion.usuario,
+        fecha: fila.cancelacion.fecha,
+        principal: numero(fila.cancelacion.principal),
+        cargo: numero(fila.cancelacion.cargo),
+      }
+    : null,
+  productos: (fila.productos || []).map((p) => ({
+    id: p.producto_id,
+    nombre: p.nombre,
+    entregado: Number(p.entregado),
+    buenEstado: Number(p.buen_estado),
+    danado: Number(p.danado),
+    pendiente: Number(p.pendiente),
+  })),
+  dinero: (fila.dinero || []).map((d) => ({
+    medio: d.medio,
+    monto: numero(d.monto),
+    cargo: numero(d.cargo),
+    total: numero(d.total),
+    devuelto: numero(d.devuelto),
+    pendiente: numero(d.pendiente),
+  })),
+  recepciones: (fila.recepciones || []).map((r) => ({
+    ubicacion: r.ubicacion,
+    enOtraUbicacion: Boolean(r.en_otra_ubicacion),
+    nota: r.nota || "",
+    usuario: r.usuario,
+    fecha: r.fecha,
+    productos: (r.productos || []).map((p) => ({ nombre: p.nombre, cantidad: Number(p.cantidad), condicion: p.condicion })),
+  })),
+  reembolsos: (fila.reembolsos || []).map((r) => ({
+    medio: r.medio,
+    importe: numero(r.importe),
+    ubicacion: r.ubicacion || "",
+    referencia: r.referencia || "",
+    usuario: r.usuario,
+    fecha: r.fecha,
+  })),
+  ubicacionesParaRecibir: (fila.ubicaciones_para_recibir || []).map((u) => ({ id: u.id, nombre: u.nombre, otra: Boolean(u.otra) })),
+  ubicacionesParaReembolsar: (fila.ubicaciones_para_reembolsar || []).map((u) => ({ id: u.id, nombre: u.nombre })),
+  puedeReembolsarElectronico: Boolean(fila.puede_reembolsar_electronico),
+})
+
+export async function traerCancelacion(pedidoId) {
+  return aCancelacionDeApp(await llamar("cancelacion_de_pedido", { p_pedido: pedidoId }, "cargar la cancelación"))
+}
+
+const aRecepcionDeServidor = (recepcion) =>
+  recepcion
+    ? {
+        ubicacion_id: recepcion.ubicacionId,
+        nota: recepcion.nota || "",
+        productos: recepcion.productos.map((p) => ({ producto_id: p.productoId, cantidad: p.cantidad, condicion: p.condicion })),
+      }
+    : null
+
+const aReembolsoDeServidor = (r) => ({ medio: r.medio, importe: r.importe, ubicacion_id: r.ubicacionId || null, referencia: r.referencia || "" })
+
+// `recepcion`: {ubicacionId, nota, productos: [{productoId, cantidad, condicion}]} o null; `reembolsos`: [{medio, importe, ubicacionId, referencia}].
+export async function cancelarPedido(pedidoId, { motivo, recepcion = null, reembolsos = [] }, clave) {
+  const data = await llamar(
+    "cancelar_pedido",
+    {
+      p_pedido: pedidoId,
+      p_motivo: motivo,
+      p_recepcion: aRecepcionDeServidor(recepcion),
+      p_reembolsos: reembolsos.map(aReembolsoDeServidor),
+      p_clave_idempotencia: clave,
+    },
+    "cancelar el pedido"
+  )
+
+  return { ...aPedidoDeApp(data), repetido: Boolean(data.repetido) }
+}
+
+export async function recibirProductosDelPedido(pedidoId, recepcion, clave) {
+  const r = aRecepcionDeServidor(recepcion)
+  const data = await llamar(
+    "registrar_recepcion_de_pedido",
+    { p_pedido: pedidoId, p_ubicacion: r.ubicacion_id, p_productos: r.productos, p_nota: r.nota, p_clave_idempotencia: clave },
+    "registrar los productos recibidos"
+  )
+
+  return { repetido: Boolean(data.repetido) }
+}
+
+export async function reembolsarAlCliente(pedidoId, reembolso, clave) {
+  const r = aReembolsoDeServidor(reembolso)
+  const data = await llamar(
+    "registrar_reembolso_de_pedido",
+    { p_pedido: pedidoId, p_medio: r.medio, p_importe: r.importe, p_ubicacion: r.ubicacion_id, p_referencia: r.referencia, p_clave_idempotencia: clave },
+    "registrar el reembolso"
+  )
+
+  return { repetido: Boolean(data.repetido) }
 }
 
 export async function traerBandeja({ vista = "recibidos", estado = "pendiente" } = {}) {

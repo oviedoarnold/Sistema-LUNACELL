@@ -423,7 +423,7 @@ function Settings() {
         permissions.ORDERS_CANCEL,
       label: "Autorizar cancelación de pedidos",
       description:
-        "Autorizar o rechazar la cancelación de un pedido entregado de su ubicación, con motivo, devolución y reembolso. Las acciones se habilitan en la etapa C.",
+        "Cancelar antes de facturar un pedido que entregó o debía facturar su ubicación, y registrar los productos que vuelven y el efectivo que se devuelve al cliente.",
     },
     /*
       Liquidaciones entre ubicaciones (0046). Consultar no deja registrar

@@ -8,6 +8,7 @@ import PageHeader from "../components/crud/PageHeader"
 import InvoiceTemplate from "../components/InvoiceTemplate"
 import DocumentPreviewModal from "../components/documents/DocumentPreviewModal"
 import DetalleDePedido from "../components/pedidos/DetalleDePedido"
+import FormularioDeCancelacion from "../components/pedidos/FormularioDeCancelacion"
 import { SalesContext } from "../context/contexts"
 import { useAuth } from "../hooks/useAuth"
 import { avisarCambioDePedidos } from "../hooks/useAvisosDePedidos"
@@ -15,11 +16,15 @@ import { useBloqueoDeActualizacion } from "../hooks/useBloqueoDeActualizacion"
 import { useSinConexion } from "../hooks/useSinConexion"
 import {
   ESTADOS_DE_PEDIDO,
+  cancelarPedido,
   facturarPedido,
   marcarPedidoLeido,
+  recibirProductosDelPedido,
+  reembolsarAlCliente,
   rechazarPedido,
   resolverPedido,
   traerBandeja,
+  traerCancelacion,
   traerDetalleDePedido,
 } from "../lib/api/pedidos"
 import { fechaYHora, formatMoney } from "../utils/format"
@@ -44,6 +49,7 @@ const FILTROS = [
   { id: "pendiente", etiqueta: "Pendientes" },
   { id: "facturado", etiqueta: "Facturados" },
   { id: "por_resolver", etiqueta: "Rechazados" },
+  { id: "cancelado", etiqueta: "Cancelados" },
   { id: "todos", etiqueta: "Todos" },
 ]
 
@@ -114,11 +120,14 @@ function Pedidos() {
   const [vista, setVista] = useState("recibidos")
   const [estado, setEstado] = useState("pendiente")
 
-  // La operación en curso: facturar, rechazar, reenviar o facturar_en_origen.
+  // La operación en curso: facturar, rechazar, reenviar, facturar_en_origen o las de cancelación.
   const [operando, setOperando] = useState(null)
 
-  // Una operación de pedido no se interrumpe por actualizar.
-  useBloqueoDeActualizacion(Boolean(operando), "operacion-de-pedido")
+  // El formulario de cancelación abierto: {modo, clave}. La clave es la del intento: se reusa al reintentar.
+  const [formulario, setFormulario] = useState(null)
+
+  // Ni una operación ni un formulario a medio llenar se interrumpen por actualizar.
+  useBloqueoDeActualizacion(Boolean(operando || formulario), "operacion-de-pedido")
   const [facturaId, setFacturaId] = useState(null)
 
   /*
@@ -153,18 +162,19 @@ function Pedidos() {
   const [abiertoId, setAbiertoId] = useState(null)
   const [versionDetalle, setVersionDetalle] = useState(0)
   const claveDetalle = abiertoId ? `${abiertoId}|${versionDetalle}` : null
-  const [cargado, setCargado] = useState({ clave: null, pedido: null, error: "" })
+  const [cargado, setCargado] = useState({ clave: null, pedido: null, cancelacion: null, error: "" })
 
   useEffect(() => {
     if (!claveDetalle) return undefined
 
     let vigente = true
 
-    traerDetalleDePedido(abiertoId).then(
-      (pedido) => {
+    // La cancelación es aparte: si no se puede leer, el pedido se ve igual, sin sus acciones.
+    Promise.all([traerDetalleDePedido(abiertoId), traerCancelacion(abiertoId).catch(() => null)]).then(
+      ([pedido, cancelacion]) => {
         if (!vigente) return
 
-        setCargado({ clave: claveDetalle, pedido, error: "" })
+        setCargado({ clave: claveDetalle, pedido, cancelacion, error: "" })
 
         if (!pedido.leido && !soloLectura) {
           marcarPedidoLeido(pedido.id).then(() => {
@@ -173,7 +183,7 @@ function Pedidos() {
           }, () => {})
         }
       },
-      (problema) => vigente && setCargado({ clave: claveDetalle, pedido: null, error: problema.message })
+      (problema) => vigente && setCargado({ clave: claveDetalle, pedido: null, cancelacion: null, error: problema.message })
     )
 
     return () => {
@@ -183,6 +193,7 @@ function Pedidos() {
 
   const detalleVigente = claveDetalle !== null && cargado.clave === claveDetalle
   const detalle = detalleVigente ? cargado.pedido : null
+  const cancelacion = detalleVigente ? cargado.cancelacion : null
   const cargandoDetalle = claveDetalle !== null && !detalleVigente
   const errorDetalle = detalleVigente ? cargado.error : ""
 
@@ -198,14 +209,17 @@ function Pedidos() {
   }, [pedidoDelEnlace, setParametros])
 
   const abrir = (id) => setAbiertoId(id)
-  const cerrar = () => setAbiertoId(null)
+  const cerrar = () => {
+    setAbiertoId(null)
+    setFormulario(null)
+  }
 
   /*
     Todas las operaciones siguen el mismo camino: una a la vez, con reintento
     seguro, avisando a la campanita y cerrando el pedido al terminar. Si el
     servidor la rechaza, se dice por qué y se vuelve a cargar el pedido.
   */
-  const operar = async (tipo, { llamada, sinRespuesta, tituloDelError, alTerminar }) => {
+  const operar = async (tipo, { llamada, sinRespuesta, tituloDelError, alTerminar, cerrarAlTerminar = true }) => {
     setOperando(tipo)
 
     try {
@@ -214,8 +228,12 @@ function Pedidos() {
       if (!resultado) return
 
       avisarCambioDePedidos()
-      cerrar()
       setVersionLista((v) => v + 1)
+
+      // Al cancelar, recibir o reembolsar, el pedido sigue abierto con lo que queda pendiente.
+      if (cerrarAlTerminar) cerrar()
+      else setVersionDetalle((v) => v + 1)
+
       await alTerminar(resultado)
     } catch (problema) {
       Swal.fire({ icon: "error", title: tituloDelError, text: problema.message })
@@ -355,6 +373,56 @@ function Pedidos() {
     })
   }
 
+  /*
+    Cancelar, recibir o reembolsar (0049). El formulario reúne todo y aquí se
+    envía con la clave de ese formulario: un reintento sin respuesta la repite
+    y el servidor no hace nada dos veces. Varios medios devueltos a la vez van
+    uno por uno, cada uno con su propia clave derivada.
+  */
+  const abrirFormulario = (modo) => setFormulario({ modo, clave: claveDeIdempotencia() })
+
+  const enviarFormulario = async (datos) => {
+    if (!detalle || !formulario || operando) return
+
+    const { modo, clave } = formulario
+    const numero = detalle.numero
+    const acciones = {
+      cancelar: {
+        llamada: () => cancelarPedido(detalle.id, datos, clave),
+        sinRespuesta: "La cancelación pudo haberse registrado o no.",
+        tituloDelError: "No se pudo cancelar",
+        exito: `Pedido ${numero} cancelado`,
+      },
+      recibir: {
+        llamada: () => recibirProductosDelPedido(detalle.id, datos.recepcion, clave),
+        sinRespuesta: "La recepción pudo haberse registrado o no.",
+        tituloDelError: "No se pudo registrar la recepción",
+        exito: "Productos recibidos registrados",
+      },
+      reembolsar: {
+        llamada: async () => {
+          for (const [i, reembolso] of datos.reembolsos.entries()) await reembolsarAlCliente(detalle.id, reembolso, `${clave}-${i}`)
+
+          return { repetido: false }
+        },
+        sinRespuesta: "El reembolso pudo haberse registrado o no.",
+        tituloDelError: "No se pudo registrar el reembolso",
+        exito: "Reembolso registrado",
+      },
+    }[modo]
+
+    await operar(modo, {
+      llamada: acciones.llamada,
+      sinRespuesta: acciones.sinRespuesta,
+      tituloDelError: acciones.tituloDelError,
+      cerrarAlTerminar: false,
+      alTerminar: () => {
+        setFormulario(null)
+        Swal.fire({ icon: "success", title: acciones.exito, text: "Lo que quede pendiente se puede completar desde este mismo pedido." })
+      },
+    })
+  }
+
   const factura = facturaId ? getSaleById?.(facturaId) : null
 
   return (
@@ -449,9 +517,22 @@ function Pedidos() {
         </ul>
       )}
 
-      {abiertoId && (
+      {abiertoId && formulario && detalle && cancelacion && (
+        <FormularioDeCancelacion
+          pedido={detalle}
+          cancelacion={cancelacion}
+          modo={formulario.modo}
+          enviando={Boolean(operando)}
+          onEnviar={enviarFormulario}
+          onCerrar={() => setFormulario(null)}
+        />
+      )}
+
+      {abiertoId && !(formulario && detalle && cancelacion) && (
         <DetalleDePedido
           pedido={detalle}
+          cancelacion={cancelacion}
+          onFormulario={abrirFormulario}
           cargando={cargandoDetalle}
           error={errorDetalle}
           operando={operando}

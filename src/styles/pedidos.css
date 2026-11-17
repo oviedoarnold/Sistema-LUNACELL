@@ -193,6 +193,115 @@
   color: var(--text-secondary);
 }
 
+/* Cancelación (etapa C2a): lo que falta recibir o devolver se resalta. */
+.pedidos-cancelacion {
+  margin-bottom: var(--space-3);
+}
+
+.pedidos-pendiente {
+  flex: none;
+  font-weight: 600;
+  color: var(--warning);
+}
+
+.cancelacion {
+  display: grid;
+  gap: var(--space-4);
+  min-width: 0;
+}
+
+.cancelacion-seccion {
+  display: grid;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.cancelacion-seccion textarea,
+.cancelacion-seccion input,
+.cancelacion-seccion select {
+  width: 100%;
+  min-width: 0;
+}
+
+.cancelacion-opciones {
+  display: flex;
+  flex-wrap: wrap;
+}
+
+.cancelacion-productos,
+.cancelacion-dinero {
+  list-style: none;
+  display: grid;
+  gap: var(--space-2);
+}
+
+.cancelacion-productos li,
+.cancelacion-dinero li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  padding-bottom: var(--space-2);
+  border-bottom: 1px solid var(--border);
+}
+
+.cancelacion-producto,
+.cancelacion-dinero li > :first-child {
+  min-width: 0;
+  flex: 1 1 12rem;
+  overflow-wrap: anywhere;
+}
+
+.cancelacion-producto small,
+.cancelacion-dinero small {
+  display: block;
+  font-size: 12.5px;
+  color: var(--text-muted);
+}
+
+.cancelacion-producto-campos {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.cancelacion-producto-campos input,
+.cancelacion-producto-campos select {
+  min-height: 38px;
+  padding: 6px 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--text-primary);
+  font: inherit;
+}
+
+.cancelacion-producto-campos input {
+  width: 4.5rem;
+}
+
+.cancelacion-producto-campos select {
+  width: auto;
+}
+
+.cancelacion-reembolsos {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.cancelacion-reembolso {
+  display: grid;
+  gap: var(--space-2);
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 12rem), 1fr));
+}
+
+.cancelacion-resumen ul {
+  display: grid;
+  gap: var(--space-1);
+  padding-left: var(--space-4);
+}
+
 .pedidos-totales {
   border-top: 1px solid var(--border);
   padding-top: var(--space-2);

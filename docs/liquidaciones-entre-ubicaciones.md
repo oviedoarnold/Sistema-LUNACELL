@@ -34,6 +34,8 @@ Desde la 0048 (etapa C1), el efectivo se le debe al **destino final** del pedido
 - un pedido por resolver tampoco: mientras no se sepa quién lo factura, su efectivo no se liquida;
 - un pedido con efectivo en una liquidación por confirmar o confirmada no se rechaza ni cambia de ubicación (`PI013`).
 
+Desde la 0049 (etapa C2a), un pedido **cancelado** ya no se le debe al destino. Solo queda el efectivo que el destino devolvió al cliente por cuenta del origen: el origen se lo debe y lo liquida en el mismo par. Lo que devolvió el origen y lo pendiente de devolver no son deudas entre ubicaciones. Con efectivo en una liquidación por confirmar o confirmada no se cancela.
+
 Estados que muestra la pantalla:
 
 | Estado | Cuándo |
