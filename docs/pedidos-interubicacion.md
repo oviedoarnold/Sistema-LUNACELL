@@ -151,6 +151,7 @@ Lo pendiente no es un registro: es lo entregado menos lo recibido, y lo cobrado 
 - **Reportes de caja:**
   - si ese día hubo devoluciones de pedidos, o quedan pendientes, agregan lo devuelto (por medio y por ubicación), el neto y lo pendiente;
   - lo pendiente no baja ninguna caja;
+  - una ubicación que devolvió efectivo aparece aunque ese día no haya cobrado (con su neto negativo), así las filas por ubicación suman exactamente los totales; lo electrónico sale de la cuenta de la empresa y no es de ninguna fila;
   - sin cancelaciones, las cifras son las de antes.
 - **Seguridad:**
   - la clave de cada operación evita repeticiones (`PI011` si se reusa para otra cosa);

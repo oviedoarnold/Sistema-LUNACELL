@@ -1078,31 +1078,47 @@ as $$
      and (p_ubicacion is null or p.origen_id = p_ubicacion)
 $$;
 
--- A cada fila de ubicación, lo que esa ubicación devolvió en efectivo y el neto de `p_campo`.
-create or replace function public.filas_con_reembolsos(p_filas jsonb, p_campo text, p_neto text, p_reembolsos jsonb)
+/*
+  A cada fila de ubicación, lo que esa ubicación devolvió en efectivo y el neto
+  de `p_campo`. Una ubicación que devolvió efectivo sin tener fila (no cobró ese
+  día, o ya no está activa) se agrega al final con `p_vacia` (los importes del
+  reporte en cero), así las filas suman exactamente los totales.
+*/
+create or replace function public.filas_con_reembolsos(p_filas jsonb, p_campo text, p_neto text, p_reembolsos jsonb, p_vacia jsonb)
 returns jsonb
 language sql
 immutable
 set search_path = ''
 as $$
+  with filas as (
+    select u.fila, u.n
+      from jsonb_array_elements(coalesce(p_filas, '[]'::jsonb)) with ordinality u(fila, n)
+    union all
+    select p_vacia || jsonb_build_object('ubicacion_id', r.ubicacion_id, 'ubicacion', r.ubicacion),
+           jsonb_array_length(coalesce(p_filas, '[]'::jsonb)) + row_number() over (order by r.ubicacion, r.ubicacion_id)
+      from (select distinct e->>'ubicacion_id' as ubicacion_id, e->>'ubicacion' as ubicacion
+              from jsonb_array_elements(coalesce(p_reembolsos, '[]'::jsonb)) e) r
+     where not exists (select 1 from jsonb_array_elements(coalesce(p_filas, '[]'::jsonb)) f
+                        where f->>'ubicacion_id' is not distinct from r.ubicacion_id)
+  )
   select coalesce(jsonb_agg(
-           u.fila || jsonb_build_object(
-             'reembolsos_pagados', public.sumar_de(p_reembolsos, 'importe', u.fila->>'ubicacion_id'),
-             p_neto, (u.fila->>p_campo)::numeric - public.sumar_de(p_reembolsos, 'importe', u.fila->>'ubicacion_id'))
-           order by u.n), '[]'::jsonb)
-    from jsonb_array_elements(coalesce(p_filas, '[]'::jsonb)) with ordinality u(fila, n)
+           f.fila || jsonb_build_object(
+             'reembolsos_pagados', public.sumar_de(p_reembolsos, 'importe', f.fila->>'ubicacion_id'),
+             p_neto, (f.fila->>p_campo)::numeric - public.sumar_de(p_reembolsos, 'importe', f.fila->>'ubicacion_id'))
+           order by f.n), '[]'::jsonb)
+    from filas f
 $$;
 
 revoke execute on function
   public.reembolsos_de_pedidos_del_dia(date, uuid),
   public.reembolsos_de_pedidos_pendientes(uuid),
-  public.filas_con_reembolsos(jsonb, text, text, jsonb)
+  public.filas_con_reembolsos(jsonb, text, text, jsonb, jsonb)
 from public, anon;
 
 grant execute on function
   public.reembolsos_de_pedidos_del_dia(date, uuid),
   public.reembolsos_de_pedidos_pendientes(uuid),
-  public.filas_con_reembolsos(jsonb, text, text, jsonb)
+  public.filas_con_reembolsos(jsonb, text, text, jsonb, jsonb)
 to authenticated;
 
 create or replace function public.reporte_diario_de_caja(p_dia date default null, p_ubicacion uuid default null)
@@ -1135,7 +1151,9 @@ begin
       'total_cobrado_neto', (v_i->>'total_cobrado')::numeric - v_devuelto,
       'reembolsos_de_pedidos_pendientes', v_pendiente
     ),
-    'por_ubicacion', public.filas_con_reembolsos(v_base->'por_ubicacion', 'cobros_total', 'cobros_netos', v_efectivo),
+    'por_ubicacion', public.filas_con_reembolsos(v_base->'por_ubicacion', 'cobros_total', 'cobros_netos', v_efectivo,
+      '{"ventas_total": 0, "ventas_cantidad": 0, "ticket_promedio": 0, "contado_total": 0, "credito_total": 0,
+        "abonos_total": 0, "cobros_total": 0, "anuladas_total": 0, "cobros_por_cuenta_de_otras": 0}'::jsonb),
     'reembolsos_de_pedidos', v_lista
   );
 end $$;
@@ -1167,7 +1185,9 @@ begin
       'total_neto', (v_t->>'total_cobrado')::numeric - public.sumar_de(v_lista, 'importe'),
       'reembolsos_pendientes', v_pendiente
     ),
-    'por_ubicacion', public.filas_con_reembolsos(v_base->'por_ubicacion', 'efectivo', 'efectivo_neto', v_efectivo),
+    'por_ubicacion', public.filas_con_reembolsos(v_base->'por_ubicacion', 'efectivo', 'efectivo_neto', v_efectivo,
+      '{"efectivo": 0, "transferencia": 0, "tarjeta": 0, "enlace": 0, "sin_registrar": 0,
+        "total": 0, "cargo": 0, "por_cuenta_de_otras": 0}'::jsonb),
     'reembolsos_de_pedidos', v_lista
   );
 end $$;

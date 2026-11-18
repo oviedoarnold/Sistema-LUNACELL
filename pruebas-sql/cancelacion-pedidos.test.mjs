@@ -613,6 +613,229 @@ describe("reportes de caja", () => {
   })
 })
 
+/*
+  Las filas por ubicación de los dos reportes suman exactamente sus totales,
+  aunque una ubicación devuelva efectivo un día en que no cobró nada. Lo
+  electrónico se devuelve desde la cuenta de la empresa: no es de ninguna fila.
+*/
+describe("reportes de caja: las filas por ubicación cuadran con los totales", () => {
+  const HOY = "(now() at time zone 'America/Tegucigalpa')::date"
+  const diario = (e, dia = HOY, ubicacion = null) => fila(e.admin.authId, `select public.reporte_diario_de_caja(${dia}, $1) as r`, [ubicacion])
+  const medios = (e, dia = HOY, ubicacion = null) => fila(e.admin.authId, `select public.reporte_medios_de_caja(${dia}, $1) as r`, [ubicacion])
+  const suma = (filas, campo) => Math.round(filas.reduce((s, u) => s + Number(u[campo] ?? 0), 0) * 100) / 100
+  const dif = (a, b) => Math.round((Number(a) - Number(b)) * 100) / 100
+  const filaDe = (filas, id) => filas.find((u) => u.ubicacion_id === id)
+  const cifras = (u) => u && [num(u.efectivo), num(u.reembolsos_pagados), num(u.efectivo_neto)]
+  const cifrasDiario = (u) => u && [num(u.cobros_total), num(u.reembolsos_pagados), num(u.cobros_netos)]
+
+  // Lo que el reporte de medios dice en sus totales, frente a lo que suman sus filas.
+  function cuadraMedios(m) {
+    const t = m.totales
+    const efectivo = num(m.por_medio.find((x) => x.medio === "efectivo")?.monto ?? 0)
+    const devueltoEfectivo = num(t.reembolsos_efectivo ?? 0)
+    const devueltoElectronico = num(t.reembolsos_electronicos ?? 0)
+
+    expect(suma(m.por_ubicacion, "total")).toBe(num(t.total))
+    expect(suma(m.por_ubicacion, "efectivo")).toBe(efectivo)
+    expect(suma(m.por_ubicacion, "reembolsos_pagados")).toBe(devueltoEfectivo)
+    expect(suma(m.por_ubicacion, "efectivo_neto")).toBe(dif(efectivo, devueltoEfectivo))
+    expect(dif(dif(suma(m.por_ubicacion, "total") + suma(m.por_ubicacion, "cargo"), suma(m.por_ubicacion, "reembolsos_pagados")), devueltoElectronico)).toBe(num(t.total_neto))
+    expect(new Set(m.por_ubicacion.map((u) => u.ubicacion_id)).size).toBe(m.por_ubicacion.length)
+  }
+
+  function cuadraDiario(d) {
+    const i = d.indicadores
+
+    expect(suma(d.por_ubicacion, "cobros_total")).toBe(num(i.cobros_total))
+    expect(suma(d.por_ubicacion, "reembolsos_pagados")).toBe(num(i.reembolsos_pagados_efectivo))
+    expect(suma(d.por_ubicacion, "cobros_netos")).toBe(dif(i.cobros_total, i.reembolsos_pagados_efectivo))
+    expect(new Set(d.por_ubicacion.map((u) => u.ubicacion_id)).size).toBe(d.por_ubicacion.length)
+  }
+
+  // Corre un reembolso al día siguiente, solo en esta base aislada, para tener un día con reembolsos y sin cobros.
+  const alDiaSiguiente = (pedido) =>
+    db.query(`begin;
+              set local session_replication_role = replica;
+              update public.reembolsos_de_pedido set reembolsado_en = reembolsado_en + interval '1 day' where pedido_id = '${pedido}';
+              commit;`)
+
+  it("Bodega cobra 360 y no devuelve; Ruta local no cobra y devuelve 80: 360, -80 y 280", async () => {
+    const e = await escenario()
+    const devuelto = await entregar(e)
+    await entregar(e, { forma: "credito", cobros: [efectivo(130)] })
+
+    await cancelar(e.cancelaBodega, devuelto.pedido_id)
+    await reembolsar(e.cancelaRuta, devuelto.pedido_id, { importe: 80 })
+
+    const m = await medios(e)
+
+    expect(num(m.por_medio.find((x) => x.medio === "efectivo").monto)).toBe(360)
+    expect(cifras(filaDe(m.por_ubicacion, e.bodega))).toEqual([360, 0, 360])
+    expect(cifras(filaDe(m.por_ubicacion, e.ruta))).toEqual([0, 80, -80])
+    expect(filaDe(m.por_ubicacion, e.ruta)).toMatchObject({ ubicacion: "Ruta local", total: 0, cargo: 0, transferencia: 0, tarjeta: 0, enlace: 0, sin_registrar: 0, por_cuenta_de_otras: 0 })
+    expect([num(m.totales.reembolsos_efectivo), num(m.totales.total_neto)]).toEqual([80, 280])
+    expect(suma(m.por_ubicacion, "efectivo_neto")).toBe(280)
+    cuadraMedios(m)
+
+    const d = await diario(e)
+
+    expect(cifrasDiario(filaDe(d.por_ubicacion, e.bodega))).toEqual([360, 0, 360])
+    expect(cifrasDiario(filaDe(d.por_ubicacion, e.ruta))).toEqual([0, 80, -80])
+    cuadraDiario(d)
+  })
+
+  it("cobros y reembolsos en la misma ubicación, varias ubicaciones y lo electrónico: una fila por ubicación y todo cuadra", async () => {
+    const e = await escenario()
+    const enEfectivo = await entregar(e)
+    const conTarjeta = await entregar(e, { cobros: [electronico("tarjeta", 230)] })
+    const pendiente = await entregar(e, { cantidad: 1, cobros: [efectivo(115)] })
+
+    await cancelar(e.cancelaBodega, enEfectivo.pedido_id)
+    await reembolsar(e.cancelaBodega, enEfectivo.pedido_id, { importe: 100 })
+    await reembolsar(e.cancelaRuta, enEfectivo.pedido_id, { importe: 30 })
+    await cancelar(e.admin, conTarjeta.pedido_id, { reembolsos: [{ medio: "tarjeta", importe: 233.91, referencia: "Reverso" }] })
+    await cancelar(e.cancelaBodega, pendiente.pedido_id)
+
+    const m = await medios(e)
+
+    expect(cifras(filaDe(m.por_ubicacion, e.bodega))).toEqual([345, 100, 245])
+    expect(cifras(filaDe(m.por_ubicacion, e.ruta))).toEqual([0, 30, -30])
+    expect(filaDe(m.por_ubicacion, e.camion1)).toBeUndefined()
+    expect([num(m.totales.reembolsos_efectivo), num(m.totales.reembolsos_electronicos), num(m.totales.reembolsos_pendientes)]).toEqual([130, 233.91, 215])
+    cuadraMedios(m)
+
+    const d = await diario(e)
+
+    expect(cifrasDiario(filaDe(d.por_ubicacion, e.bodega))).toEqual([575, 100, 475])
+    expect(cifrasDiario(filaDe(d.por_ubicacion, e.ruta))).toEqual([0, 30, -30])
+    expect(cifrasDiario(filaDe(d.por_ubicacion, e.camion1))).toEqual([0, 0, 0])
+    cuadraDiario(d)
+  })
+
+  it("un reembolso pendiente no cambia ninguna fila; el realizado sí", async () => {
+    const e = await escenario()
+    const p = await entregar(e)
+
+    await cancelar(e.cancelaBodega, p.pedido_id)
+
+    const antes = await medios(e)
+
+    expect(num(antes.totales.reembolsos_pendientes)).toBe(230)
+    expect(antes.por_ubicacion.map(cifras)).toEqual([[230, 0, 230]])
+    expect(num(antes.totales.total_neto)).toBe(230)
+    cuadraMedios(antes)
+    cuadraDiario(await diario(e))
+
+    await reembolsar(e.cancelaRuta, p.pedido_id, { importe: 50 })
+
+    const despues = await medios(e)
+
+    expect(cifras(filaDe(despues.por_ubicacion, e.ruta))).toEqual([0, 50, -50])
+    expect([num(despues.totales.total_neto), num(despues.totales.reembolsos_pendientes)]).toEqual([180, 180])
+    cuadraMedios(despues)
+  })
+
+  it("un día sin cobros y con reembolsos: solo las filas de quien devolvió, en negativo", async () => {
+    const e = await escenario()
+    const p = await entregar(e)
+
+    await cancelar(e.cancelaBodega, p.pedido_id)
+    await reembolsar(e.cancelaRuta, p.pedido_id, { importe: 80 })
+    await reembolsar(e.cancelaBodega, p.pedido_id, { importe: 20 })
+    await alDiaSiguiente(p.pedido_id)
+
+    const m = await medios(e, `${HOY} + 1`)
+
+    expect(num(m.totales.total)).toBe(0)
+    expect(m.por_ubicacion.map((u) => [u.ubicacion, ...cifras(u)])).toEqual([
+      ["Bodega", 0, 20, -20],
+      ["Ruta local", 0, 80, -80],
+    ])
+    expect(num(m.totales.total_neto)).toBe(-100)
+    cuadraMedios(m)
+
+    const d = await diario(e, `${HOY} + 1`)
+
+    expect(cifrasDiario(filaDe(d.por_ubicacion, e.ruta))).toEqual([0, 80, -80])
+    expect(num(d.indicadores.total_cobrado_neto)).toBe(-100)
+    cuadraDiario(d)
+
+    // Filtrado por Ruta local: solo su fila.
+    const soloRuta = await medios(e, `${HOY} + 1`, e.ruta)
+
+    expect(soloRuta.por_ubicacion.map(cifras)).toEqual([[0, 80, -80]])
+    cuadraMedios(soloRuta)
+  })
+
+  it("un día sin cobros ni reembolsos: sin pendientes, el reporte de antes; con pendientes, ninguna fila nueva", async () => {
+    const e = await escenario()
+    const vacio = `${HOY} + 2`
+
+    expect(await medios(e, vacio)).toEqual(await fila(e.admin.authId, `select public.reporte_medios_de_caja_sin_reembolsos(${vacio}, null) as r`))
+    expect(await diario(e, vacio)).toEqual(await fila(e.admin.authId, `select public.reporte_diario_de_caja_sin_reembolsos(${vacio}, null) as r`))
+
+    const p = await entregar(e)
+
+    await cancelar(e.cancelaBodega, p.pedido_id)
+
+    const m = await medios(e, vacio)
+
+    expect(m.por_ubicacion).toEqual([])
+    expect([num(m.totales.reembolsos_efectivo), num(m.totales.total_neto), num(m.totales.reembolsos_pendientes)]).toEqual([0, 0, 230])
+    cuadraMedios(m)
+    cuadraDiario(await diario(e, vacio))
+  })
+
+  it("una ubicación ya inactiva que devolvió efectivo sigue en el reporte diario", async () => {
+    const e = await escenario()
+    const p = await entregar(e)
+
+    await cancelar(e.cancelaBodega, p.pedido_id)
+    await reembolsar(e.cancelaRuta, p.pedido_id, { importe: 80 })
+    await db.query("update usuarios set ubicacion_id = null where ubicacion_id = $1", [e.ruta])
+    await db.query("update ubicaciones set activa = false where id = $1", [e.ruta])
+
+    const d = await diario(e)
+
+    expect(cifrasDiario(filaDe(d.por_ubicacion, e.ruta))).toEqual([0, 80, -80])
+    cuadraDiario(d)
+    cuadraMedios(await medios(e))
+  })
+
+  it("cada empresa ve solo sus filas, y un reembolso reintentado cuenta una vez", async () => {
+    const e = await escenario()
+    const otra = await escenario()
+    const p = await entregar(e)
+    const q = await entregar(otra)
+    const clave = randomUUID()
+
+    await cancelar(e.cancelaBodega, p.pedido_id)
+    await cancelar(otra.cancelaBodega, q.pedido_id)
+    await reembolsar(e.cancelaRuta, p.pedido_id, { importe: 80, clave })
+    expect(await reembolsar(e.cancelaRuta, p.pedido_id, { importe: 80, clave })).toMatchObject({ repetido: true })
+    await reembolsar(otra.cancelaRuta, q.pedido_id, { importe: 200 })
+
+    const m = await medios(e)
+    const ids = new Set([e.bodega, e.ruta, e.camion1])
+
+    expect(m.por_ubicacion.every((u) => ids.has(u.ubicacion_id))).toBe(true)
+    expect(cifras(filaDe(m.por_ubicacion, e.ruta))).toEqual([0, 80, -80])
+    expect(m.reembolsos_de_pedidos.map((x) => num(x.importe))).toEqual([80])
+    cuadraMedios(m)
+
+    const d = await diario(e)
+
+    expect(d.por_ubicacion.every((u) => ids.has(u.ubicacion_id))).toBe(true)
+    cuadraDiario(d)
+
+    const deLaOtra = await medios(otra)
+
+    expect(cifras(filaDe(deLaOtra.por_ubicacion, otra.ruta))).toEqual([0, 200, -200])
+    expect(filaDe(deLaOtra.por_ubicacion, e.ruta)).toBeUndefined()
+    cuadraMedios(deLaOtra)
+  })
+})
+
 describe("nada se cambia por fuera", () => {
   it("las cancelaciones, recepciones y reembolsos no se modifican ni se borran, ni por el dueño", async () => {
     const e = await escenario()
