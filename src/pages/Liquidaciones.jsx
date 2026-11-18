@@ -303,7 +303,8 @@ function Liquidaciones() {
                   </span>
                 </div>
                 <div className="liquidaciones-cifras">
-                  <Cifra etiqueta="Efectivo" valor={pedido.efectivo} />
+                  {/* Un pedido cancelado (0049) solo debe lo que el destino devolvió al cliente por cuenta del origen. */}
+                  <Cifra etiqueta={pedido.estado === "cancelado" ? `Cancelado: devuelto por ${pedido.destino}` : "Efectivo"} valor={pedido.efectivo} />
                   <Cifra etiqueta="Pendiente" valor={pedido.pendiente} destacada />
                   <Cifra etiqueta="Por confirmar" valor={pedido.porConfirmar} />
                   <Cifra etiqueta="Liquidado" valor={pedido.liquidado} />

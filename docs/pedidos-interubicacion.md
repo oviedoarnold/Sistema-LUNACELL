@@ -114,6 +114,51 @@ Lo electrónico (transferencia, tarjeta, enlace y su cargo) sigue sin liquidarse
 - `saldos_de_pedidos()` deja fuera los pedidos facturados en origen y los que están por resolver;
 - los reportes de caja siguen contando el cobro de un pedido facturado en origen en su ubicación, su día y su medio, pero ya no como «cobrado por cuenta de otra ubicación».
 
+## Cancelación antes de facturar (etapa C2a)
+
+Migración: [`0049_cancelacion_pedidos_interubicacion.sql`](../supabase/migrations/0049_cancelacion_pedidos_interubicacion.sql). Se hace desde el detalle del pedido en «Pedidos», con conexión, en un solo formulario.
+
+**Tres hechos, tres registros.** Pueden ir juntos en la misma operación o registrarse después, desde el pedido cancelado.
+
+| Hecho | Registro | Qué mueve |
+|---|---|---|
+| La cancelación | `cancelaciones_de_pedido` (una por pedido) | Nada: el pedido deja de poder facturarse |
+| Los productos que vuelven | `recepciones_de_pedido` y `recepcion_detalle` | En buen estado, suman existencia en la ubicación que los recibió (movimiento `devolucion`); dañados, solo quedan registrados |
+| El dinero que se le devuelve al cliente | `reembolsos_de_pedido`, una fila por entrega y medio | El efectivo baja la caja de quien pagó; lo electrónico sale de la cuenta de la empresa |
+
+Lo pendiente no es un registro: es lo entregado menos lo recibido, y lo cobrado menos lo devuelto. Los cobros originales no se tocan.
+
+### Reglas
+
+- **Quién:** «Autorizar cancelación de pedidos» (`orders-cancel`) en el origen o el destino, o el administrador. Ni el contador ni otra empresa.
+- **Qué se cancela:** solo un pedido pendiente o por resolver. Uno facturado se rechaza (`PI012`): su anulación es de la etapa C3.
+- **Motivo:** obligatorio, de 5 a 500 caracteres.
+- **Productos:**
+  - el empleado los recibe en su ubicación, si es el origen o el destino;
+  - el administrador, en cualquier ubicación activa; si no es ni el origen ni el destino, con una nota que la respalde;
+  - nunca más de lo entregado y no recibido (`PI014`).
+- **Dinero:**
+  - se devuelve lo realmente recibido, cargo de tarjeta o enlace incluido, con los importes históricos;
+  - el efectivo se devuelve en efectivo desde el origen o el destino;
+  - transferencia, tarjeta y enlace los devuelve solo el administrador, con referencia;
+  - se puede devolver en varias entregas, nunca más de lo pendiente de cada medio (`PI015`);
+  - devolver efectivo desde una tercera ubicación queda para la etapa C2b.
+- **Liquidaciones:**
+  - con efectivo del pedido en una liquidación por confirmar o confirmada, no se cancela (`PI013`); una rechazada no bloquea;
+  - un pedido cancelado ya no se le debe al destino;
+  - si el destino devuelve efectivo al cliente, el origen se lo debe y lo liquida como siempre;
+  - lo que devuelve el origen y lo pendiente de devolver no son deudas entre ubicaciones.
+- **Reportes de caja:**
+  - si ese día hubo devoluciones de pedidos, o quedan pendientes, agregan lo devuelto (por medio y por ubicación), el neto y lo pendiente;
+  - lo pendiente no baja ninguna caja;
+  - una ubicación que devolvió efectivo aparece aunque ese día no haya cobrado (con su neto negativo), así las filas por ubicación suman exactamente los totales; lo electrónico sale de la cuenta de la empresa y no es de ninguna fila;
+  - sin cancelaciones, las cifras son las de antes.
+- **Seguridad:**
+  - la clave de cada operación evita repeticiones (`PI011` si se reusa para otra cosa);
+  - el pedido se bloquea con el mismo candado que las liquidaciones;
+  - los registros no se modifican ni se borran;
+  - el formulario abierto bloquea la actualización automática.
+
 ## Quién puede
 
 - Entrega quien tiene «Facturar» y una ubicación asignada; el pedido sale de esa ubicación.
@@ -130,7 +175,7 @@ Lo electrónico (transferencia, tarjeta, enlace y su cargo) sigue sin liquidarse
 - Al contador no se le ofrecen, y la base no se los reconoce aunque se le marquen por SQL.
 - Valen solo para pedidos de la ubicación del usuario (origen o destino). La base los comprueba con `usuario_puede_resolver_pedido()` y `usuario_puede_autorizar_cancelacion()`.
 
-Desde la etapa C1, «Resolver pedidos interubicación» permite resolver los pedidos rechazados, y solo en la ubicación que los entregó. «Autorizar cancelación de pedidos» todavía no habilita ninguna acción: es de la etapa C2.
+Desde la etapa C1, «Resolver pedidos interubicación» permite resolver los pedidos rechazados, y solo en la ubicación que los entregó. Desde la C2a, «Autorizar cancelación de pedidos» permite cancelar antes de facturar y registrar los productos que vuelven y el dinero que se devuelve.
 
 ## Lo que queda para después
 
@@ -139,7 +184,9 @@ Desde la etapa C1, «Resolver pedidos interubicación» permite resolver los ped
   - Hasta entonces, los reportes de siempre cuentan la factura de un pedido en la ubicación y el día en que se facturó, y su dinero aparece como «sin registrar». Lo cobrado en origen ya queda guardado con su ubicación, usuario y fecha en `cobros_por_medio.pedido_id`, que es lo que usará la etapa B.
 - **Etapa C**
   - C1 (0048): rechazo y resolución antes de facturar. Hecho; ver arriba.
-  - C2 y siguientes: cancelación autorizada, anulación de facturas de pedido, devoluciones, reembolsos y ajustes de liquidaciones ya registradas.
+  - C2a (0049): cancelación antes de facturar, productos que vuelven y reembolsos. Hecho; ver arriba.
+  - C2b: obligaciones entre ubicaciones en ambos sentidos (contraliquidación), reembolsos desde terceras ubicaciones y cancelar con efectivo ya liquidado.
+  - C3 y siguientes: anulación de facturas de pedido, devoluciones después de facturar y ajustes de crédito.
   - Una factura de pedido no se anula con la anulación actual: `anular_venta()` la rechaza y la pantalla explica por qué.
 - **Sin conexión**: los pedidos se crean, revisan, facturan, rechazan y resuelven solo con conexión. La venta sin conexión de siempre no cambió.
 
@@ -160,3 +207,5 @@ Desde la etapa C1, «Resolver pedidos interubicación» permite resolver los ped
 | `PI011` | Clave usada para otra operación (rechazar o resolver) |
 | `PI012` | El pedido no está en el estado que la operación necesita, o cambió mientras se revisaba |
 | `PI013` | El efectivo del pedido ya está en una liquidación por confirmar o confirmada |
+| `PI014` | Recepción de productos no válida: cantidades, estado, ubicación o falta la nota |
+| `PI015` | Reembolso no válido: medio que el cliente no usó, más de lo pendiente, sin referencia o desde una tercera ubicación |

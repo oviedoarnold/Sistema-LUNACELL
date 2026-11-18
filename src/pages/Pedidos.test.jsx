@@ -9,6 +9,7 @@ import SalesProvider from "../context/SalesContext"
 import { renderizarPantalla } from "../test/pantallas"
 import CampanaDePedidos from "../components/pedidos/CampanaDePedidos"
 import { CADA_CUANTO, EVENTO_PEDIDOS_CAMBIARON } from "../hooks/useAvisosDePedidos"
+import { hayOperacionEnCurso } from "../lib/actualizacion/bloqueos"
 import Pedidos from "./Pedidos"
 
 vi.mock("../lib/supabase", () => ({
@@ -66,6 +67,22 @@ const detalle = (cambios = {}) => ({
   ...cambios,
 })
 
+const sinCancelacion = (cambios = {}) => ({
+  puede_cancelar: false,
+  puede_registrar: false,
+  es_admin: false,
+  bloqueo_por_liquidacion: null,
+  cancelacion: null,
+  productos: [{ producto_id: "p1", nombre: "Cargador", entregado: 2, buen_estado: 0, danado: 0, pendiente: 2 }],
+  dinero: [{ medio: "efectivo", monto: 80, cargo: 0, total: 80, devuelto: 0, pendiente: 80 }],
+  recepciones: [],
+  reembolsos: [],
+  ubicaciones_para_recibir: [{ id: "camion-01", nombre: "Camión 01", otra: false }],
+  ubicaciones_para_reembolsar: [{ id: "camion-01", nombre: "Camión 01" }],
+  puede_reembolsar_electronico: false,
+  ...cambios,
+})
+
 function Direccion() {
   const { pathname, search } = useLocation()
 
@@ -73,7 +90,7 @@ function Direccion() {
 }
 
 async function renderPedidos({ rpcs = {}, rol = "vendedor", permisos = ["pos"], ruta = "/pedidos" } = {}) {
-  const llamadas = { bandeja: [], detalle: [], leer: [], facturar: [], rechazar: [], resolver: [] }
+  const llamadas = { bandeja: [], detalle: [], leer: [], facturar: [], rechazar: [], resolver: [], cancelar: [], recibir: [], reembolsar: [] }
   const rpcsExtra = {
     bandeja_de_pedidos: (a) => {
       llamadas.bandeja.push(a)
@@ -108,6 +125,22 @@ async function renderPedidos({ rpcs = {}, rol = "vendedor", permisos = ["pos"], 
       return a.p_decision === "reenviar"
         ? { data: { ...fila({ destino_id: "camion-02", destino: "Camión 02" }), repetido: false }, error: null }
         : { data: { ...fila({ estado: "facturado", destino_id: "bodega", destino: "Bodega", numero_factura: "VTA-000043", venta_id: "v-43" }), repetido: false, ya_facturado: false }, error: null }
+    },
+    cancelacion_de_pedido: () => ({ data: rpcs.cancelacion ? rpcs.cancelacion() : sinCancelacion(), error: null }),
+    cancelar_pedido: (a) => {
+      llamadas.cancelar.push(a)
+
+      return rpcs.cancelar ? rpcs.cancelar(a) : { data: { ...fila({ estado: "cancelado" }), repetido: false }, error: null }
+    },
+    registrar_recepcion_de_pedido: (a) => {
+      llamadas.recibir.push(a)
+
+      return { data: { recepcion_id: "r-1", repetido: false }, error: null }
+    },
+    registrar_reembolso_de_pedido: (a) => {
+      llamadas.reembolsar.push(a)
+
+      return { data: { reembolso_id: "d-1", repetido: false }, error: null }
     },
     avisos_de_pedidos: () => ({ data: { pendientes: 0, sin_leer: 0, ultimos: [] }, error: null }),
   }
@@ -543,6 +576,173 @@ describe("Pedidos: resolver un rechazo (etapa C1)", () => {
     const tarjeta = await screen.findByRole("button", { name: "Abrir el pedido PED-000001 de Ferremax" })
 
     expect(within(tarjeta).getByText(/Facturado en Bodega · Crédito · VTA-000043/)).toBeInTheDocument()
+  })
+})
+
+describe("Pedidos: cancelar antes de facturar (etapa C2a)", () => {
+  const conPermiso = (cambios = {}) => sinCancelacion({ puede_cancelar: true, ...cambios })
+
+  it("sin permiso no aparece «Cancelar pedido»", async () => {
+    const { ventana } = await abrirElPedido()
+
+    expect(within(ventana).queryByRole("button", { name: "Cancelar pedido" })).not.toBeInTheDocument()
+  })
+
+  it("con una liquidación por confirmar, el botón está desactivado", async () => {
+    const { ventana } = await abrirElPedido({ rpcs: { cancelacion: () => conPermiso({ bloqueo_por_liquidacion: "LIQ-000002 (por confirmar)" }) } })
+
+    expect(within(ventana).getByRole("button", { name: "Cancelar pedido" })).toBeDisabled()
+  })
+
+  it("un solo formulario: motivo, productos, dinero y resumen; envía todo con una clave", async () => {
+    const { llamadas, ventana } = await abrirElPedido({ rpcs: { cancelacion: () => conPermiso() } })
+
+    fireEvent.click(within(ventana).getByRole("button", { name: "Cancelar pedido" }))
+
+    const formulario = await screen.findByRole("dialog", { name: "Cancelar el pedido PED-000001" })
+    const confirmar = within(formulario).getByRole("button", { name: "Confirmar cancelación" })
+
+    // Sin motivo no se puede confirmar, y lo explica.
+    expect(confirmar).toBeDisabled()
+    expect(within(formulario).getByRole("alert")).toHaveTextContent("Escribe el motivo")
+    expect(hayOperacionEnCurso()).toBe(true)
+
+    fireEvent.change(within(formulario).getByLabelText("Motivo de la cancelación"), { target: { value: "El cliente ya no lo quiere" } })
+    fireEvent.click(within(formulario).getByRole("button", { name: "Algunos" }))
+    fireEvent.change(within(formulario).getByLabelText("Cantidad de Cargador"), { target: { value: "1" } })
+    fireEvent.change(within(formulario).getByLabelText("Estado de Cargador"), { target: { value: "danado" } })
+    fireEvent.click(within(formulario).getByRole("button", { name: "Reembolsar ahora" }))
+    fireEvent.change(within(formulario).getByLabelText("Se devuelve con Efectivo"), { target: { value: "50" } })
+
+    const resumen = within(formulario).getByRole("region", { name: "Resumen" })
+
+    expect(resumen).toHaveTextContent("El pedido queda cancelado")
+    expect(resumen).toHaveTextContent("Quedan 1 unidad(es) por recibir")
+    expect(resumen).toHaveTextContent("Se registra la devolución de L 50.00")
+    expect(resumen).toHaveTextContent("Quedan L 30.00 pendientes de devolver")
+
+    fireEvent.click(confirmar)
+
+    await waitFor(() =>
+      expect(llamadas.cancelar).toEqual([
+        {
+          p_pedido: "ped-1",
+          p_motivo: "El cliente ya no lo quiere",
+          p_recepcion: { ubicacion_id: "camion-01", nota: "", productos: [{ producto_id: "p1", cantidad: 1, condicion: "danado" }] },
+          p_reembolsos: [{ medio: "efectivo", importe: 50, ubicacion_id: "camion-01", referencia: "" }],
+          p_clave_idempotencia: expect.any(String),
+        },
+      ])
+    )
+    await waitFor(() => expect(Swal.fire).toHaveBeenCalledWith(expect.objectContaining({ title: "Pedido PED-000001 cancelado" })))
+    await waitFor(() => expect(hayOperacionEnCurso()).toBe(false))
+  })
+
+  it("sin pago no pregunta por dinero; «Ninguno» deja los productos por recibir", async () => {
+    const { llamadas, ventana } = await abrirElPedido({ rpcs: { cancelacion: () => conPermiso({ dinero: [] }) } })
+
+    fireEvent.click(within(ventana).getByRole("button", { name: "Cancelar pedido" }))
+
+    const formulario = await screen.findByRole("dialog", { name: "Cancelar el pedido PED-000001" })
+
+    expect(within(formulario).queryByRole("region", { name: "Dinero" })).not.toBeInTheDocument()
+    expect(within(formulario).getByText("El cliente no pagó nada: no hay dinero que devolver.")).toBeInTheDocument()
+    expect(within(formulario).getByRole("button", { name: "Ninguno" })).toHaveAttribute("aria-pressed", "true")
+
+    fireEvent.change(within(formulario).getByLabelText("Motivo de la cancelación"), { target: { value: "Se envió por error" } })
+    fireEvent.click(within(formulario).getByRole("button", { name: "Confirmar cancelación" }))
+
+    await waitFor(() => expect(llamadas.cancelar[0]).toMatchObject({ p_recepcion: null, p_reembolsos: [] }))
+  })
+
+  it("el vendedor no ve campos para devolver lo electrónico", async () => {
+    const { ventana } = await abrirElPedido({
+      rpcs: { cancelacion: () => conPermiso({ dinero: [{ medio: "tarjeta", monto: 80, cargo: 1.36, total: 81.36, devuelto: 0, pendiente: 81.36 }] }) },
+    })
+
+    fireEvent.click(within(ventana).getByRole("button", { name: "Cancelar pedido" }))
+
+    const formulario = await screen.findByRole("dialog", { name: "Cancelar el pedido PED-000001" })
+
+    expect(within(formulario).getByRole("button", { name: "Reembolsar ahora" })).toBeDisabled()
+    expect(within(formulario).getByText("Las devoluciones por transferencia, tarjeta o enlace las registra el administrador.")).toBeInTheDocument()
+    expect(within(formulario).getByText(/incluye cargo L 1.36/)).toBeInTheDocument()
+  })
+
+  it("sin respuesta, reintentar la cancelación usa la misma clave", async () => {
+    let intentos = 0
+    const { llamadas, ventana } = await abrirElPedido({
+      rpcs: {
+        cancelacion: () => conPermiso({ dinero: [] }),
+        cancelar: () => {
+          intentos += 1
+
+          return intentos === 1 ? { data: null, error: { message: "Failed to fetch" }, status: 0 } : { data: { ...fila({ estado: "cancelado" }), repetido: true }, error: null }
+        },
+      },
+    })
+
+    fireEvent.click(within(ventana).getByRole("button", { name: "Cancelar pedido" }))
+
+    const formulario = await screen.findByRole("dialog", { name: "Cancelar el pedido PED-000001" })
+
+    fireEvent.change(within(formulario).getByLabelText("Motivo de la cancelación"), { target: { value: "Se envió por error" } })
+    Swal.fire.mockResolvedValueOnce({ isConfirmed: true })
+    fireEvent.click(within(formulario).getByRole("button", { name: "Confirmar cancelación" }))
+
+    await waitFor(() => expect(llamadas.cancelar).toHaveLength(2))
+    expect(llamadas.cancelar[1].p_clave_idempotencia).toBe(llamadas.cancelar[0].p_clave_idempotencia)
+  })
+
+  it("el pedido cancelado muestra lo pendiente y permite recibir y reembolsar después", async () => {
+    const cancelado = sinCancelacion({
+      puede_registrar: true,
+      cancelacion: { motivo: "El cliente ya no lo quiere", usuario: "Encargado", fecha: "2026-11-17T15:00:00Z", principal: 80, cargo: 0 },
+      productos: [{ producto_id: "p1", nombre: "Cargador", entregado: 2, buen_estado: 1, danado: 0, pendiente: 1 }],
+      dinero: [{ medio: "efectivo", monto: 80, cargo: 0, total: 80, devuelto: 30, pendiente: 50 }],
+      recepciones: [{ ubicacion: "Camión 01", en_otra_ubicacion: false, nota: "", usuario: "Encargado", fecha: "2026-11-17T15:00:00Z", productos: [{ nombre: "Cargador", cantidad: 1, condicion: "buen_estado" }] }],
+      reembolsos: [{ medio: "efectivo", importe: 30, ubicacion: "Camión 01", referencia: "", usuario: "Encargado", fecha: "2026-11-17T15:00:00Z" }],
+    })
+    const { llamadas, ventana } = await abrirElPedido({ rpcs: { detalle: () => detalle({ estado: "cancelado", puede_facturar: false }), cancelacion: () => cancelado } })
+
+    const seccion = within(ventana).getByRole("region", { name: "Cancelación" })
+
+    expect(seccion).toHaveTextContent("«El cliente ya no lo quiere»")
+    expect(seccion).toHaveTextContent("Por recibir 1")
+    expect(seccion).toHaveTextContent("Por devolver L 50.00")
+    expect(seccion).toHaveTextContent("Devuelto L 30.00 con Efectivo desde Camión 01")
+    expect(within(ventana).queryByRole("button", { name: "Cancelar pedido" })).not.toBeInTheDocument()
+
+    fireEvent.click(within(ventana).getByRole("button", { name: "Registrar productos recibidos" }))
+
+    const recibir = await screen.findByRole("dialog", { name: "Registrar productos recibidos PED-000001" })
+
+    fireEvent.click(within(recibir).getByRole("button", { name: "Registrar recepción" }))
+    await waitFor(() =>
+      expect(llamadas.recibir).toEqual([
+        { p_pedido: "ped-1", p_ubicacion: "camion-01", p_productos: [{ producto_id: "p1", cantidad: 1, condicion: "buen_estado" }], p_nota: "", p_clave_idempotencia: expect.any(String) },
+      ])
+    )
+
+    const otra = await screen.findByRole("dialog", { name: "Pedido PED-000001" })
+
+    fireEvent.click(within(otra).getByRole("button", { name: "Registrar reembolso" }))
+
+    const reembolsar = await screen.findByRole("dialog", { name: "Registrar reembolso PED-000001" })
+
+    fireEvent.click(within(reembolsar).getByRole("button", { name: "Registrar reembolso" }))
+    await waitFor(() =>
+      expect(llamadas.reembolsar).toEqual([
+        { p_pedido: "ped-1", p_medio: "efectivo", p_importe: 50, p_ubicacion: "camion-01", p_referencia: "", p_clave_idempotencia: expect.stringMatching(/-0$/) },
+      ])
+    )
+  })
+
+  it("el filtro «Cancelados» pide los pedidos cancelados", async () => {
+    const { llamadas } = await renderPedidos()
+
+    fireEvent.change(screen.getByLabelText("Estado"), { target: { value: "cancelado" } })
+    await waitFor(() => expect(llamadas.bandeja.at(-1)).toEqual({ p_vista: "recibidos", p_estado: "cancelado" }))
   })
 })
 

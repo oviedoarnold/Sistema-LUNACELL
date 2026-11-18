@@ -2,6 +2,7 @@ import ModalShell from "../forms/ModalShell"
 import { ESTADOS_DE_PEDIDO } from "../../lib/api/pedidos"
 import { etiquetaDelMedio, textoDePorcentaje } from "../../utils/mediosDePago"
 import { textoDelMotivo } from "../../utils/preciosNegociados"
+import { pendientesQuePuedeCompletar } from "../../utils/cancelacionDePedidos"
 import { fechaYHora, formatMoney } from "../../utils/format"
 
 /*
@@ -26,6 +27,91 @@ const EVENTOS = {
   cancelacion_solicitada: "Cancelación solicitada",
   cancelacion_autorizada: "Cancelación autorizada",
   cancelacion_rechazada: "Cancelación rechazada",
+  cancelado: "Cancelado",
+  devolucion_recibida: "Productos devueltos recibidos",
+  reembolso_registrado: "Reembolso al cliente registrado",
+}
+
+const CONDICIONES = { buen_estado: "buen estado", danado: "dañado" }
+
+/*
+  El pedido cancelado (0049): por qué, qué falta recibir, qué falta devolver al
+  cliente y lo ya registrado. Las acciones para completar lo pendiente van al pie.
+*/
+function SeccionDeCancelacion({ cancelacion }) {
+  const { cancelacion: c, productos, dinero, recepciones, reembolsos } = cancelacion
+
+  return (
+    <section className="pedidos-cancelacion" aria-label="Cancelación">
+      <div className="pedidos-rechazo">
+        <b>Pedido cancelado</b>
+        <span>«{c.motivo}»</span>
+        <small>
+          {c.usuario} · {fechaYHora(c.fecha)}
+        </small>
+      </div>
+
+      <h3 className="pedidos-subtitulo">Productos</h3>
+      <ul className="pedidos-cobros">
+        {productos.map((p) => (
+          <li key={p.id}>
+            <span>
+              {p.nombre}
+              <small>
+                Entregados {p.entregado} · recibidos en buen estado {p.buenEstado} · dañados {p.danado}
+              </small>
+            </span>
+            <span className={p.pendiente > 0 ? "pedidos-pendiente" : "pos-importe"}>{p.pendiente > 0 ? `Por recibir ${p.pendiente}` : "Recibido"}</span>
+          </li>
+        ))}
+      </ul>
+
+      {dinero.length > 0 && (
+        <>
+          <h3 className="pedidos-subtitulo">Dinero del cliente</h3>
+          <ul className="pedidos-cobros">
+            {dinero.map((d) => (
+              <li key={d.medio}>
+                <span>
+                  {etiquetaDelMedio(d.medio)}
+                  <small>
+                    Recibido {formatMoney(d.total)}
+                    {d.cargo > 0 ? ` (incluye cargo ${formatMoney(d.cargo)})` : ""} · devuelto {formatMoney(d.devuelto)}
+                  </small>
+                </span>
+                <span className={d.pendiente > 0 ? "pedidos-pendiente" : "pos-importe"}>
+                  {d.pendiente > 0 ? `Por devolver ${formatMoney(d.pendiente)}` : "Devuelto"}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
+
+      {(recepciones.length > 0 || reembolsos.length > 0) && (
+        <>
+          <h3 className="pedidos-subtitulo">Registrado</h3>
+          <ul className="pedidos-eventos">
+            {recepciones.map((r, i) => (
+              <li key={`r-${i}`}>
+                Recibido en {r.ubicacion}
+                {r.enOtraUbicacion ? " (otra ubicación)" : ""}: {r.productos.map((p) => `${p.cantidad} ${p.nombre} (${CONDICIONES[p.condicion]})`).join(", ")} · {r.usuario} ·{" "}
+                {fechaYHora(r.fecha)}
+                {r.nota && <span className="pedidos-evento-motivo">«{r.nota}»</span>}
+              </li>
+            ))}
+            {reembolsos.map((r, i) => (
+              <li key={`d-${i}`}>
+                Devuelto {formatMoney(r.importe)} con {etiquetaDelMedio(r.medio)}
+                {r.ubicacion ? ` desde ${r.ubicacion}` : " desde la cuenta de la empresa"} · {r.usuario} · {fechaYHora(r.fecha)}
+                {r.referencia && <span className="pedidos-evento-motivo">Referencia: {r.referencia}</span>}
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
+    </section>
+  )
 }
 
 // Lo que dice la historia de cada paso, con el cambio de ubicación cuando lo hubo.
@@ -54,14 +140,33 @@ function PrecioDelProducto({ producto }) {
   return null
 }
 
-function AccionesDelPedido({ pedido, operando, sinConexion, onFacturar, onRechazar, onReenviar, onFacturarEnOrigen }) {
+function AccionesDelPedido({ pedido, cancelacion, operando, sinConexion, onFacturar, onRechazar, onReenviar, onFacturarEnOrigen, onFormulario }) {
   if (!pedido) return null
 
   const ocupado = Boolean(operando) || sinConexion
   const bloqueado = Boolean(pedido.bloqueoPorLiquidacion)
+  const completar = pendientesQuePuedeCompletar(cancelacion)
 
   return (
     <>
+      {cancelacion?.puedeCancelar && (
+        <button type="button" className="btn btn-danger" disabled={ocupado || Boolean(cancelacion.bloqueoPorLiquidacion)} onClick={() => onFormulario("cancelar")}>
+          Cancelar pedido
+        </button>
+      )}
+
+      {completar.recibir && (
+        <button type="button" className="btn btn-secondary" disabled={ocupado} onClick={() => onFormulario("recibir")}>
+          Registrar productos recibidos
+        </button>
+      )}
+
+      {completar.reembolsar && (
+        <button type="button" className="btn btn-secondary" disabled={ocupado} onClick={() => onFormulario("reembolsar")}>
+          Registrar reembolso
+        </button>
+      )}
+
       {pedido.puedeRechazar && (
         <button type="button" className="btn btn-secondary" disabled={ocupado || bloqueado} onClick={onRechazar}>
           {operando === "rechazar" ? "Rechazando…" : "Rechazar"}
@@ -94,9 +199,25 @@ function AccionesDelPedido({ pedido, operando, sinConexion, onFacturar, onRechaz
   )
 }
 
-function DetalleDePedido({ pedido, cargando, error, operando, sinConexion, onFacturar, onRechazar, onReenviar, onFacturarEnOrigen, onCerrar }) {
+function DetalleDePedido({
+  pedido,
+  cancelacion = null,
+  cargando,
+  error,
+  operando,
+  sinConexion,
+  onFacturar,
+  onRechazar,
+  onReenviar,
+  onFacturarEnOrigen,
+  onFormulario = () => {},
+  onCerrar,
+}) {
   const titulo = pedido ? `Pedido ${pedido.numero}` : "Pedido"
-  const opera = Boolean(pedido && (pedido.puedeFacturar || pedido.puedeRechazar || pedido.puedeResolver))
+  const completar = pendientesQuePuedeCompletar(cancelacion)
+  const opera = Boolean(
+    pedido && (pedido.puedeFacturar || pedido.puedeRechazar || pedido.puedeResolver || cancelacion?.puedeCancelar || completar.recibir || completar.reembolsar)
+  )
 
   const acciones = (
     <>
@@ -106,6 +227,8 @@ function DetalleDePedido({ pedido, cargando, error, operando, sinConexion, onFac
 
       <AccionesDelPedido
         pedido={pedido}
+        cancelacion={cancelacion}
+        onFormulario={onFormulario}
         operando={operando}
         sinConexion={sinConexion}
         onFacturar={onFacturar}
@@ -148,6 +271,8 @@ function DetalleDePedido({ pedido, cargando, error, operando, sinConexion, onFac
               </p>
             )}
 
+            {cancelacion?.cancelacion && <SeccionDeCancelacion cancelacion={cancelacion} />}
+
             <dl className="pedidos-datos">
               {[
                 ["Estado", ESTADOS_DE_PEDIDO[pedido.estado] || pedido.estado],
@@ -159,7 +284,9 @@ function DetalleDePedido({ pedido, cargando, error, operando, sinConexion, onFac
                     ? `${pedido.destino} · ${pedido.numeroFactura} · ${fechaYHora(pedido.facturadoEn)}`
                     : pedido.estado === "por_resolver"
                       ? `Por decidir (lo rechazó ${pedido.destino})`
-                      : pedido.destino,
+                      : pedido.estado === "cancelado"
+                        ? `No se factura (iba a ${pedido.destino})`
+                        : pedido.destino,
                 ],
                 ["Forma de pago", pedido.formaPago === "credito" ? `Crédito${pedido.fechaVencimiento ? ` · vence ${pedido.fechaVencimiento}` : ""}` : "Contado"],
                 ["Nota", pedido.nota || "—"],
