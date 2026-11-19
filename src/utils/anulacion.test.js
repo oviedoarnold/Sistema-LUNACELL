@@ -71,10 +71,12 @@ describe("por qué no se puede anular", () => {
     expect(razonParaNoAnular(venta(), ADMIN, MISMO_DIA)).toBeNull()
   })
 
-  // 0045: su mercadería salió de otra ubicación; se anula en la etapa C.
-  it("la factura de un pedido interubicación no se anula con este procedimiento, ni por el administrador", () => {
-    expect(razonParaNoAnular(venta({ pedidoId: "ped-1" }), VENDEDOR, MISMO_DIA)).toMatch(/pedido entregado en otra ubicación/)
-    expect(razonParaNoAnular(venta({ pedidoId: "ped-1" }), ADMIN, MISMO_DIA)).toMatch(/pedido entregado en otra ubicación/)
+  // 0051 (C3): la factura de un pedido se anula con su propia función; la prima no la bloquea aquí, los abonos posteriores los revisa la base.
+  it("la factura de un pedido se puede anular, con las mismas reglas de día y de factura fiscal", () => {
+    expect(razonParaNoAnular(venta({ pedidoId: "ped-1" }), VENDEDOR, MISMO_DIA)).toBeNull()
+    expect(razonParaNoAnular(venta({ pedidoId: "ped-1", payments: [{ id: "prima", amount: 40 }] }), VENDEDOR, MISMO_DIA)).toBeNull()
+    expect(razonParaNoAnular(venta({ pedidoId: "ped-1", isFiscal: true }), ADMIN, MISMO_DIA)).toMatch(/fiscales/)
+    expect(razonParaNoAnular(venta({ payments: [{ id: "a1", amount: 40 }] }), ADMIN, MISMO_DIA)).toMatch(/abonos/)
   })
 
   it("una de conciliación solo la anula el administrador", () => {
