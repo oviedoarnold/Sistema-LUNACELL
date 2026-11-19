@@ -97,13 +97,13 @@ export function indicadoresDelReporte({ indicadores: i, moneda, medios }) {
     { id: "total-cobrado", etiqueta: "Total cobrado con cargos", valor: t.total_cobrado, tipo: "dinero" },
     { id: "abonos", etiqueta: "Abonos cobrados", valor: i.abonos_total, tipo: "dinero", detalle: `${cuantas(i.abonos_cantidad, "abono", "abonos")}, por la fecha del abono` },
     { id: "anuladas", etiqueta: "Anulaciones del día", valor: i.anuladas_total, tipo: "dinero", detalle: `${cuantas(i.anuladas_cantidad, "anulación", "anulaciones")}, fuera de las ventas; ${formatMoney(i.reembolsos_pendientes, moneda)} por reembolsar` },
-    // Solo si ese día hubo reembolsos de pedidos cancelados, o quedan pendientes (0049).
+    // Solo si ese día hubo reembolsos de pedidos cancelados o de devoluciones (0049, 0052), o quedan pendientes.
     ...(i.reembolsos_pagados === undefined
       ? []
       : [
-          { id: "reembolsos-pedidos", etiqueta: "Devuelto a clientes (pedidos cancelados)", valor: i.reembolsos_pagados, tipo: "dinero", detalle: `${cuantas(i.reembolsos_pagados_cantidad, "reembolso", "reembolsos")}; en efectivo ${formatMoney(i.reembolsos_pagados_efectivo, moneda)}, que bajó la caja de quien pagó` },
+          { id: "reembolsos-pedidos", etiqueta: "Devuelto a clientes (pedidos cancelados y devoluciones)", valor: i.reembolsos_pagados, tipo: "dinero", detalle: `${cuantas(i.reembolsos_pagados_cantidad, "reembolso", "reembolsos")}; en efectivo ${formatMoney(i.reembolsos_pagados_efectivo, moneda)}, que bajó la caja de quien pagó` },
           { id: "neto", etiqueta: "Total cobrado menos lo devuelto", valor: i.total_cobrado_neto, tipo: "dinero" },
-          { id: "reembolsos-pendientes-pedidos", etiqueta: "Por devolver a clientes", valor: i.reembolsos_de_pedidos_pendientes, tipo: "dinero", detalle: "De pedidos cancelados, al consultar. No baja ninguna caja hasta que se devuelve." },
+          { id: "reembolsos-pendientes-pedidos", etiqueta: "Por devolver a clientes", valor: i.reembolsos_de_pedidos_pendientes, tipo: "dinero", detalle: "De pedidos cancelados y de devoluciones de facturas, al consultar. No baja ninguna caja hasta que se devuelve." },
         ]),
   ]
 }
@@ -153,9 +153,10 @@ export function seccionesDelReporte(reporte) {
     },
     {
       id: "reembolsos-de-pedidos",
-      titulo: "Devoluciones a clientes de pedidos cancelados",
-      vacio: "No se devolvió dinero de pedidos cancelados este día.",
-      columnas: [texto("Fecha y hora"), texto("Pedido"), texto("Cliente"), texto("Medio de pago"), texto("Desde"), texto("Referencia"), dinero("Importe")],
+      titulo: "Devoluciones de dinero a clientes",
+      vacio: "No se devolvió dinero de pedidos cancelados ni de devoluciones este día.",
+      // Un pedido cancelado lleva el número del pedido; una devolución de factura (0052), el de la factura.
+      columnas: [texto("Fecha y hora"), texto("Pedido o factura"), texto("Cliente"), texto("Medio de pago"), texto("Desde"), texto("Referencia"), dinero("Importe")],
       filas: (reporte.reembolsos_de_pedidos ?? []).map((r) => ({
         clave: r.id,
         celdas: [fechaYHoraEnHonduras(r.fecha), r.pedido, r.cliente, etiquetaDelMedio(r.medio), r.ubicacion || "Cuenta de la empresa", r.referencia || "", r.importe],

@@ -138,6 +138,7 @@ sql_paths = [
   "./migrations/0049_cancelacion_pedidos_interubicacion.sql",
   "./migrations/0050_contraliquidaciones_entre_ubicaciones.sql",
   "./migrations/0051_anulacion_facturas_pedidos.sql",
+  "./migrations/0052_devoluciones_ventas_y_ajustes_credito.sql",
   "./seed.sql",
 ]
 

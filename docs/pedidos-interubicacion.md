@@ -187,7 +187,7 @@ Desde la etapa C1, «Resolver pedidos interubicación» permite resolver los ped
   - C2a (0049): cancelación antes de facturar, productos que vuelven y reembolsos. Hecho; ver arriba.
   - C2b (0050): obligaciones entre ubicaciones en ambos sentidos (contraliquidación), reembolsos desde terceras ubicaciones y cancelar con efectivo ya liquidado. Hecho; ver [liquidaciones-entre-ubicaciones.md](liquidaciones-entre-ubicaciones.md).
   - C3 (0051): anulación completa de la factura de un pedido. Hecho; ver «Anular la factura de un pedido».
-  - C4 y C5: devoluciones parciales con la factura vigente y ajustes de crédito (entre ellos, anular una factura con abonos registrados después de facturar).
+  - C4 y C5 (0052): devoluciones parciales o totales con la factura vigente y ajustes de crédito. Hecho; ver [devoluciones-de-ventas.md](devoluciones-de-ventas.md). El dinero de una devolución sale solo de la ubicación que facturó: no cambia ninguna obligación entre ubicaciones.
 - **Sin conexión**: los pedidos se crean, revisan, facturan, rechazan y resuelven solo con conexión. La venta sin conexión de siempre no cambió.
 
 ## Anular la factura de un pedido (etapa C3, 0051)
@@ -204,7 +204,7 @@ Una factura de pedido no se anula con `anular_venta()`, porque la mercadería sa
 Reglas (decisiones del propietario, 2026-11-19):
 
 - **Quién:** igual que `anular_venta()`. El administrador, siempre. El vendedor necesita «Historial de facturas» y «Anular ventas», en la ubicación que facturó, y solo el mismo día de la factura. Recibir y devolver después siguen las reglas de C2a.
-- **Abonos registrados después de facturar** (pagos del cliente repartidos por FIFO): no se anula (`AV005`); queda para los ajustes de crédito (C5). La prima cobrada en el pedido sí se admite.
+- **Abonos registrados después de facturar** (pagos del cliente repartidos por FIFO): no se anula (`AV005`); se usan las devoluciones de C4 y C5, que rebajan el saldo y dejan a favor el excedente. La prima cobrada en el pedido sí se admite.
 - **Facturas fiscales (CAI):** no se anulan (`AV004`). Falta definir con el contador su anulación o nota de crédito y el tratamiento del correlativo fiscal.
 - **Liquidación por confirmar:** no se anula (`PI013`); con una confirmada, sí.
 - **Una sola vez:** un reintento responde «ya_anulada» sin escribir nada. La clave es obligatoria.

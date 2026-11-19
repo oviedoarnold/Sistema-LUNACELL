@@ -14,11 +14,13 @@ import {
   esVentaAnulada,
   getSaleBalance,
   getSalePaid,
+  getSaleReturned,
   isCreditSale,
 } from "../utils/salesUtils"
 
 import { puedeVerAnular, razonParaNoAnular, textoDelTratamiento } from "../utils/anulacion"
 import AnularVentaModal from "../components/ventas/AnularVentaModal"
+import DevolucionModal from "../components/ventas/DevolucionModal"
 
 import { ProductContext } from "../context/contexts"
 
@@ -114,6 +116,14 @@ function SalesHistory() {
   }
 
   const [porAnular, setPorAnular] = useState(null)
+
+  /*
+    Devoluciones (0052): las mismas reglas de ubicación que anular, con
+    «Registrar devoluciones» en vez de «Anular ventas» y sin límite de día.
+    Una venta que ya tiene devoluciones las deja consultar a quien la ve.
+  */
+  const quienDevuelve = { ...quienAnula, puedeAnular: hasPermission(permissions.SALES_RETURN) }
+  const [porDevolver, setPorDevolver] = useState(null)
 
   const nombreDeUbicacion = (id) => obtenerUbicacionPorId?.(id)?.name || ""
 
@@ -540,6 +550,12 @@ function SalesHistory() {
                           "right",
                       }}
                     >
+                      {getSaleReturned(sale) > 0 && (
+                        <span className="sale-devuelto">
+                          Devuelto {formatMoney(getSaleReturned(sale), currency)}
+                        </span>
+                      )}
+
                       <div className="sale-total">
                         {formatMoney(
                           Number(sale.total) + Number(sale.cargo || 0),
@@ -614,6 +630,17 @@ function SalesHistory() {
                     >
                       Ver factura
                     </button>
+
+                    {(puedeVerAnular(sale, quienDevuelve) || (sale.devoluciones || []).length > 0) && (
+                      <button
+                        type="button"
+                        className="btn btn-secondary btn-sm"
+                        aria-label={`Devoluciones de ${sale.invoiceNumber}`}
+                        onClick={() => setPorDevolver(sale)}
+                      >
+                        Devoluciones
+                      </button>
+                    )}
 
                     {puedeVerAnular(sale, quienAnula) && (
                       <button
@@ -694,6 +721,15 @@ function SalesHistory() {
           razon={razonParaNoAnular(porAnular, quienAnula)}
           onCerrar={() => setPorAnular(null)}
           onAnulada={alAnular}
+        />
+      )}
+
+      {porDevolver && (
+        <DevolucionModal
+          venta={porDevolver}
+          moneda={currency}
+          onCerrar={() => setPorDevolver(null)}
+          onCambio={() => refrescarVentas?.().catch(() => {})}
         />
       )}
 

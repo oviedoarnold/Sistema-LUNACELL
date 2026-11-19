@@ -20,6 +20,13 @@ export const PERMISSIONS = {
     marcas, y la base lo comprueba en anular_venta(), no solo esta pantalla.
   */
   SALES_VOID: "sales-void",
+
+  /*
+    Registrar devoluciones de productos ya facturados (0052), en la ubicación
+    que facturó y sin límite de día. Nadie lo recibe solo y no se le ofrece al
+    contador; la base lo exige en registrar_devolucion_de_venta().
+  */
+  SALES_RETURN: "sales-return",
   LOCATIONS: "locations",
   SETTINGS: "settings",
 

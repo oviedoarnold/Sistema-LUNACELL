@@ -403,6 +403,13 @@ function Settings() {
     },
     {
       id:
+        permissions.SALES_RETURN,
+      label: "Registrar devoluciones",
+      description:
+        "Recibir en su ubicación productos de facturas que ella emitió, rebajar el crédito y reembolsar en efectivo lo que quede a favor del cliente. Se usa desde «Historial de facturas».",
+    },
+    {
+      id:
         permissions.LOCATIONS,
       label: "Ubicaciones",
       description:
