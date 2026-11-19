@@ -504,7 +504,16 @@ describe("venta en línea que se queda sin respuesta", () => {
     elegirEfectivo()
     fireEvent.click(screen.getByRole("button", { name: /generar factura/i }))
 
-    await waitFor(() => expect(Swal.fire).toHaveBeenCalledWith(expect.objectContaining({ title: "No hubo respuesta del servidor" })))
+    await waitFor(() =>
+      expect(Swal.fire).toHaveBeenCalledWith(
+        expect.objectContaining({
+          title: "No hubo respuesta del servidor",
+          denyButtonText: "Guardar sin conexión",
+          cancelButtonText: "Cerrar sin reintentar",
+          text: expect.stringContaining("Comprueba el historial antes de repetirla."),
+        })
+      )
+    )
     await waitFor(() => expect(screen.getByText("COMPROBANTE PROVISIONAL")).toBeInTheDocument())
 
     await devolverConexion()

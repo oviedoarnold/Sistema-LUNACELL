@@ -1,6 +1,6 @@
 import { useRef, useState } from "react"
 
-import { formatMoney } from "../../utils/format"
+import { fechaYHora, formatMoney } from "../../utils/format"
 import { supabase } from "../../lib/supabase"
 import { crearRescate } from "../../lib/api/ventasSinConexion"
 import { importarCifrado } from "../../lib/sinConexion/exportacion"
@@ -158,7 +158,7 @@ function RescateDeRespaldo({ enviar = crearRescate(supabase), alTerminar }) {
                 {ventas.map((venta, indice) => (
                   <tr key={`${venta?.clave}-${indice}`}>
                     <td>{venta?.numeroProvisional || "—"}</td>
-                    <td>{venta?.registradaEn ? new Date(venta.registradaEn).toLocaleString("es-HN") : "—"}</td>
+                    <td>{fechaYHora(venta?.registradaEn)}</td>
                     <td>{venta?.nombreCliente || "—"}</td>
                     <td className="r">{Number.isFinite(venta?.totalCobrado) ? formatMoney(venta.totalCobrado) : "—"}</td>
                     <td>{validarVentaDeRespaldo(venta) || "Lista para rescatar"}</td>

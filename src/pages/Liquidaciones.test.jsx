@@ -180,6 +180,30 @@ describe("Liquidaciones: los saldos", () => {
     expect(screen.queryByRole("button", { name: "Confirmar recepción" })).not.toBeInTheDocument()
   })
 
+  it("esperar confirmación no se pinta como un rechazo: ámbar, verde y rojo", async () => {
+    await renderLiquidaciones({
+      permisos: ["settlements-view"],
+      control: {
+        ...CONTROL,
+        liquidaciones: [
+          liquidacion(),
+          liquidacion({ id: "liq-2", numero: "LIQ-000002", estado: "confirmada" }),
+          liquidacion({ id: "liq-3", numero: "LIQ-000003", estado: "rechazada", motivo_rechazo: "Faltaron 20 lempiras" }),
+        ],
+      },
+    })
+
+    await screen.findByText("Bodega → Camión 01")
+    fireEvent.click(screen.getByRole("button", { name: "Historial" }))
+
+    const clase = (numero) => insignia(screen.getByText(numero).closest(".liquidaciones-tarjeta")).className
+
+    expect(clase("LIQ-000001")).toContain("badge-low")
+    expect(clase("LIQ-000002")).toContain("badge-paid")
+    expect(clase("LIQ-000003")).toContain("badge-out")
+    expect(clase("LIQ-000001")).not.toContain("badge-overdue")
+  })
+
   it("el contador consulta sin botones, aunque la base dijera que puede", async () => {
     await renderLiquidaciones({
       rol: "contador",

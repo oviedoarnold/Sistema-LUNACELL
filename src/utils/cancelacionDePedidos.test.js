@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest"
 
-import { inicial, leerFormulario, mediosQuePuedeDevolver, pendientesQuePuedeCompletar, resumen } from "./cancelacionDePedidos"
+import { cifrasDeCancelado, inicial, leerFormulario, mediosQuePuedeDevolver, pendientesQuePuedeCompletar, resumen } from "./cancelacionDePedidos"
 
 /*
   La lógica del formulario de cancelación (0049): qué se envía y cuándo no se
@@ -115,5 +115,50 @@ describe("pendientesQuePuedeCompletar", () => {
       pendientesQuePuedeCompletar(cancelacion({ puedeRegistrar: true, ubicacionesParaReembolsar: [], dinero: [{ medio: "tarjeta", total: 10, devuelto: 0, pendiente: 10 }] }))
     ).toEqual({ recibir: true, reembolsar: false })
     expect(pendientesQuePuedeCompletar(null)).toEqual({ recibir: false, reembolsar: false })
+  })
+})
+
+describe("cifrasDeCancelado: un pedido cancelado ya no debe nada", () => {
+  const conDinero = (dinero) => ({ cancelacion: { motivo: "x" }, dinero })
+
+  it("cancelado sin pago (PED-000007): nada recibido ni por devolver; el saldo de antes es solo historia", () => {
+    expect(cifrasDeCancelado({ total: 90, cobrado: 0, cargo: 0, saldo: 90 }, conDinero([]))).toEqual({
+      recibido: 0,
+      reembolsado: 0,
+      porReembolsar: 0,
+      saldoAntes: 90,
+      saldoVigente: 0,
+    })
+  })
+
+  it("cancelado con anticipo y reembolso (PED-000008): lo pagado, lo devuelto y saldo vigente cero", () => {
+    expect(
+      cifrasDeCancelado(
+        { total: 200, cobrado: 50, cargo: 0, saldo: 150 },
+        conDinero([{ medio: "efectivo", total: 50, devuelto: 50, pendiente: 0 }])
+      )
+    ).toEqual({ recibido: 50, reembolsado: 50, porReembolsar: 0, saldoAntes: 150, saldoVigente: 0 })
+  })
+
+  it("suma los medios con su cargo y lo que falta devolver, en centavos exactos", () => {
+    expect(
+      cifrasDeCancelado(
+        { total: 230, cobrado: 100.1, cargo: 1.36, saldo: 129.9 },
+        conDinero([
+          { medio: "efectivo", total: 20.1, devuelto: 20.1, pendiente: 0 },
+          { medio: "tarjeta", total: 81.36, devuelto: 0, pendiente: 81.36 },
+        ])
+      )
+    ).toEqual({ recibido: 101.46, reembolsado: 20.1, porReembolsar: 81.36, saldoAntes: 129.9, saldoVigente: 0 })
+  })
+
+  it("sin los datos de la cancelación, lo pagado sale del pedido y lo devuelto queda sin saber", () => {
+    expect(cifrasDeCancelado({ total: 230, cobrado: 80, cargo: 1.36, saldo: 150 }, null)).toEqual({
+      recibido: 81.36,
+      reembolsado: null,
+      porReembolsar: null,
+      saldoAntes: 150,
+      saldoVigente: 0,
+    })
   })
 })

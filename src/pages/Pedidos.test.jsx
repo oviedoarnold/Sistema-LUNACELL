@@ -187,6 +187,9 @@ describe("Pedidos: la bandeja", () => {
     fireEvent.change(screen.getByLabelText("Estado"), { target: { value: "facturado" } })
     await waitFor(() => expect(llamadas.bandeja.at(-1)).toEqual({ p_vista: "recibidos", p_estado: "facturado" }))
 
+    expect(within(screen.getByLabelText("Estado")).getByRole("option", { name: "Por resolver" })).toHaveValue("por_resolver")
+    expect(within(screen.getByLabelText("Estado")).queryByRole("option", { name: "Rechazados" })).not.toBeInTheDocument()
+
     fireEvent.change(screen.getByLabelText("Estado"), { target: { value: "por_resolver" } })
     await waitFor(() => expect(llamadas.bandeja.at(-1)).toEqual({ p_vista: "recibidos", p_estado: "por_resolver" }))
 
@@ -244,6 +247,7 @@ describe("Pedidos: la bandeja", () => {
       expect.objectContaining({
         title: "¿Facturar el pedido PED-000001?",
         text: expect.stringMatching(/^Total del pedido: L 230.00\. Pago recibido en Bodega: L 80.00\. Saldo pendiente del cliente: L 150.00\..*no se cobra otra vez/),
+        cancelButtonText: "Volver",
       })
     )
   })
@@ -414,7 +418,32 @@ describe("Pedidos: rechazar (etapa C1)", () => {
 
     await waitFor(() => expect(llamadas.rechazar).toHaveLength(2))
     expect(llamadas.rechazar[1].p_clave_idempotencia).toBe(llamadas.rechazar[0].p_clave_idempotencia)
-    expect(Swal.fire).toHaveBeenCalledWith(expect.objectContaining({ title: "No hubo respuesta del servidor" }))
+    expect(Swal.fire).toHaveBeenCalledWith(
+      expect.objectContaining({
+        title: "No hubo respuesta del servidor",
+        confirmButtonText: "Reintentar",
+        cancelButtonText: "Cerrar sin reintentar",
+        text: expect.stringMatching(/Reintentar es seguro.*La operación podría haberse registrado\. Comprueba el historial antes de repetirla\.$/),
+      })
+    )
+  })
+
+  it("sin respuesta, cerrar sin reintentar no vuelve a llamar", async () => {
+    const { llamadas, ventana } = await abrirElPedido({
+      rpcs: {
+        detalle: () => detalle({ puede_rechazar: true }),
+        rechazar: () => ({ data: null, error: { message: "Failed to fetch" }, status: 0 }),
+      },
+    })
+
+    Swal.fire.mockResolvedValueOnce({ isConfirmed: true, value: "Corresponde a Bodega" }).mockResolvedValueOnce({ isConfirmed: false, isDismissed: true })
+    fireEvent.click(within(ventana).getByRole("button", { name: "Rechazar" }))
+
+    await waitFor(() => expect(Swal.fire).toHaveBeenCalledWith(expect.objectContaining({ title: "No hubo respuesta del servidor" })))
+    await paso()
+
+    expect(llamadas.rechazar).toHaveLength(1)
+    expect(Swal.fire).not.toHaveBeenCalledWith(expect.objectContaining({ cancelButtonText: "Cancelar" }))
   })
 
   it("con efectivo en una liquidación registrada, lo explica y no deja rechazar", async () => {
@@ -736,6 +765,117 @@ describe("Pedidos: cancelar antes de facturar (etapa C2a)", () => {
         { p_pedido: "ped-1", p_medio: "efectivo", p_importe: 50, p_ubicacion: "camion-01", p_referencia: "", p_clave_idempotencia: expect.stringMatching(/-0$/) },
       ])
     )
+  })
+
+  /*
+    Los dos pedidos cancelados de producción, simulados: PED-000007 sin pago y
+    PED-000008 con anticipo de L 50 ya devuelto. Ninguno debe nada.
+  */
+  const ped07 = { pedido_id: "ped-7", numero: "PED-000007", estado: "cancelado", total: 90, cobrado: 0, saldo: 90 }
+  const ped08 = { pedido_id: "ped-8", numero: "PED-000008", estado: "cancelado", total: 200, cobrado: 50, saldo: 150 }
+  const cancelacionDe = (dinero, reembolsos = []) =>
+    sinCancelacion({
+      cancelacion: { motivo: "El cliente ya no lo quiere", usuario: "Encargado", fecha: "2026-11-17T15:00:00Z", principal: 50, cargo: 0 },
+      productos: [{ producto_id: "p1", nombre: "Cargador", entregado: 2, buen_estado: 2, danado: 0, pendiente: 0 }],
+      dinero,
+      reembolsos,
+    })
+  const detalleCancelado = (cambios) =>
+    detalle({
+      ...cambios,
+      cargo: 0,
+      tasa_cargo: null,
+      puede_facturar: false,
+      cobros: cambios.cobrado > 0 ? [{ medio: "efectivo", monto: cambios.cobrado, cargo: 0, tasa: null, referencia: "", ubicacion: "Bodega", fecha: "2026-11-16T15:00:00Z" }] : [],
+    })
+  const renglon = (ventana, texto) => within(ventana).getByText(texto).closest(".totals-row")
+
+  it("las tarjetas de pedidos cancelados no muestran saldo pendiente; las pendientes y facturadas siguen igual", async () => {
+    await renderPedidos({
+      rpcs: { bandeja: () => [fila(ped07), fila(ped08), fila(), fila({ pedido_id: "ped-6", numero: "PED-000006", estado: "facturado", numero_factura: "VTA-000006", cobrado: 230, saldo: 0 })] },
+    })
+
+    const t07 = await screen.findByRole("button", { name: "Abrir el pedido PED-000007 de Ferremax" })
+    const t08 = screen.getByRole("button", { name: "Abrir el pedido PED-000008 de Ferremax" })
+    const pendiente = screen.getByRole("button", { name: "Abrir el pedido PED-000001 de Ferremax" })
+    const facturado = screen.getByRole("button", { name: "Abrir el pedido PED-000006 de Ferremax" })
+
+    expect(within(t07).getByText("Cancelado")).toBeInTheDocument()
+    expect(within(t07).getByText("Sin pagos recibidos")).toBeInTheDocument()
+    expect(within(t07).getByText("Sin saldo por cobrar")).toBeInTheDocument()
+    expect(within(t07).queryByText(/Pendiente L/)).not.toBeInTheDocument()
+
+    expect(within(t08).getByText("Pagado antes de cancelar L 50.00 en Bodega")).toBeInTheDocument()
+    expect(within(t08).getByText("Sin saldo por cobrar")).toBeInTheDocument()
+    expect(within(t08).queryByText(/L 150.00/)).not.toBeInTheDocument()
+
+    expect(within(pendiente).getByText("Pendiente L 150.00")).toBeInTheDocument()
+    expect(within(facturado).queryByText(/Pendiente L|Sin saldo/)).not.toBeInTheDocument()
+    expect(within(facturado).getByText(/VTA-000006/)).toBeInTheDocument()
+  })
+
+  it("PED-000008: el detalle muestra lo pagado, lo devuelto y saldo vigente cero; el saldo de antes solo como historia", async () => {
+    await renderPedidos({
+      rpcs: {
+        bandeja: () => [fila(ped08)],
+        detalle: () => detalleCancelado(ped08),
+        cancelacion: () =>
+          cancelacionDe(
+            [{ medio: "efectivo", monto: 50, cargo: 0, total: 50, devuelto: 50, pendiente: 0 }],
+            [{ medio: "efectivo", importe: 50, ubicacion: "Bodega", referencia: "", usuario: "Encargado", fecha: "2026-11-17T16:00:00Z" }]
+          ),
+      },
+    })
+
+    fireEvent.click(await screen.findByRole("button", { name: "Abrir el pedido PED-000008 de Ferremax" }))
+    const ventana = await screen.findByRole("dialog", { name: "Pedido PED-000008" })
+    await within(ventana).findByRole("region", { name: "Cancelación" })
+
+    expect(renglon(ventana, "Total original")).toHaveTextContent("L 200.00")
+    expect(renglon(ventana, "Pagos recibidos antes de cancelar")).toHaveTextContent("L 50.00")
+    expect(renglon(ventana, "Reembolsado al cliente")).toHaveTextContent("L 50.00")
+    expect(renglon(ventana, "Reembolso pendiente")).toHaveTextContent("L 0.00")
+    expect(renglon(ventana, "Saldo original antes de cancelar")).toHaveTextContent("L 150.00")
+    expect(renglon(ventana, "Saldo vigente por cobrar")).toHaveTextContent("L 0.00")
+    expect(renglon(ventana, "Saldo vigente por cobrar")).toHaveClass("grand")
+
+    expect(within(ventana).queryByText("Saldo pendiente del cliente")).not.toBeInTheDocument()
+    expect(within(ventana).queryByText(/Pago parcial recibido/)).not.toBeInTheDocument()
+    expect(within(ventana).queryByText(/vence/)).not.toBeInTheDocument()
+    expect(within(ventana).getByText("Crédito")).toBeInTheDocument()
+    expect(within(ventana).getByText("Cancelado")).toBeInTheDocument()
+
+    // Lo cobrado y lo devuelto van en secciones con nombres distintos.
+    expect(within(ventana).getByRole("heading", { name: "Detalle de los pagos recibidos" })).toBeInTheDocument()
+    expect(within(ventana).getByRole("heading", { name: "Reembolsos al cliente" })).toBeInTheDocument()
+    expect(within(ventana).queryByRole("heading", { name: "Cobros recibidos en origen" })).not.toBeInTheDocument()
+  })
+
+  it("PED-000007: cancelado sin pago, saldo vigente cero y nada que devolver", async () => {
+    await renderPedidos({
+      rpcs: { bandeja: () => [fila(ped07)], detalle: () => detalleCancelado(ped07), cancelacion: () => cancelacionDe([]) },
+    })
+
+    fireEvent.click(await screen.findByRole("button", { name: "Abrir el pedido PED-000007 de Ferremax" }))
+    const ventana = await screen.findByRole("dialog", { name: "Pedido PED-000007" })
+    await within(ventana).findByRole("region", { name: "Cancelación" })
+
+    expect(renglon(ventana, "Total original")).toHaveTextContent("L 90.00")
+    expect(renglon(ventana, "Pagos recibidos antes de cancelar")).toHaveTextContent("L 0.00")
+    expect(renglon(ventana, "Reembolso pendiente")).toHaveTextContent("L 0.00")
+    expect(renglon(ventana, "Saldo original antes de cancelar")).toHaveTextContent("L 90.00")
+    expect(renglon(ventana, "Saldo vigente por cobrar")).toHaveTextContent("L 0.00")
+    expect(within(ventana).queryByText("Saldo pendiente del cliente")).not.toBeInTheDocument()
+    expect(within(ventana).queryByRole("heading", { name: "Detalle de los pagos recibidos" })).not.toBeInTheDocument()
+  })
+
+  it("un pedido pendiente sigue mostrando su saldo y su vencimiento", async () => {
+    const { ventana } = await abrirElPedido()
+
+    expect(renglon(ventana, "Total")).toHaveTextContent("L 230.00")
+    expect(renglon(ventana, "Saldo pendiente del cliente")).toHaveTextContent("L 150.00")
+    expect(within(ventana).getByText(/vence 2026-12-31/)).toBeInTheDocument()
+    expect(within(ventana).queryByText("Saldo vigente por cobrar")).not.toBeInTheDocument()
   })
 
   it("el filtro «Cancelados» pide los pedidos cancelados", async () => {

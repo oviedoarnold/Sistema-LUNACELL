@@ -3,7 +3,7 @@ import { FaCheckCircle, FaClock, FaExclamationCircle, FaSync, FaBalanceScale } f
 
 import ModalShell from "../forms/ModalShell"
 import StatusBadge from "../crud/StatusBadge"
-import { formatMoney } from "../../utils/format"
+import { fechaYHora, formatMoney } from "../../utils/format"
 import ModalDeRespaldo from "./ModalDeRespaldo"
 import { motivoDeConciliacion } from "../../lib/sinConexion/textos"
 
@@ -129,7 +129,7 @@ function PanelDeVentasLocales({ estado, onCerrar, onVerComprobante }) {
                 return (
                   <tr key={venta.clave}>
                     <td>{venta.numeroProvisional}</td>
-                    <td>{new Date(venta.registradaEn).toLocaleString("es-HN")}</td>
+                    <td>{fechaYHora(venta.registradaEn)}</td>
                     <td>{venta.nombreCliente}</td>
                     <td className="r">{formatMoney(venta.totalCobrado)}</td>
                     <td>

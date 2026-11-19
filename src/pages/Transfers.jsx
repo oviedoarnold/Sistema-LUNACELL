@@ -8,12 +8,14 @@ import { useAuth } from "../hooks/useAuth"
 import { useExistencias } from "../hooks/useExistencias"
 import { useTraslados } from "../hooks/useTraslados"
 import { registrarTraslado } from "../lib/api/traslados"
+import { fechaYHora } from "../utils/format"
 import { claveDeIdempotencia } from "../utils/ids"
 import EmptyState from "../components/crud/EmptyState"
 import PageHeader from "../components/crud/PageHeader"
 import FormField from "../components/forms/FormField"
 import DetalleDeTraslado from "../components/transfers/DetalleDeTraslado"
 import "../styles/transfers.css"
+import { CAMPO_DE_CANTIDAD } from "../utils/camposNumericos"
 
 /*
   Traslados de existencia entre ubicaciones.
@@ -29,15 +31,6 @@ import "../styles/transfers.css"
 let siguienteRenglon = 0
 
 const renglonVacio = () => ({ clave: ++siguienteRenglon, productId: "", qty: "" })
-
-const aFecha = (iso) =>
-  new Date(iso).toLocaleString("es-HN", {
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  })
 
 const ESTADOS = { aplicado: "Aplicado" }
 
@@ -220,7 +213,7 @@ function Transfers() {
 
     return {
       ...t,
-      fecha: aFecha(t.isoDate),
+      fecha: fechaYHora(t.isoDate),
       origen: nombreUbicacion(t.originId),
       destino: nombreUbicacion(t.destinationId),
       ruta: `${nombreUbicacion(t.originId)} → ${nombreUbicacion(t.destinationId)}`,
@@ -299,7 +292,7 @@ function Transfers() {
                 >
                   <input
                     id={`transfers-cantidad-${r.clave}`}
-                    type="number"
+                    type="number" {...CAMPO_DE_CANTIDAD}
                     min="1"
                     max={r.productId ? disponible(r.productId) : undefined}
                     step="1"

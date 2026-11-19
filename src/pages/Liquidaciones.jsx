@@ -38,16 +38,20 @@ const VISTAS = [
   { id: "historial", etiqueta: "Historial" },
 ]
 
+/*
+  Colores de estado: esperar una confirmación es normal (ámbar), confirmada o
+  liquidada es bueno (verde) y solo un rechazo va en rojo.
+*/
 const CLASE_DEL_PEDIDO = {
   pendiente: "badge badge-low",
   parcial: "badge badge-credit",
-  por_confirmar: "badge badge-overdue",
+  por_confirmar: "badge badge-low",
   liquidado: "badge badge-paid",
   sin_efectivo: "badge badge-neutral",
 }
 
 const CLASE_DE_LIQUIDACION = {
-  por_confirmar: "badge badge-overdue",
+  por_confirmar: "badge badge-low",
   confirmada: "badge badge-paid",
   rechazada: "badge badge-out",
 }
@@ -142,7 +146,7 @@ function Liquidaciones() {
         text: `Confirmas que ${liquidacion.destino} recibió ${formatMoney(liquidacion.monto)} de ${liquidacion.origen}.`,
         showCancelButton: true,
         confirmButtonText: "Confirmar recepción",
-        cancelButtonText: "Cancelar",
+        cancelButtonText: "Volver",
       })
 
       if (!respuesta.isConfirmed) return
@@ -156,7 +160,7 @@ function Liquidaciones() {
         inputValidator: (valor) => (valor?.trim().length >= 5 ? undefined : "Escribe el motivo (al menos 5 caracteres)."),
         showCancelButton: true,
         confirmButtonText: "Rechazar entrega",
-        cancelButtonText: "Cancelar",
+        cancelButtonText: "Volver",
       })
 
       if (!respuesta.isConfirmed) return

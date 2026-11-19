@@ -7,6 +7,7 @@ import { METODOS, registrarLiquidacion } from "../../lib/api/liquidaciones"
 import { useBloqueoDeActualizacion } from "../../hooks/useBloqueoDeActualizacion"
 import { formatMoney } from "../../utils/format"
 import { claveDeIdempotencia } from "../../utils/ids"
+import { CERRAR_SIN_REINTENTAR, textoSinRespuesta } from "../../utils/sinRespuesta"
 import { hoyEnHonduras } from "../../utils/reporteDiario"
 
 /*
@@ -83,10 +84,10 @@ function RegistrarEntrega({ par, pedidos, onCerrar, onRegistrada }) {
           const otraVez = await Swal.fire({
             icon: "warning",
             title: "No hubo respuesta del servidor",
-            text: "La entrega pudo haberse registrado o no. Reintentar es seguro: no se registra dos veces.",
+            text: textoSinRespuesta("La entrega pudo haberse registrado o no. Reintentar es seguro: no se registra dos veces."),
             showCancelButton: true,
             confirmButtonText: "Reintentar",
-            cancelButtonText: "Cancelar",
+            cancelButtonText: CERRAR_SIN_REINTENTAR,
           })
 
           if (!otraVez.isConfirmed) return

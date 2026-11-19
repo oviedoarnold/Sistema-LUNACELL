@@ -29,6 +29,7 @@ import {
   FISCAL_VACIO,
   getFiscalStatus,
 } from "../utils/fiscal"
+import { CAMPO_DE_CANTIDAD, CAMPO_DE_IMPORTE } from "../utils/camposNumericos"
 
 const EMPTY_USER_FORM = {
   id: null,
@@ -761,7 +762,7 @@ function Settings() {
       text: `${selectedUser.name} dejará de poder entrar con su contraseña actual y deberá cambiar la temporal al entrar.`,
       showCancelButton: true,
       confirmButtonText: "Sí, restablecer",
-      cancelButtonText: "Cancelar",
+      cancelButtonText: "Volver",
     })
 
     if (!respuesta.isConfirmed) return
@@ -912,7 +913,7 @@ function Settings() {
                 </label>
 
                 <input id="settings-tasa-isv"
-                  type="number"
+                  type="number" {...CAMPO_DE_IMPORTE}
                   name="taxRate"
                   min="0"
                   max="100"
@@ -1038,7 +1039,7 @@ function Settings() {
                   </label>
 
                   <input id="settings-rango-autorizado-desde"
-                    type="number"
+                    type="number" {...CAMPO_DE_CANTIDAD}
                     name="rangoDesde"
                     min="1"
                     placeholder="1"
@@ -1057,7 +1058,7 @@ function Settings() {
                   </label>
 
                   <input id="settings-rango-autorizado-hasta"
-                    type="number"
+                    type="number" {...CAMPO_DE_CANTIDAD}
                     name="rangoHasta"
                     min="1"
                     placeholder="5000"

@@ -29,6 +29,7 @@ import {
 } from "../lib/api/pedidos"
 import { fechaYHora, formatMoney } from "../utils/format"
 import { claveDeIdempotencia } from "../utils/ids"
+import { CERRAR_SIN_REINTENTAR, textoSinRespuesta } from "../utils/sinRespuesta"
 import "../styles/pedidos.css"
 
 /*
@@ -48,7 +49,7 @@ const VISTAS = [
 const FILTROS = [
   { id: "pendiente", etiqueta: "Pendientes" },
   { id: "facturado", etiqueta: "Facturados" },
-  { id: "por_resolver", etiqueta: "Rechazados" },
+  { id: "por_resolver", etiqueta: "Por resolver" },
   { id: "cancelado", etiqueta: "Cancelados" },
   { id: "todos", etiqueta: "Todos" },
 ]
@@ -91,10 +92,10 @@ async function conReintento(llamada, queSePudoHacer) {
       const otraVez = await Swal.fire({
         icon: "warning",
         title: "No hubo respuesta del servidor",
-        text: `${queSePudoHacer} Reintentar es seguro: el servidor no lo hace dos veces.`,
+        text: textoSinRespuesta(`${queSePudoHacer} Reintentar es seguro: el servidor no lo hace dos veces.`),
         showCancelButton: true,
         confirmButtonText: "Reintentar",
-        cancelButtonText: "Cancelar",
+        cancelButtonText: CERRAR_SIN_REINTENTAR,
       })
 
       if (!otraVez.isConfirmed) return null
@@ -266,7 +267,7 @@ function Pedidos() {
       text: textoDeLaConfirmacion(detalle),
       showCancelButton: true,
       confirmButtonText: "Facturar",
-      cancelButtonText: "Cancelar",
+      cancelButtonText: "Volver",
     })
 
     if (!confirmacion.isConfirmed) return
@@ -431,7 +432,8 @@ function Pedidos() {
 
       {sinConexion && (
         <p className="alert-banner" role="alert">
-          Sin conexión con el servidor. Los pedidos se revisan, se facturan, se rechazan y se resuelven con conexión.
+          Sin conexión con el servidor. Los pedidos se revisan, se facturan, se rechazan, se resuelven y se cancelan con conexión, y también
+          así se registran los productos devueltos y los reembolsos.
         </p>
       )}
 
@@ -494,7 +496,14 @@ function Pedidos() {
                     <span className="pedidos-cliente">{pedido.cliente}</span>
                     <span className="pos-importe">{formatMoney(pedido.total)}</span>
                   </span>
-                  {pedido.estado !== "facturado" && (
+                  {pedido.estado === "cancelado" && (
+                    // Cancelado: lo pagado es historia y ya no se le cobra nada al cliente.
+                    <span className="pedidos-tarjeta-fila pedidos-tarjeta-suave">
+                      <span>{pedido.cobrado > 0 ? `Pagado antes de cancelar ${formatMoney(pedido.cobrado)} en ${pedido.origen}` : "Sin pagos recibidos"}</span>
+                      <span>Sin saldo por cobrar</span>
+                    </span>
+                  )}
+                  {pedido.estado !== "facturado" && pedido.estado !== "cancelado" && (
                     <span className="pedidos-tarjeta-fila pedidos-tarjeta-suave">
                       <span>
                         Pagado {formatMoney(pedido.cobrado)}

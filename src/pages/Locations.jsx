@@ -171,7 +171,7 @@ function Locations() {
         text: "Dejará de estar disponible para nuevas operaciones. Su historial se conserva y puedes volver a activarla.",
         showCancelButton: true,
         confirmButtonText: "Sí, desactivar",
-        cancelButtonText: "Cancelar",
+        cancelButtonText: "Volver",
       })
 
       if (!result.isConfirmed) return

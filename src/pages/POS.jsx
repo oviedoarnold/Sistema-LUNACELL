@@ -51,6 +51,7 @@ import { esPrecioValido, necesitaMotivo, problemaDelPrecioNegociado } from "../u
 import PanelDeVentasLocales from "../components/sinConexion/PanelDeVentasLocales"
 import { useAuth } from "../hooks/useAuth"
 import { useSinConexion } from "../hooks/useSinConexion"
+import { CERRAR_SIN_REINTENTAR, textoSinRespuesta } from "../utils/sinRespuesta"
 
 import {
   formatMoney,
@@ -63,6 +64,7 @@ import {
   filterProductsBySearchText,
   hasEnoughStock,
 } from "../utils/cart"
+import { CAMPO_DE_CANTIDAD } from "../utils/camposNumericos"
 
 const ISV_POR_OMISION = 15
 
@@ -871,12 +873,14 @@ function POS() {
     const eleccion = await Swal.fire({
       icon: "warning",
       title: "No hubo respuesta del servidor",
-      text: "La venta pudo haberse registrado o no. Reintentar es seguro: esta misma venta no se duplica. Si sigues sin conexión, guárdala en este teléfono: antes de enviarla se comprobará si ya se había registrado.",
+      text: textoSinRespuesta(
+        "La venta pudo haberse registrado o no. Reintentar es seguro: esta misma venta no se duplica. Si sigues sin conexión, guárdala en este teléfono: antes de enviarla se comprobará si ya se había registrado."
+      ),
       showDenyButton: true,
       showCancelButton: true,
       confirmButtonText: "Reintentar",
       denyButtonText: "Guardar sin conexión",
-      cancelButtonText: "Cancelar",
+      cancelButtonText: CERRAR_SIN_REINTENTAR,
     })
 
     if (eleccion.isConfirmed) return "reintentar"
@@ -897,7 +901,7 @@ function POS() {
       text: `${nombreDeAqui || "Esta ubicación"} entrega ${unidades} ${unidades === 1 ? "unidad" : "unidades"} ahora y su inventario baja. ${destino.name} recibe el pedido y emite la factura.`,
       showCancelButton: true,
       confirmButtonText: "Entregar y enviar",
-      cancelButtonText: "Cancelar",
+      cancelButtonText: "Volver",
     })
 
     if (!confirmacion.isConfirmed) return null
@@ -934,10 +938,10 @@ function POS() {
           const otraVez = await Swal.fire({
             icon: "warning",
             title: "No hubo respuesta del servidor",
-            text: "El pedido pudo haberse registrado o no. Reintentar es seguro: no se descuenta dos veces.",
+            text: textoSinRespuesta("El pedido pudo haberse registrado o no. Reintentar es seguro: no se descuenta dos veces."),
             showCancelButton: true,
             confirmButtonText: "Reintentar",
-            cancelButtonText: "Cancelar",
+            cancelButtonText: CERRAR_SIN_REINTENTAR,
           })
 
           if (otraVez.isConfirmed) continue
@@ -1262,7 +1266,7 @@ function POS() {
                       </span>
 
                       <input
-                        type="number"
+                        type="number" {...CAMPO_DE_CANTIDAD}
                         className="qty-input"
                         min="1"
                         max={Math.max(available, 1)}

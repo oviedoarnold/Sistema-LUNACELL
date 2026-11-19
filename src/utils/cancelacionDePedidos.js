@@ -129,6 +129,26 @@ export function resumen(cancelacion, modo, datos) {
   return lineas
 }
 
+/*
+  Las cifras de un pedido cancelado, solo para mostrarlas: lo que el cliente
+  pagó antes de cancelar (con el cargo, que también se le devuelve), lo ya
+  devuelto, lo que falta devolver y el saldo que tenía antes de cancelar.
+  Nada se le cobra ya: el saldo vigente es cero. Sin los datos de la
+  cancelación, lo pagado sale del pedido y lo devuelto queda sin saber (null).
+*/
+export function cifrasDeCancelado(pedido, cancelacion) {
+  const suma = (campo) => (cancelacion?.dinero || []).reduce((n, d) => n + centavos(d[campo] || 0), 0) / 100
+  const conDinero = Boolean(cancelacion?.cancelacion)
+
+  return {
+    recibido: conDinero ? suma("total") : centavos((pedido.cobrado || 0) + (pedido.cargo || 0)) / 100,
+    reembolsado: conDinero ? suma("devuelto") : null,
+    porReembolsar: conDinero ? suma("pendiente") : null,
+    saldoAntes: Number(pedido.saldo) || 0,
+    saldoVigente: 0,
+  }
+}
+
 // Qué puede completar quien mira en un pedido cancelado.
 export function pendientesQuePuedeCompletar(cancelacion) {
   if (!cancelacion?.puedeRegistrar) return { recibir: false, reembolsar: false }

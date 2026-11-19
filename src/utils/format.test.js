@@ -5,6 +5,7 @@ import {
   toISODate,
   toISODateInDays,
   formatDateForDisplay,
+  fechaYHora,
   MONEDA_POR_DEFECTO,
 } from "./format"
 
@@ -74,6 +75,33 @@ describe("toISODateInDays", () => {
     toISODateInDays(45, original)
 
     expect(toISODate(original)).toBe("2026-08-28")
+  })
+})
+
+/*
+  El formato único de fecha y hora del sistema (historial, traslados,
+  conciliación, ventas sin conexión, pedidos): día/mes/año de cuatro
+  dígitos y hora sin segundos, en la hora local del instante guardado.
+*/
+describe("fechaYHora", () => {
+  it("usa día, mes y año de cuatro dígitos, con la hora sin segundos", () => {
+    const texto = fechaYHora("2026-11-16T15:04:59Z")
+
+    expect(texto).toMatch(/^\d{2}\/\d{2}\/\d{4}/)
+    expect(texto).toMatch(/\d{1,2}:\d{2}(\s?[ap]\.?\s?m\.?)?$/i)
+    expect(texto).not.toMatch(/:59/)
+  })
+
+  it("muestra el instante en la hora local, sin cambiarlo", () => {
+    const instante = "2026-11-16T15:04:00Z"
+    const local = new Date(instante)
+
+    expect(fechaYHora(instante)).toContain(String(local.getDate()).padStart(2, "0"))
+    expect(fechaYHora(instante)).toContain(String(local.getMinutes()).padStart(2, "0"))
+  })
+
+  it("sin fecha dice «—»", () => {
+    expect(fechaYHora(null)).toBe("—")
   })
 })
 

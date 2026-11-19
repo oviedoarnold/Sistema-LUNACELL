@@ -14,6 +14,7 @@ import {
   etiquetaDelCargo,
   textoDeTasas,
 } from "../../utils/mediosDePago"
+import { CAMPO_DE_IMPORTE } from "../../utils/camposNumericos"
 
 /*
   Cobrarle a un cliente.
@@ -167,7 +168,7 @@ function ModalDeCobro({
           <FormField etiqueta="Monto del abono" error={aviso || null}>
             <input
               id="cobro-monto"
-              type="number"
+              type="number" {...CAMPO_DE_IMPORTE}
               step="0.01"
               min="0"
               max={cuenta.deudaTotal}

@@ -20,10 +20,12 @@ import EmptyState from "../components/crud/EmptyState"
 import PageHeader from "../components/crud/PageHeader"
 import SearchInput from "../components/crud/SearchInput"
 import StatusBadge from "../components/crud/StatusBadge"
+import { formatMoney } from "../utils/format"
 import { coincideBusqueda } from "../utils/texto"
 import { traerCostosDeProductos } from "../lib/api/catalogos"
 import FormField from "../components/forms/FormField"
 import ModalShell from "../components/forms/ModalShell"
+import { CAMPO_DE_CANTIDAD, CAMPO_DE_IMPORTE } from "../utils/camposNumericos"
 
 /*
   Sin costPrice a propósito: el formulario solo lo lleva cuando quien
@@ -54,8 +56,6 @@ function useCostos(esAdmin) {
 
   return { costos: esAdmin ? costos : null, recargar }
 }
-
-const dinero = (valor) => `L ${Number(valor || 0).toFixed(2)}`
 
 function Products() {
   const {
@@ -121,7 +121,12 @@ function Products() {
     El estado sale del stock que ya trae el producto; la variante es solo
     el nombre del color con el que se pinta.
   */
-  const status = (p) => Number(p.stock) <= 0 ? ["Agotado", "out"] : Number(p.stock) <= Number(p.minStock ?? 5) ? ["Stock bajo", "low"] : ["Disponible", "ok"]
+  /*
+    El stock de esta pantalla es el TOTAL de todas las ubicaciones. Por eso no
+    se dice «Disponible»: un vendedor lo leería como lo que puede vender en la
+    suya, que se ve al facturar y en Inventario.
+  */
+  const status = (p) => Number(p.stock) <= 0 ? ["Agotado", "out"] : Number(p.stock) <= Number(p.minStock ?? 5) ? ["Stock bajo", "low"] : ["Con existencias", "ok"]
   // La ubicación operativa del usuario, si sigue activa; si no, que elija.
   const ubicacionPorOmision = () =>
     ubicacionesActivas.some((u) => u.id === user?.locationId) ? user.locationId : ""
@@ -221,7 +226,7 @@ function Products() {
 
   const remove = async (id) => {
     const p = products.find((x) => x.id === id)
-    const r = await Swal.fire({ title: `¿Eliminar "${p?.name || "producto"}"?`, icon: "warning", showCancelButton: true, confirmButtonText: "Sí, eliminar", cancelButtonText: "Cancelar" })
+    const r = await Swal.fire({ title: `¿Eliminar "${p?.name || "producto"}"?`, icon: "warning", showCancelButton: true, confirmButtonText: "Sí, eliminar", cancelButtonText: "Volver" })
     if (!r.isConfirmed) return
     try {
       await quitarProducto(id)
@@ -257,6 +262,8 @@ function Products() {
       />
     </div>
 
+    <p className="crud-nota">Stock total: la suma de todas las ubicaciones. Lo que se puede vender en tu ubicación se ve al facturar y en Inventario.</p>
+
     <div className="table-wrap">
       <table>
         <thead>
@@ -266,7 +273,7 @@ function Products() {
             <th scope="col">Código</th>
             <th scope="col" className="num">Precio</th>
             {isAdmin && <th scope="col" className="num">Costo</th>}
-            <th scope="col" className="num">Stock</th>
+            <th scope="col" className="num">Stock total</th>
             <th scope="col">Estado</th>
             {puedeAdministrar && <th></th>}
           </tr>
@@ -280,8 +287,8 @@ function Products() {
               <td className="celda-miniatura"><MiniaturaDeProducto url={p.imageUrl} nombre={p.name} /></td>
               <td><span className="product-name">{p.name}</span><span className="product-cat">{p.category}</span></td>
               <td><span className="celda-codigo">{p.code || "—"}</span></td>
-              <td className="num">{dinero(p.price)}</td>
-              {isAdmin && <td className="num celda-secundaria">{conCostos ? dinero(costos[p.id]) : "—"}</td>}
+              <td className="num">{formatMoney(p.price)}</td>
+              {isAdmin && <td className="num celda-secundaria">{conCostos ? formatMoney(costos[p.id]) : "—"}</td>}
               <td className="num">{p.stock} u.</td>
               <td><StatusBadge variante={variante}>{label}</StatusBadge></td>
               {puedeAdministrar && <td><div className="row-actions">
@@ -336,12 +343,12 @@ function Products() {
           </FormField>
 
           <FormField etiqueta="Precio de venta">
-            <input id="products-precio-de-venta" type="number" min="0" step="0.01" value={form.price} onChange={(e) => setForm({ ...form, price: e.target.value })} />
+            <input id="products-precio-de-venta" type="number" {...CAMPO_DE_IMPORTE} min="0" step="0.01" value={form.price} onChange={(e) => setForm({ ...form, price: e.target.value })} />
           </FormField>
 
           {"costPrice" in form && (
             <FormField etiqueta="Costo" ayuda="Confidencial: solo lo ven los administradores.">
-              <input id="products-costo" type="number" min="0" step="0.01" value={form.costPrice} onChange={(e) => setForm({ ...form, costPrice: e.target.value })} />
+              <input id="products-costo" type="number" {...CAMPO_DE_IMPORTE} min="0" step="0.01" value={form.costPrice} onChange={(e) => setForm({ ...form, costPrice: e.target.value })} />
             </FormField>
           )}
 
@@ -355,7 +362,7 @@ function Products() {
           <FormField etiqueta={form.id ? "Nueva existencia en esta ubicación" : "Existencia inicial"} ayuda={ayudaExistencia}>
             <input
               id="products-stock"
-              type="number"
+              type="number" {...CAMPO_DE_CANTIDAD}
               min="0"
               value={form.stock}
               placeholder={referencia === null ? "" : String(referencia)}
@@ -365,7 +372,7 @@ function Products() {
           </FormField>
 
           <FormField etiqueta="Stock mínimo" ayuda="Por debajo de esta cantidad el producto se marca como escaso.">
-            <input id="products-stock-minimo" type="number" min="0" value={form.minStock} onChange={(e) => setForm({ ...form, minStock: e.target.value })} />
+            <input id="products-stock-minimo" type="number" {...CAMPO_DE_CANTIDAD} min="0" value={form.minStock} onChange={(e) => setForm({ ...form, minStock: e.target.value })} />
           </FormField>
 
           <FormField etiqueta="Proveedor" ancho="full">

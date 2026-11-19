@@ -2,6 +2,7 @@ import { useEffect, useState } from "react"
 
 import { traerAuditoriaRescates } from "../../lib/api/conciliacion"
 import { RESULTADOS_DE_RESCATE } from "../../lib/sinConexion/textos"
+import { fechaYHora } from "../../utils/format"
 
 /*
   Cada intento de rescate queda en auditoria_rescates (0027): quién, cuándo,
@@ -58,7 +59,7 @@ function AuditoriaDeRescates({ traer = traerAuditoriaRescates, vuelta = 0 }) {
             <tbody>
               {carga.lista.map((fila) => (
                 <tr key={fila.id}>
-                  <td>{new Date(fila.creadoEn).toLocaleString("es-HN")}</td>
+                  <td>{fechaYHora(fila.creadoEn)}</td>
                   <td>{fila.lote || "—"}</td>
                   <td>{fila.dispositivo || "—"}</td>
                   <td>{RESULTADOS_DE_RESCATE[fila.resultado] || fila.resultado}</td>
