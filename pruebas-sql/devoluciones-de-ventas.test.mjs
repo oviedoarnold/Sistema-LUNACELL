@@ -8,7 +8,7 @@
 import { randomUUID } from "node:crypto"
 import { describe, it, expect } from "vitest"
 
-import { enDosSesiones } from "./arnes.mjs"
+import { comoUsuario, enDosSesiones, esperarBloqueo } from "./arnes.mjs"
 import { usarBaseDePrueba, num, falla, empresaConTresUbicaciones } from "./ayudantes.mjs"
 import { crearEmpresa, crearVendedor, deudaDe, contar } from "./fixtures.mjs"
 
@@ -373,5 +373,173 @@ describe("seguridad, reintentos y reportes", () => {
 
     expect(num(despues.indicadores.ventas_total)).toBe(num(antes.indicadores.ventas_total) + 1000)
     expect(num(despues.indicadores.reembolsos_de_pedidos_pendientes)).toBe(200)
+  })
+})
+
+/*
+  Una devolución a crédito y un abono del mismo cliente a la vez. Para que el
+  cruce sea real y no dependa del orden en que Node manda las consultas, la
+  devolución se detiene justo antes de registrar (un candado consultivo en un
+  disparador de prueba), con todos sus candados tomados; la otra operación no
+  sale hasta que PostgreSQL diga que está esperando un candado, y entonces se
+  suelta la devolución. Con el orden de candados al revés (la factura antes que
+  el cliente), este cruce termina en un deadlock (40P01).
+*/
+const PAUSA = 4052
+
+async function devolucionDetenida(e, { venta, productos, otra }) {
+  const a = await base.conectar()
+  const b = await base.conectar()
+
+  await db.query(`create or replace function public.pausa_de_prueba() returns trigger language plpgsql as $$
+                   begin perform pg_advisory_xact_lock(${PAUSA}); return new; end $$`)
+  await db.query("create trigger pausa_de_prueba before insert on public.devoluciones_de_venta for each row execute function public.pausa_de_prueba()")
+  await db.query("select pg_advisory_lock($1)", [PAUSA])
+
+  try {
+    await comoUsuario(a, e.devuelveBodega.authId)
+    await comoUsuario(b, e.admin.authId)
+    const [pidA, pidB] = await Promise.all([a, b].map(async (c) => (await c.query("select pg_backend_pid() as pid")).rows[0].pid))
+
+    await a.query("begin")
+    await b.query("begin")
+
+    const resultado = (promesa) => promesa.then((r) => ({ r: r.rows[0].r }), (error) => ({ error }))
+    const deA = resultado(
+      a.query("select public.registrar_devolucion_de_venta($1, 'Lo devolvió', $2::jsonb, null, $3) as r", [
+        venta,
+        JSON.stringify(productos.map(([producto_id, cantidad]) => ({ producto_id, cantidad, condicion: "buen_estado" }))),
+        randomUUID(),
+      ])
+    )
+
+    await esperarBloqueo(db, pidA)
+    const deB = resultado(otra(b))
+
+    await esperarBloqueo(db, pidB)
+    await db.query("select pg_advisory_unlock($1)", [PAUSA])
+
+    const devolucion = await deA
+    await a.query(devolucion.error ? "rollback" : "commit")
+    const pago = await deB
+    await b.query(pago.error ? "rollback" : "commit")
+
+    return { devolucion, pago }
+  } finally {
+    await db.query("select pg_advisory_unlock_all()")
+    await db.query("drop trigger if exists pausa_de_prueba on public.devoluciones_de_venta")
+    await db.query("drop function if exists public.pausa_de_prueba()")
+    await a.end()
+    await b.end()
+  }
+}
+
+const pagoEnSesion = (e, monto) => (c) => c.query("select registrar_pago_cliente($1, $2, $3) as r", [e.cliente, monto, randomUUID()])
+
+/*
+  La cuenta del cliente después del cruce: cada factura sin saldo negativo,
+  los pagos encadenados (cada uno parte del saldo en que dejó la cuenta el
+  anterior, sea ajuste o dinero) y el último deja la deuda real. Los ajustes
+  no entran en lo cobrado del día.
+*/
+async function cuentaCoherente(e) {
+  const facturas = (
+    await db.query("select v.total - coalesce((select sum(a.monto) from abonos a where a.venta_id = v.id), 0) as saldo from ventas v where v.cliente_id = $1", [e.cliente])
+  ).rows
+  const pagos = (await db.query("select estado, monto, saldo_anterior, saldo_posterior from pagos where cliente_id = $1 order by saldo_anterior desc", [e.cliente])).rows.map(
+    (g) => ({ estado: g.estado, monto: num(g.monto), antes: num(g.saldo_anterior), despues: num(g.saldo_posterior) })
+  )
+  const deuda = await deudaDe(db, e.cliente)
+
+  expect(facturas.every((f) => num(f.saldo) >= 0)).toBe(true)
+  pagos.forEach((g, i) => {
+    expect(g.despues).toBe(Math.round((g.antes - g.monto) * 100) / 100)
+    if (i > 0) expect(g.antes).toBe(pagos[i - 1].despues)
+  })
+  expect(pagos.at(-1).despues).toBe(deuda)
+
+  const reales = pagos.filter((g) => g.estado === "aplicado").reduce((n, g) => n + g.monto, 0)
+  expect(num((await diario(e)).indicadores.abonos_total)).toBe(reales)
+
+  return { pagos, deuda }
+}
+
+const devolucionEnSesion = (venta, productos) => (c) =>
+  c.query("select public.registrar_devolucion_de_venta($1, 'Lo devolvió', $2::jsonb, null, $3) as r", [
+    venta,
+    JSON.stringify(productos.map((producto_id) => ({ producto_id, cantidad: 1, condicion: "buen_estado" }))),
+    randomUUID(),
+  ])
+
+describe("concurrencia entre devoluciones a crédito y abonos del cliente", () => {
+  it("A. la devolución empieza antes que el abono: el abono espera, sin deadlock, y abona sobre el saldo ya rebajado", async () => {
+    const e = await escenario()
+    const v = await vender(e, { forma: "credito" })
+
+    const { devolucion, pago } = await devolucionDetenida(e, { venta: v.venta_id, productos: [[e.B, 1]], otra: pagoEnSesion(e, 500) })
+
+    expect(devolucion.error).toBeUndefined()
+    expect(pago.error).toBeUndefined()
+    expect([num(devolucion.r.ajuste_credito), num(devolucion.r.a_favor)]).toEqual([300, 0])
+    expect((await cuentaCoherente(e)).pagos).toEqual([
+      { estado: "ajuste", monto: 300, antes: 1000, despues: 700 },
+      { estado: "aplicado", monto: 500, antes: 700, despues: 200 },
+    ])
+    expect(await contar(db, "abonos", "venta_id = $1", [v.venta_id])).toBe(2)
+  })
+
+  it("B. el abono empieza antes que la devolución: la devolución espera y ajusta solo el saldo que quedó; el resto, a favor", async () => {
+    const e = await escenario()
+    const v = await vender(e, { forma: "credito" })
+
+    const r = await enDosSesiones(base, db, {
+      primera: { authId: e.admin.authId, hacer: pagoEnSesion(e, 800) },
+      segunda: { authId: e.devuelveBodega.authId, hacer: devolucionEnSesion(v.venta_id, [e.B]) },
+    })
+
+    expect(r.error).toBeUndefined()
+    expect([num(r.respuesta.rows[0].r.ajuste_credito), num(r.respuesta.rows[0].r.a_favor)]).toEqual([200, 100])
+    expect((await cuentaCoherente(e)).pagos).toEqual([
+      { estado: "aplicado", monto: 800, antes: 1000, despues: 200 },
+      { estado: "ajuste", monto: 200, antes: 200, despues: 0 },
+    ])
+    expect((await laVenta(v.venta_id)).estado).toBe("pagada")
+    expect(await dinero(e, v.venta_id)).toMatchObject({ saldo: 0, a_favor: 100, pendiente: 100 })
+  })
+
+  it("C. devolución en una factura mientras se abona otra del mismo cliente: sin deadlock, el abono va por FIFO a la más vieja", async () => {
+    const e = await escenario()
+    const vieja = await vender(e, { forma: "credito", items: [[e.A, 1]] })
+    const nueva = await vender(e, { forma: "credito", items: [[e.B, 1], [e.C, 1]] })
+
+    const { devolucion, pago } = await devolucionDetenida(e, { venta: nueva.venta_id, productos: [[e.C, 1]], otra: pagoEnSesion(e, 200) })
+
+    expect(devolucion.error).toBeUndefined()
+    expect(pago.error).toBeUndefined()
+    expect(pago.r.aplicaciones.map((x) => [x.venta_id, num(x.monto_aplicado)])).toEqual([[vieja.venta_id, 200]])
+    expect((await cuentaCoherente(e)).deuda).toBe(300)
+    expect(await dinero(e, nueva.venta_id)).toMatchObject({ saldo: 300, a_favor: 0 })
+    expect((await laVenta(vieja.venta_id)).estado).toBe("pagada")
+  })
+
+  it("D. dos devoluciones de la misma factura a crédito: se ordenan, cada una ajusta lo suyo y ninguna pasa de lo vendido", async () => {
+    const e = await escenario()
+    const v = await vender(e, { forma: "credito" })
+    const dos = (primera, segunda) =>
+      enDosSesiones(base, db, {
+        primera: { authId: e.devuelveBodega.authId, hacer: devolucionEnSesion(v.venta_id, primera) },
+        segunda: { authId: e.admin.authId, hacer: devolucionEnSesion(v.venta_id, segunda) },
+      })
+
+    expect((await dos([e.A], [e.B])).error).toBeUndefined()
+    expect((await dos([e.C], [e.C, e.A])).error?.code).toBe("DV005")
+
+    expect((await cuentaCoherente(e)).pagos.map((g) => [g.estado, g.monto])).toEqual([
+      ["ajuste", 200],
+      ["ajuste", 300],
+      ["ajuste", 500],
+    ])
+    expect(await contar(db, "devoluciones_de_venta", "venta_id = $1", [v.venta_id])).toBe(3)
+    expect(await dinero(e, v.venta_id)).toMatchObject({ devuelto: 1000, saldo: 0, a_favor: 0 })
   })
 })

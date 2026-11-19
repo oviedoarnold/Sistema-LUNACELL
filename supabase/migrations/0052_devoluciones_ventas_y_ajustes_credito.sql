@@ -297,7 +297,21 @@ begin
   return v_usuario;
 end $$;
 
--- La venta de la empresa, bloqueada (la misma fila que bloquean cobrar y anular), y que se pueda devolver. Pieza interna.
+/*
+  La venta de la empresa, bloqueada (la misma fila que bloquean cobrar y
+  anular), y que se pueda devolver. Pieza interna.
+
+  A crédito, en el mismo orden que registrar_pago_cliente(): primero la cuenta
+  del cliente y sus facturas a crédito, después esta. Al revés, un abono que ya
+  tiene al cliente y espera esta factura, y una devolución que tiene la factura
+  y espera al cliente (la llave foránea de su pago de ajuste), se bloquean entre
+  sí. Sobre el cliente basta FOR KEY SHARE: choca con el FOR UPDATE de los
+  abonos, que esperan o hacen esperar, pero no con las ventas nuevas del
+  cliente, que piden lo mismo. Las facturas van en orden de id, para que dos
+  devoluciones del mismo cliente se esperen sin cruzarse. Con todo bloqueado,
+  la venta se vuelve a leer: la deuda y el saldo que se calculan después son
+  los de un estado que nadie más puede cambiar hasta confirmar.
+*/
 create or replace function public.tomar_venta_para_devolver(p_venta uuid)
 returns public.ventas
 language plpgsql
@@ -305,12 +319,32 @@ security definer
 set search_path = ''
 as $$
 declare
-  v_venta public.ventas;
+  v_venta   public.ventas;
+  v_cliente uuid;
 begin
+  select v.cliente_id into v_cliente
+    from public.ventas v
+   where v.id = p_venta and v.empresa_id = public.empresa_del_usuario() and v.forma_pago = 'credito';
+
+  if v_cliente is not null then
+    perform 1 from public.clientes c where c.id = v_cliente for key share;
+
+    perform 1
+       from public.ventas v
+      where v.empresa_id = public.empresa_del_usuario() and v.cliente_id = v_cliente and v.forma_pago = 'credito' and v.estado <> 'anulada'
+      order by v.id
+        for update;
+  end if;
+
   select v.* into v_venta from public.ventas v where v.id = p_venta and v.empresa_id = public.empresa_del_usuario() for update;
 
   if v_venta.id is null then
     raise exception 'La venta no existe en tu empresa' using errcode = 'DV002';
+  end if;
+
+  -- El cliente de una factura no cambia; si no es el que se bloqueó, mejor no seguir.
+  if v_venta.forma_pago = 'credito' and v_venta.cliente_id is distinct from v_cliente then
+    raise exception 'La venta % cambió mientras se revisaba: vuelve a intentarlo', v_venta.numero_factura using errcode = '40001';
   end if;
 
   if v_venta.estado = 'anulada' then
