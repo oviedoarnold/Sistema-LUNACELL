@@ -186,9 +186,28 @@ Desde la etapa C1, «Resolver pedidos interubicación» permite resolver los ped
   - C1 (0048): rechazo y resolución antes de facturar. Hecho; ver arriba.
   - C2a (0049): cancelación antes de facturar, productos que vuelven y reembolsos. Hecho; ver arriba.
   - C2b (0050): obligaciones entre ubicaciones en ambos sentidos (contraliquidación), reembolsos desde terceras ubicaciones y cancelar con efectivo ya liquidado. Hecho; ver [liquidaciones-entre-ubicaciones.md](liquidaciones-entre-ubicaciones.md).
-  - C3 y siguientes: anulación de facturas de pedido, devoluciones después de facturar y ajustes de crédito.
-  - Una factura de pedido no se anula con la anulación actual: `anular_venta()` la rechaza y la pantalla explica por qué.
+  - C3 (0051): anulación completa de la factura de un pedido. Hecho; ver «Anular la factura de un pedido».
+  - C4 y C5: devoluciones parciales con la factura vigente y ajustes de crédito (entre ellos, anular una factura con abonos registrados después de facturar).
 - **Sin conexión**: los pedidos se crean, revisan, facturan, rechazan y resuelven solo con conexión. La venta sin conexión de siempre no cambió.
+
+## Anular la factura de un pedido (etapa C3, 0051)
+
+Una factura de pedido no se anula con `anular_venta()`, porque la mercadería salió del origen y no de la ubicación que facturó. Se anula con `anular_factura_de_pedido(venta, motivo, clave)`, desde el mismo botón **Anular** del Historial.
+
+- **La factura** queda «Anulada», con su registro inmutable en `anulaciones_venta` (tratamiento del dinero «pedido»). Conserva su número, sus productos y sus pagos, y deja de contar como venta y como deuda.
+- **El pedido** queda «Cancelado», con su registro en `cancelaciones_de_pedido` (estado anterior «facturado»). Desde ahí se usa lo mismo que en C2a y C2b:
+  - los productos que devuelva el cliente se reciben donde de verdad vuelvan;
+  - lo cobrado en el pedido (el contado o la prima) queda por devolver y se devuelve en una o varias entregas;
+  - las obligaciones entre ubicaciones salen de dónde quedó el efectivo, también con liquidaciones ya confirmadas.
+- **Anular no mueve inventario ni registra reembolsos** por su cuenta: la mercadería no vuelve sola a ninguna ubicación.
+
+Reglas (decisiones del propietario, 2026-11-19):
+
+- **Quién:** igual que `anular_venta()`. El administrador, siempre. El vendedor necesita «Historial de facturas» y «Anular ventas», en la ubicación que facturó, y solo el mismo día de la factura. Recibir y devolver después siguen las reglas de C2a.
+- **Abonos registrados después de facturar** (pagos del cliente repartidos por FIFO): no se anula (`AV005`); queda para los ajustes de crédito (C5). La prima cobrada en el pedido sí se admite.
+- **Facturas fiscales (CAI):** no se anulan (`AV004`). Falta definir con el contador su anulación o nota de crédito y el tratamiento del correlativo fiscal.
+- **Liquidación por confirmar:** no se anula (`PI013`); con una confirmada, sí.
+- **Una sola vez:** un reintento responde «ya_anulada» sin escribir nada. La clave es obligatoria.
 
 ## Errores
 

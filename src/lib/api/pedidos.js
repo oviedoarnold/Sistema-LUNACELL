@@ -247,6 +247,8 @@ const aCancelacionDeApp = (fila) => ({
         fecha: fila.cancelacion.fecha,
         principal: numero(fila.cancelacion.principal),
         cargo: numero(fila.cancelacion.cargo),
+        // «facturado»: se canceló al anular su factura (0051).
+        estadoAnterior: fila.cancelacion.estado_anterior || "",
       }
     : null,
   productos: (fila.productos || []).map((p) => ({

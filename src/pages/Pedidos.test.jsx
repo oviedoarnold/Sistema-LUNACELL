@@ -958,6 +958,22 @@ describe("Pedidos: cancelar antes de facturar (etapa C2a)", () => {
     expect(seccion).toHaveTextContent("Devuelto L 400.00 con Efectivo desde Camión 02 (otra ubicación)")
   })
 
+  it("C3: un pedido cancelado por la anulación de su factura lo dice, y muestra la factura como anulada", async () => {
+    const { ventana } = await abrirElPedido({
+      rpcs: {
+        detalle: () => detalle({ estado: "cancelado", puede_facturar: false, numero_factura: "VTA-000042", facturado_en: "2026-11-19T15:00:00Z" }),
+        cancelacion: () =>
+          canceladoC2b({
+            cancelacion: { motivo: "El cliente devolvió todo", usuario: "Administrador", fecha: "2026-11-19T16:00:00Z", principal: 80, cargo: 0, estado_anterior: "facturado" },
+          }),
+      },
+    })
+
+    expect(within(ventana).getByRole("region", { name: "Cancelación" })).toHaveTextContent("Factura anulada: pedido cancelado")
+    expect(within(ventana).getByText(/VTA-000042 \(anulada\)/)).toBeInTheDocument()
+    expect(within(ventana).getByText("Saldo vigente por cobrar").closest(".totals-row")).toHaveTextContent("L 0.00")
+  })
+
   it("el filtro «Cancelados» pide los pedidos cancelados", async () => {
     const { llamadas } = await renderPedidos()
 

@@ -44,7 +44,7 @@ function SeccionDeCancelacion({ cancelacion }) {
   return (
     <section className="pedidos-cancelacion" aria-label="Cancelación">
       <div className="pedidos-rechazo">
-        <b>Pedido cancelado</b>
+        <b>{c.estadoAnterior === "facturado" ? "Factura anulada: pedido cancelado" : "Pedido cancelado"}</b>
         <span>«{c.motivo}»</span>
         <small>
           {c.usuario} · {fechaYHora(c.fecha)}
@@ -354,7 +354,7 @@ function DetalleDePedido({
                 [
                   "Factura",
                   pedido.numeroFactura
-                    ? `${pedido.destino} · ${pedido.numeroFactura} · ${fechaYHora(pedido.facturadoEn)}`
+                    ? `${pedido.destino} · ${pedido.numeroFactura}${cancelado ? " (anulada)" : ""} · ${fechaYHora(pedido.facturadoEn)}`
                     : pedido.estado === "por_resolver"
                       ? `Por decidir (lo rechazó ${pedido.destino})`
                       : pedido.estado === "cancelado"

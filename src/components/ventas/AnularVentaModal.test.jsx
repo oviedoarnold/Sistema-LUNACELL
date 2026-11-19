@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
-import { render, screen, fireEvent, waitFor } from "@testing-library/react"
+import { cleanup, render, screen, fireEvent, waitFor } from "@testing-library/react"
 
 /*
   La confirmación de una anulación: qué se ve antes de confirmar, el motivo
@@ -8,9 +8,9 @@ import { render, screen, fireEvent, waitFor } from "@testing-library/react"
   pruebas-sql/anulacion-de-ventas.test.mjs.
 */
 
-vi.mock("../../lib/api/ventas", () => ({ anularVenta: vi.fn() }))
+vi.mock("../../lib/api/ventas", () => ({ anularVenta: vi.fn(), anularFacturaDePedido: vi.fn() }))
 
-const { anularVenta } = await import("../../lib/api/ventas")
+const { anularVenta, anularFacturaDePedido } = await import("../../lib/api/ventas")
 const { default: AnularVentaModal } = await import("./AnularVentaModal")
 
 const contado = {
@@ -140,5 +140,45 @@ describe("al confirmar", () => {
     expect(anularVenta).toHaveBeenCalledTimes(1)
 
     terminar({ estado: "anulada" })
+  })
+})
+
+describe("la factura de un pedido (etapa C3)", () => {
+  const dePedido = { ...contado, id: "v-3", invoiceNumber: "VTA-000011", pedidoId: "ped-9" }
+
+  it("no ofrece qué hacer con el dinero ni dice que la mercadería vuelve sola", () => {
+    abrir()
+    expect(screen.getByRole("group", { name: /qué pasa con el dinero/i })).toBeInTheDocument()
+    cleanup()
+
+    abrir({ venta: dePedido })
+
+    expect(screen.queryByRole("group", { name: /qué pasa con el dinero/i })).not.toBeInTheDocument()
+    expect(screen.getByText(/se conserva y no se vuelve a usar/)).toHaveTextContent("su pedido queda cancelado y la mercadería no regresa sola")
+    expect(screen.getByText(/se conserva y no se vuelve a usar/)).not.toHaveTextContent("Las existencias regresan")
+    expect(screen.getByRole("button", { name: "Anular factura" })).toBeDisabled()
+  })
+
+  it("anula con la función de facturas de pedido, con el motivo y la clave de la venta", async () => {
+    anularFacturaDePedido.mockResolvedValue({ estado: "anulada", numero_factura: "VTA-000011", pedido: "PED-000009" })
+    const { onAnulada } = abrir({ venta: dePedido })
+
+    fireEvent.change(motivo(), { target: { value: "  El cliente devolvió todo  " } })
+    fireEvent.click(screen.getByRole("button", { name: "Anular factura" }))
+
+    await waitFor(() => expect(onAnulada).toHaveBeenCalledWith({ estado: "anulada", numero_factura: "VTA-000011", pedido: "PED-000009" }))
+    expect(anularFacturaDePedido).toHaveBeenCalledWith("v-3", { motivo: "El cliente devolvió todo", clave: "anular-v-3" })
+    expect(anularVenta).not.toHaveBeenCalled()
+  })
+
+  it("si la base la rechaza (abonos después de facturar), lo dice y no cierra", async () => {
+    anularFacturaDePedido.mockRejectedValue(Object.assign(new Error("Esta factura tiene abonos registrados después de facturar"), { motivo: "otro" }))
+    const { onAnulada } = abrir({ venta: dePedido })
+
+    fireEvent.change(motivo(), { target: { value: "El cliente devolvió todo" } })
+    fireEvent.click(screen.getByRole("button", { name: "Anular factura" }))
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("abonos registrados después de facturar")
+    expect(onAnulada).not.toHaveBeenCalled()
   })
 })

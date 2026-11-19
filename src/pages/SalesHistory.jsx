@@ -124,7 +124,9 @@ function SalesHistory() {
     Swal.fire({
       icon: "success",
       title: respuesta?.estado === "ya_anulada" ? "La venta ya estaba anulada" : "Venta anulada",
-      text: `${respuesta?.numero_factura || ""} conserva su número. Las existencias regresaron a su ubicación.`,
+      text: respuesta?.pedido
+        ? `${respuesta.numero_factura} conserva su número. El pedido ${respuesta.pedido} quedó cancelado: registra allí los productos que devuelva el cliente y el dinero que se le devuelva.`
+        : `${respuesta?.numero_factura || ""} conserva su número. Las existencias regresaron a su ubicación.`,
     })
   }
 
@@ -512,7 +514,7 @@ function SalesHistory() {
                           {sale.anulacion.usuarioRol === "admin" ? " (administrador)" : " (vendedor)"}
                           {" · "}
                           {sale.anulacion.motivo}
-                          {!isCreditSale(sale) && ` · ${textoDelTratamiento(sale.anulacion.tratamientoDinero)}`}
+                          {(!isCreditSale(sale) || sale.anulacion.tratamientoDinero === "pedido") && ` · ${textoDelTratamiento(sale.anulacion.tratamientoDinero)}`}
                         </span>
                       )}
 

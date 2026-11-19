@@ -3,7 +3,7 @@ import { useState } from "react"
 import ModalShell from "../forms/ModalShell"
 import FormField from "../forms/FormField"
 
-import { anularVenta } from "../../lib/api/ventas"
+import { anularFacturaDePedido, anularVenta } from "../../lib/api/ventas"
 import { MOTIVO_MINIMO, TRATAMIENTOS_DEL_DINERO, mensajeDeRechazo } from "../../utils/anulacion"
 import { isCreditSale } from "../../utils/salesUtils"
 import { formatMoney } from "../../utils/format"
@@ -31,6 +31,8 @@ function AnularVentaModal({ venta, ubicacion, moneda = "L", razon = null, onCerr
   const [error, setError] = useState("")
 
   const credito = isCreditSale(venta)
+  // La factura de un pedido (0051): la mercadería salió de otra ubicación y el dinero se cobró en el pedido.
+  const dePedido = Boolean(venta.pedidoId)
   const motivoValido = motivo.trim().length >= MOTIVO_MINIMO
 
   const confirmar = async () => {
@@ -40,11 +42,10 @@ function AnularVentaModal({ venta, ubicacion, moneda = "L", razon = null, onCerr
     setError("")
 
     try {
-      const respuesta = await anularVenta(venta.id, {
-        motivo: motivo.trim(),
-        tratamientoDinero: credito ? null : tratamiento,
-        clave: `anular-${venta.id}`,
-      })
+      const clave = `anular-${venta.id}`
+      const respuesta = dePedido
+        ? await anularFacturaDePedido(venta.id, { motivo: motivo.trim(), clave })
+        : await anularVenta(venta.id, { motivo: motivo.trim(), tratamientoDinero: credito ? null : tratamiento, clave })
 
       await onAnulada?.(respuesta)
     } catch (problema) {
@@ -60,7 +61,7 @@ function AnularVentaModal({ venta, ubicacion, moneda = "L", razon = null, onCerr
       </button>
 
       <button type="button" className="btn btn-danger" onClick={confirmar} disabled={Boolean(razon) || !motivoValido || enCurso}>
-        {enCurso ? "Anulando..." : "Anular venta"}
+        {enCurso ? "Anulando..." : dePedido ? "Anular factura" : "Anular venta"}
       </button>
     </>
   )
@@ -101,10 +102,19 @@ function AnularVentaModal({ venta, ubicacion, moneda = "L", razon = null, onCerr
         </div>
       )}
 
-      <p className="anular-aviso">
-        El número {venta.invoiceNumber} se conserva y no se vuelve a usar. Las existencias regresan a {ubicacion || "la ubicación de la venta"}.
-        {credito ? " El saldo pendiente de esta venta se cancela." : ""}
-      </p>
+      {dePedido ? (
+        <p className="anular-aviso">
+          El número {venta.invoiceNumber} se conserva y no se vuelve a usar. Es la factura de un pedido: su pedido queda cancelado y la
+          mercadería no regresa sola a ninguna ubicación. Los productos se registran desde el pedido cuando el cliente los devuelva, y lo
+          cobrado en el pedido queda por devolver hasta que se le entregue.
+          {credito ? " El saldo pendiente de esta factura se cancela." : ""}
+        </p>
+      ) : (
+        <p className="anular-aviso">
+          El número {venta.invoiceNumber} se conserva y no se vuelve a usar. Las existencias regresan a {ubicacion || "la ubicación de la venta"}.
+          {credito ? " El saldo pendiente de esta venta se cancela." : ""}
+        </p>
+      )}
 
       {!razon && (
         <>
@@ -116,7 +126,7 @@ function AnularVentaModal({ venta, ubicacion, moneda = "L", razon = null, onCerr
             <textarea id="anular-motivo" rows={3} value={motivo} onChange={(e) => setMotivo(e.target.value)} disabled={enCurso} />
           </FormField>
 
-          {!credito && (
+          {!credito && !dePedido && (
             <fieldset className="anular-dinero" disabled={enCurso}>
               <legend>¿Qué pasa con el dinero?</legend>
               {TRATAMIENTOS_DEL_DINERO.map((opcion) => (

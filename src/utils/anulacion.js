@@ -21,6 +21,7 @@ const TEXTO_DEL_TRATAMIENTO = {
   reembolso_pendiente: "Reembolso pendiente",
   no_cobrado: "No se cobró, error de registro",
   credito_sin_abonos: "Crédito sin abonos: no entró dinero",
+  pedido: "El dinero cobrado en el pedido se devuelve desde el pedido",
 }
 
 export const textoDelTratamiento = (id) => TEXTO_DEL_TRATAMIENTO[id] || id
@@ -50,11 +51,6 @@ export function puedeVerAnular(venta, { esAdmin, puedeAnular, ubicacionId }) {
 
 /* Por qué no se puede anular, o null si se puede. */
 export function razonParaNoAnular(venta, { esAdmin }, ahora = new Date()) {
-  // La mercadería salió de otra ubicación (0045): anular_venta() no la devuelve.
-  if (venta.pedidoId) {
-    return "Es la factura de un pedido entregado en otra ubicación. Su anulación se habilitará en la etapa de cancelaciones y devoluciones."
-  }
-
   if (venta.origin === "conciliacion" && !esAdmin) {
     return "Se aplicó por conciliación: solo un administrador puede anularla."
   }
@@ -71,7 +67,8 @@ export function razonParaNoAnular(venta, { esAdmin }, ahora = new Date()) {
     return "Es una venta antigua sin ubicación: no se puede anular automáticamente."
   }
 
-  if (getSalePayments(venta).length > 0) {
+  // La factura de un pedido (0051) admite la prima cobrada en el pedido: los abonos posteriores los revisa la base (AV005).
+  if (!venta.pedidoId && getSalePayments(venta).length > 0) {
     return MENSAJE_CON_ABONOS
   }
 

@@ -370,6 +370,10 @@ const MOTIVOS_DE_ANULACION = {
   AV007: "inventario-no-cuadra",
   AV008: "conciliacion",
   AV009: "clave-reusada",
+  // Factura de un pedido (0051): el pedido ya no está facturado, o su efectivo está en una liquidación por confirmar.
+  PI001: "datos-invalidos",
+  PI012: "estado-del-pedido",
+  PI013: "liquidacion-por-confirmar",
   42501: "sin-permiso",
 }
 
@@ -382,13 +386,8 @@ export class ErrorDeAnulacion extends Error {
   }
 }
 
-export async function anularVenta(ventaId, { motivo, tratamientoDinero = null, clave = null }) {
-  const { data, error, status } = await supabase.rpc("anular_venta", {
-    p_venta_id: ventaId,
-    p_motivo: motivo,
-    p_tratamiento_dinero: tratamientoDinero,
-    p_clave_idempotencia: clave,
-  })
+async function llamarAnulacion(funcion, argumentos) {
+  const { data, error, status } = await supabase.rpc(funcion, argumentos)
 
   if (error) {
     const razon = MOTIVOS_DE_ANULACION[error.code]
@@ -410,3 +409,14 @@ export async function anularVenta(ventaId, { motivo, tratamientoDinero = null, c
 
   return data
 }
+
+export const anularVenta = (ventaId, { motivo, tratamientoDinero = null, clave = null }) =>
+  llamarAnulacion("anular_venta", { p_venta_id: ventaId, p_motivo: motivo, p_tratamiento_dinero: tratamientoDinero, p_clave_idempotencia: clave })
+
+/*
+  La factura de un pedido interubicación (0051, etapa C3). No devuelve la
+  mercadería ni el dinero por su cuenta: el pedido queda cancelado y desde él
+  se reciben los productos y se registran los reembolsos (C2a).
+*/
+export const anularFacturaDePedido = (ventaId, { motivo, clave }) =>
+  llamarAnulacion("anular_factura_de_pedido", { p_venta_id: ventaId, p_motivo: motivo, p_clave_idempotencia: clave })
