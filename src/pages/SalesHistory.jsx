@@ -33,13 +33,11 @@ import StatusBadge from "../components/crud/StatusBadge"
 
 import { FaFileInvoiceDollar, FaSearch } from "react-icons/fa"
 
-import { formatMoney } from "../utils/format"
+import { fechaYHora, formatMoney } from "../utils/format"
 import { textoDelMotivo } from "../utils/preciosNegociados"
 
 const renglonesNegociados = (sale) => (sale.items || []).filter((item) => item.negociacion)
 
-const fechaYHora = (iso) =>
-  new Date(iso).toLocaleString("es-HN", { dateStyle: "short", timeStyle: "short" })
 
 
 function isOverdue(sale) {
@@ -277,12 +275,13 @@ function SalesHistory() {
       return <StatusBadge variante="neutral">Anulada</StatusBadge>
     }
 
+    /*
+      Pagada, sea de contado o al crédito ya saldada. No se dice «Cancelada»:
+      en el sistema esa palabra es la de un pedido que no se facturó, y una
+      venta que no vale se llama «Anulada».
+    */
     if (sale.status === "pagada") {
-      return (
-        <StatusBadge variante="paid">
-          {isCreditSale(sale) ? "Cancelada" : "Pagada"}
-        </StatusBadge>
-      )
+      return <StatusBadge variante="paid">Pagada</StatusBadge>
     }
 
     if (isOverdue(sale)) {

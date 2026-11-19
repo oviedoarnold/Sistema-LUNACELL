@@ -89,7 +89,7 @@ function PorcentajeAdicional() {
       text: `${detalle}. Se aplica a las ventas y abonos que se cobren desde ahora; lo ya cobrado no cambia.`,
       showCancelButton: true,
       confirmButtonText: "Sí, cambiar",
-      cancelButtonText: "Cancelar",
+      cancelButtonText: "Volver",
     })
 
     if (!respuesta.isConfirmed) return

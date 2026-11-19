@@ -4,6 +4,7 @@ import { FaPlus, FaTrash } from "react-icons/fa"
 import SearchInput from "../crud/SearchInput"
 import { filterProductsBySearchText } from "../../utils/cart"
 import { formatMoney } from "../../utils/format"
+import { sinCambioConLaRueda } from "../../utils/camposNumericos"
 
 const RESULTADOS_A_MOSTRAR = 6
 
@@ -109,7 +110,7 @@ function PreciosEspeciales({ filas, onCambiar, productos, editable, cargando, fa
                   <label className="field">
                     <span className="solo-lector">Precio especial de {f.nombre}</span>
                     <input
-                      type="number"
+                      type="number" onWheel={sinCambioConLaRueda}
                       min="0.01"
                       step="0.01"
                       inputMode="decimal"

@@ -204,6 +204,12 @@
   color: var(--warning);
 }
 
+/* Un dato histórico de un pedido cancelado (el saldo antes de cancelar): se ve, pero no como deuda. */
+.pedidos-historico {
+  color: var(--text-secondary);
+  font-style: italic;
+}
+
 .cancelacion {
   display: grid;
   gap: var(--space-4);

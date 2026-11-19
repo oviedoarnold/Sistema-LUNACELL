@@ -50,9 +50,21 @@ describe("Products", () => {
     expect(screen.getByText("Cemento gris")).toBeInTheDocument()
   })
 
-  it("marca disponible el producto con stock suficiente", async () => {
+  it("marca con existencias, no «Disponible», el producto con stock total suficiente", async () => {
     await renderProducts()
-    expect(screen.getByText("Disponible")).toBeInTheDocument()
+    expect(screen.getByText("Con existencias")).toBeInTheDocument()
+    expect(screen.queryByText("Disponible")).not.toBeInTheDocument()
+  })
+
+  it("dice que el stock es el total de todas las ubicaciones", async () => {
+    await renderProducts()
+    expect(screen.getByRole("columnheader", { name: "Stock total" })).toBeInTheDocument()
+    expect(screen.getByText(/la suma de todas las ubicaciones/)).toBeInTheDocument()
+  })
+
+  it("muestra el precio con separador de miles, como el resto del sistema", async () => {
+    await renderProducts([{ ...PRODUCTOS[0], price: 1500 }])
+    expect(screen.getByText("L 1,500.00")).toBeInTheDocument()
   })
 
   it("marca stock bajo cuando llega al mínimo", async () => {

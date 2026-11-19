@@ -130,14 +130,26 @@ describe("SalesHistory con ventas", () => {
     expect(within(filaDe("FAC-01002")).getByText("Vencida")).toBeInTheDocument()
   })
 
-  it("marca cancelada la venta a crédito ya saldada", async () => {
+  it("marca pagada, no «Cancelada», la venta a crédito ya saldada", async () => {
     await renderHistory([
       aCredito({ status: "pagada", payments: [{ id: "a1", amount: 1000 }] }),
     ])
 
-    expect(
-      within(filaDe("FAC-01002")).getByText("Cancelada")
-    ).toBeInTheDocument()
+    const fila = filaDe("FAC-01002")
+
+    expect(within(fila).getByText("Pagada")).toBeInTheDocument()
+    expect(within(fila).queryByText(/Cancelad/)).not.toBeInTheDocument()
+  })
+
+  it("marca anulada la venta anulada, aunque fuera al crédito y se hubiera saldado", async () => {
+    await renderHistory([
+      aCredito({ status: "anulada", payments: [{ id: "a1", amount: 1000 }] }),
+    ])
+
+    const fila = filaDe("FAC-01002")
+
+    expect(within(fila).getByText("Anulada")).toBeInTheDocument()
+    expect(within(fila).queryByText("Pagada")).not.toBeInTheDocument()
   })
 })
 

@@ -2,7 +2,7 @@ import ModalShell from "../forms/ModalShell"
 import { ESTADOS_DE_PEDIDO } from "../../lib/api/pedidos"
 import { etiquetaDelMedio, textoDePorcentaje } from "../../utils/mediosDePago"
 import { textoDelMotivo } from "../../utils/preciosNegociados"
-import { pendientesQuePuedeCompletar } from "../../utils/cancelacionDePedidos"
+import { cifrasDeCancelado, pendientesQuePuedeCompletar } from "../../utils/cancelacionDePedidos"
 import { fechaYHora, formatMoney } from "../../utils/format"
 
 /*
@@ -68,7 +68,7 @@ function SeccionDeCancelacion({ cancelacion }) {
 
       {dinero.length > 0 && (
         <>
-          <h3 className="pedidos-subtitulo">Dinero del cliente</h3>
+          <h3 className="pedidos-subtitulo">Reembolsos al cliente</h3>
           <ul className="pedidos-cobros">
             {dinero.map((d) => (
               <li key={d.medio}>
@@ -121,6 +121,46 @@ function textoDelEvento(evento) {
   if (evento.tipo === "facturar_en_origen") return `Se factura en ${evento.hacia} (lo rechazó ${evento.desde})`
 
   return EVENTOS[evento.tipo] || evento.tipo
+}
+
+/*
+  Un pedido cancelado ya no se le cobra a nadie: lo que se ve es lo que pagó el
+  cliente, lo devuelto y lo que falta devolver. El saldo que tenía antes de
+  cancelar queda como dato histórico, nunca como deuda.
+*/
+function TotalesDeCancelado({ pedido, cancelacion }) {
+  const cifras = cifrasDeCancelado(pedido, cancelacion)
+
+  return (
+    <>
+      <div className="totals-row">
+        <span>Pagos recibidos antes de cancelar</span>
+        <span className="v">{formatMoney(cifras.recibido)}</span>
+      </div>
+      {cifras.reembolsado !== null && (
+        <>
+          <div className="totals-row">
+            <span>Reembolsado al cliente</span>
+            <span className="v">{formatMoney(cifras.reembolsado)}</span>
+          </div>
+          <div className="totals-row">
+            <span>Reembolso pendiente</span>
+            <span className={cifras.porReembolsar > 0 ? "v pedidos-pendiente" : "v"}>{formatMoney(cifras.porReembolsar)}</span>
+          </div>
+        </>
+      )}
+      {cifras.saldoAntes > 0 && (
+        <div className="totals-row pedidos-historico">
+          <span>Saldo original antes de cancelar</span>
+          <span className="v">{formatMoney(cifras.saldoAntes)}</span>
+        </div>
+      )}
+      <div className="totals-row grand">
+        <span>Saldo vigente por cobrar</span>
+        <span className="v">{formatMoney(cifras.saldoVigente)}</span>
+      </div>
+    </>
+  )
 }
 
 function PrecioDelProducto({ producto }) {
@@ -214,6 +254,7 @@ function DetalleDePedido({
   onCerrar,
 }) {
   const titulo = pedido ? `Pedido ${pedido.numero}` : "Pedido"
+  const cancelado = pedido?.estado === "cancelado"
   const completar = pendientesQuePuedeCompletar(cancelacion)
   const opera = Boolean(
     pedido && (pedido.puedeFacturar || pedido.puedeRechazar || pedido.puedeResolver || cancelacion?.puedeCancelar || completar.recibir || completar.reembolsar)
@@ -249,7 +290,8 @@ function DetalleDePedido({
           <>
             {opera && sinConexion && (
               <p className="alert-banner" role="alert">
-                Facturar, rechazar o resolver un pedido necesita conexión. Podrás hacerlo cuando vuelva.
+                Facturar, rechazar, resolver o cancelar un pedido, y registrar productos devueltos o reembolsos, necesita conexión. Podrás
+                hacerlo cuando vuelva.
               </p>
             )}
 
@@ -288,7 +330,13 @@ function DetalleDePedido({
                         ? `No se factura (iba a ${pedido.destino})`
                         : pedido.destino,
                 ],
-                ["Forma de pago", pedido.formaPago === "credito" ? `Crédito${pedido.fechaVencimiento ? ` · vence ${pedido.fechaVencimiento}` : ""}` : "Contado"],
+                [
+                  "Forma de pago",
+                  // Un pedido cancelado no vence: ya no se le cobra nada al cliente.
+                  pedido.formaPago === "credito"
+                    ? `Crédito${pedido.fechaVencimiento && !cancelado ? ` · vence ${pedido.fechaVencimiento}` : ""}`
+                    : "Contado",
+                ],
                 ["Nota", pedido.nota || "—"],
               ].map(([termino, valor]) => (
                 <div className="pedidos-dato" key={termino}>
@@ -323,8 +371,8 @@ function DetalleDePedido({
                 <span>ISV ({pedido.tasaIsv}%)</span>
                 <span className="v">{formatMoney(pedido.isv)}</span>
               </div>
-              <div className="totals-row grand">
-                <span>Total</span>
+              <div className={cancelado ? "totals-row" : "totals-row grand"}>
+                <span>{cancelado ? "Total original" : "Total"}</span>
                 <span className="v">{formatMoney(pedido.total)}</span>
               </div>
               {pedido.cargo > 0 && (
@@ -333,19 +381,25 @@ function DetalleDePedido({
                   <span className="v">{formatMoney(pedido.cargo)}</span>
                 </div>
               )}
-              <div className="totals-row">
-                <span>{pedido.formaPago === "credito" ? `Pago parcial recibido en ${pedido.origen}` : `Cobrado en ${pedido.origen}`}</span>
-                <span className="v">{formatMoney(pedido.cobrado)}</span>
-              </div>
-              <div className="totals-row">
-                <span>{pedido.formaPago === "credito" ? "Saldo pendiente del cliente" : "Saldo"}</span>
-                <span className="v">{formatMoney(pedido.saldo)}</span>
-              </div>
+              {cancelado ? (
+                <TotalesDeCancelado pedido={pedido} cancelacion={cancelacion} />
+              ) : (
+                <>
+                  <div className="totals-row">
+                    <span>{pedido.formaPago === "credito" ? `Pago parcial recibido en ${pedido.origen}` : `Cobrado en ${pedido.origen}`}</span>
+                    <span className="v">{formatMoney(pedido.cobrado)}</span>
+                  </div>
+                  <div className="totals-row">
+                    <span>{pedido.formaPago === "credito" ? "Saldo pendiente del cliente" : "Saldo"}</span>
+                    <span className="v">{formatMoney(pedido.saldo)}</span>
+                  </div>
+                </>
+              )}
             </div>
 
             {pedido.cobros.length > 0 && (
               <>
-                <h3 className="pedidos-subtitulo">Cobros recibidos en origen</h3>
+                <h3 className="pedidos-subtitulo">{cancelado ? "Detalle de los pagos recibidos" : "Cobros recibidos en origen"}</h3>
                 <ul className="pedidos-cobros">
                   {pedido.cobros.map((cobro) => (
                     <li key={cobro.medio}>

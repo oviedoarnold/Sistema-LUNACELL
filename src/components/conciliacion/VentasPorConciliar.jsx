@@ -3,7 +3,7 @@ import { FaBalanceScale } from "react-icons/fa"
 
 import EmptyState from "../crud/EmptyState"
 import StatusBadge from "../crud/StatusBadge"
-import { formatMoney } from "../../utils/format"
+import { fechaYHora, formatMoney } from "../../utils/format"
 import { traerVentasPorConciliar } from "../../lib/api/conciliacion"
 import { motivoDeConciliacion } from "../../lib/sinConexion/textos"
 import DetalleDeConciliacion from "./DetalleDeConciliacion"
@@ -101,7 +101,7 @@ function VentasPorConciliar({ nombreDelVendedor, nombreDeUbicacion, traer = trae
             <tbody>
               {visibles.map((venta) => (
                 <tr key={venta.id}>
-                  <td>{new Date(venta.recibidaEn).toLocaleString("es-HN")}</td>
+                  <td>{fechaYHora(venta.recibidaEn)}</td>
                   <td>{venta.numeroProvisional}</td>
                   <td>{nombreDelVendedor(venta.usuarioId)}</td>
                   <td>{nombreDeUbicacion(venta.ubicacionId)}</td>

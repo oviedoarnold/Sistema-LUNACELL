@@ -1,7 +1,7 @@
 import { useState } from "react"
 
 import ModalShell from "../forms/ModalShell"
-import { formatMoney } from "../../utils/format"
+import { fechaYHora, formatMoney } from "../../utils/format"
 import { conciliarVenta } from "../../lib/api/conciliacion"
 import { ACCIONES_DE_CONCILIACION_TEXTO, motivoDeConciliacion } from "../../lib/sinConexion/textos"
 
@@ -18,7 +18,6 @@ import { ACCIONES_DE_CONCILIACION_TEXTO, motivoDeConciliacion } from "../../lib/
   El motivo es obligatorio. Mientras una acción está en curso no se puede
   pedir otra (y la base, además, solo deja resolver una vez).
 */
-const fechaYHora = (iso) => (iso ? new Date(iso).toLocaleString("es-HN") : "—")
 
 const ORIGEN = { vendedor: "Enviada por el vendedor", rescate: "Rescatada por un administrador" }
 const ESTADO = { pendiente: "Pendiente", aplicada: "Aplicada", anulada: "Anulada" }

@@ -43,6 +43,7 @@ import {
   filterQuotesBySearchText,
   getQuoteStatus,
 } from "../utils/quotes"
+import { CAMPO_DE_CANTIDAD } from "../utils/camposNumericos"
 
 const CLASE_POR_ESTADO = {
   vencida: "badge-overdue",
@@ -634,7 +635,7 @@ function Quotes() {
                         </span>
 
                         <input
-                          type="number"
+                          type="number" {...CAMPO_DE_CANTIDAD}
                           className="qty-input"
                           min="1"
                           value={

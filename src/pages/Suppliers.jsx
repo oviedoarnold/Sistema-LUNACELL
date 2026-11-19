@@ -59,7 +59,7 @@ function Suppliers() {
   }
 
   const remove = async (id) => {
-    const result = await Swal.fire({ title: "¿Eliminar proveedor?", icon: "warning", showCancelButton: true, confirmButtonText: "Sí, eliminar", cancelButtonText: "Cancelar" })
+    const result = await Swal.fire({ title: "¿Eliminar proveedor?", icon: "warning", showCancelButton: true, confirmButtonText: "Sí, eliminar", cancelButtonText: "Volver" })
     if (!result.isConfirmed) return
     try {
       await quitarProveedor(id)
