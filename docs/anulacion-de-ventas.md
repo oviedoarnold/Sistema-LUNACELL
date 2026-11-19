@@ -24,6 +24,7 @@ La migración es la [0033](../supabase/migrations/0033_anulacion_de_ventas.sql) 
 
 - **Facturas fiscales** (con CAI). Su tratamiento, anulación o nota de crédito, está pendiente de definir con el contador.
 - **Ventas con abonos**, parciales o que la saldaron. El mensaje es: «Esta venta tiene abonos registrados y no puede anularse mediante el procedimiento actual. Contacta con el administrador».
+- **Ventas con devoluciones** (`AV010`): lo que falta se devuelve con otra devolución; ver [devoluciones-de-ventas.md](devoluciones-de-ventas.md).
 - **Ventas antiguas sin ubicación**, o cuyo inventario no se puede reconstruir con seguridad.
 - **Facturas de pedidos interubicación.** Se anulan con su propio procedimiento, `anular_factura_de_pedido()` (0051, etapa C3); ver [pedidos-interubicacion.md](pedidos-interubicacion.md). En Historial el mismo botón **Anular** usa el procedimiento que corresponde.
 

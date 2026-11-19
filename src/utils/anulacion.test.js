@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest"
 
 import {
   MENSAJE_CON_ABONOS,
+  MENSAJE_CON_DEVOLUCIONES,
   esDelMismoDiaEnHonduras,
   mensajeDeRechazo,
   puedeVerAnular,
@@ -97,6 +98,14 @@ describe("por qué no se puede anular", () => {
     ["una venta con abonos", venta({ paymentType: "credito", payments: [{ id: "a", amount: 10 }] }), /abonos registrados/],
   ])("%s, ni siquiera el administrador", (_, laVenta, razon) => {
     expect(razonParaNoAnular(laVenta, ADMIN, MISMO_DIA)).toMatch(razon)
+  })
+
+  // 0052: la base la rechaza con AV010; aquí se dice antes, también en la factura de un pedido.
+  it("una venta con devoluciones ya no se anula, ni siquiera el administrador", () => {
+    const conDevolucion = { devoluciones: [{ id: "dv-1", valor: 115, cargo: 0 }] }
+
+    expect(razonParaNoAnular(venta(conDevolucion), ADMIN, MISMO_DIA)).toBe(MENSAJE_CON_DEVOLUCIONES)
+    expect(razonParaNoAnular(venta({ ...conDevolucion, pedidoId: "ped-1" }), ADMIN, MISMO_DIA)).toBe(MENSAJE_CON_DEVOLUCIONES)
   })
 
   it("el mensaje de las ventas con abonos es el acordado", () => {

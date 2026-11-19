@@ -6,6 +6,8 @@ import {
   getSalePayments,
   getSalePaid,
   getSaleBalance,
+  getSaleAdjusted,
+  getSaleReturned,
   applyPayments,
 } from "./salesUtils"
 
@@ -152,5 +154,26 @@ describe("applyPayments", () => {
   it("deja la lista de abonos que se le pasó", () => {
     const nuevos = [abono(100), abono(200)]
     expect(applyPayments(credito(1000), nuevos).payments).toEqual(nuevos)
+  })
+})
+
+/*
+  0052: el ajuste de una devolución a crédito rebaja el saldo, pero no es
+  dinero que entró: no cuenta como abonado.
+*/
+describe("devoluciones", () => {
+  const ajuste = (amount) => ({ id: `AJ-${amount}`, amount, ajuste: true })
+
+  it("el ajuste no cuenta como abonado y sí rebaja el saldo", () => {
+    const venta = credito(230, [abono(50), ajuste(115)])
+
+    expect(getSalePaid(venta)).toBe(50)
+    expect(getSaleAdjusted(venta)).toBe(115)
+    expect(getSaleBalance(venta)).toBe(65)
+  })
+
+  it("lo devuelto suma el valor y el cargo de cada devolución", () => {
+    expect(getSaleReturned({ devoluciones: [{ valor: 115, cargo: 0 }, { valor: 115, cargo: 8.5 }] })).toBe(238.5)
+    expect(getSaleReturned({})).toBe(0)
   })
 })

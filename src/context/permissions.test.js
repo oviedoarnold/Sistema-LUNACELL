@@ -110,6 +110,14 @@ describe("los conjuntos de permisos", () => {
     expect(CONTADOR_PERMISSIONS).not.toContain(PERMISSIONS.SETTLEMENTS_MANAGE)
   })
 
+  // 0052: el nombre que acepta permisos_usuario; nadie lo recibe solo y no se le ofrece al contador.
+  it("registrar devoluciones usa el nombre de la base, no viene con un vendedor nuevo ni se le ofrece al contador", () => {
+    expect(PERMISSIONS.SALES_RETURN).toBe("sales-return")
+    expect(SELLER_PERMISSIONS).not.toContain(PERMISSIONS.SALES_RETURN)
+    expect(CONTADOR_PERMISSIONS).not.toContain(PERMISSIONS.SALES_RETURN)
+    expect(ADMIN_PERMISSIONS).toContain(PERMISSIONS.SALES_RETURN)
+  })
+
   it("los permisos de inventario usan los nombres que la base acepta", () => {
     expect(PERMISSIONS.INVENTORY_OWN).toBe("inventory-own")
     expect(PERMISSIONS.INVENTORY_ALL).toBe("inventory-all")

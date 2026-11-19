@@ -219,6 +219,8 @@ const abonosDe = (venta) =>
     monto: abono.amount,
     fecha: abono.isoDate || new Date(abono.timestamp || Date.now()).toISOString(),
     nota: abono.note || "",
+    // El ajuste de una devolución a crédito (0052).
+    devolucion_id: abono.devolucionId || null,
   }))
 
 const aFilaDeCotizacion = (cotizacion) => ({

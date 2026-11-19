@@ -35,14 +35,26 @@ export function getSalePayments(sale) {
     : []
 }
 
+/*
+  Una devolución a crédito rebaja el saldo con un abono de ajuste (0052): no
+  es dinero que entró, así que no cuenta como abonado, pero sí descuenta.
+*/
+export const esAjuste = (payment) => Boolean(payment?.ajuste)
+
+const sumaDe = (payments) =>
+  roundMoney(payments.reduce((sum, payment) => sum + Number(payment.amount || 0), 0))
+
 export function getSalePaid(sale) {
-  return roundMoney(
-    getSalePayments(sale).reduce(
-      (sum, payment) =>
-        sum + Number(payment.amount || 0),
-      0
-    )
-  )
+  return sumaDe(getSalePayments(sale).filter((payment) => !esAjuste(payment)))
+}
+
+export function getSaleAdjusted(sale) {
+  return sumaDe(getSalePayments(sale).filter(esAjuste))
+}
+
+/* Lo devuelto en una venta (0052): el valor de los productos más el cargo, si volvió. */
+export function getSaleReturned(sale) {
+  return roundMoney((sale?.devoluciones || []).reduce((sum, d) => sum + Number(d.valor || 0) + Number(d.cargo || 0), 0))
 }
 
 /*
@@ -64,7 +76,7 @@ export function getSaleBalance(sale) {
 
   const balance = roundMoney(
     Number(sale?.total || 0) -
-      getSalePaid(sale)
+      sumaDe(getSalePayments(sale))
   )
 
   return balance > 0 ? balance : 0

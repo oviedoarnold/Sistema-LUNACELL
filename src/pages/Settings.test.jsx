@@ -325,7 +325,7 @@ describe("Settings: usuarios", () => {
     expect(within(modal).getByText("Historial de facturas")).toBeInTheDocument()
     expect(within(modal).getByText("Clientes")).toBeInTheDocument()
 
-    for (const operativa of ["Facturar", "Inventario", "Anular ventas", "Ubicaciones"]) {
+    for (const operativa of ["Facturar", "Inventario", "Anular ventas", "Registrar devoluciones", "Ubicaciones"]) {
       expect(within(modal).queryByText(operativa)).not.toBeInTheDocument()
     }
   })

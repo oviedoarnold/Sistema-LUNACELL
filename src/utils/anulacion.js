@@ -29,6 +29,10 @@ export const textoDelTratamiento = (id) => TEXTO_DEL_TRATAMIENTO[id] || id
 export const MENSAJE_CON_ABONOS =
   "Esta venta tiene abonos registrados y no puede anularse mediante el procedimiento actual. Contacta con el administrador."
 
+// Una venta con devoluciones (0052) no se anula: la base lo detiene con AV010.
+export const MENSAJE_CON_DEVOLUCIONES =
+  "Esta venta ya tiene devoluciones registradas: no se anula. Registra la devolución de lo que falta."
+
 /* El día de una fecha en Honduras, como AAAA-MM-DD. */
 const diaEnHonduras = (fecha) =>
   new Intl.DateTimeFormat("en-CA", { timeZone: "America/Tegucigalpa", year: "numeric", month: "2-digit", day: "2-digit" }).format(
@@ -66,6 +70,8 @@ export function razonParaNoAnular(venta, { esAdmin }, ahora = new Date()) {
   if (!venta.locationId) {
     return "Es una venta antigua sin ubicación: no se puede anular automáticamente."
   }
+
+  if ((venta.devoluciones || []).length > 0) return MENSAJE_CON_DEVOLUCIONES
 
   // La factura de un pedido (0051) admite la prima cobrada en el pedido: los abonos posteriores los revisa la base (AV005).
   if (!venta.pedidoId && getSalePayments(venta).length > 0) {

@@ -13,7 +13,8 @@ const COLUMNAS_VENTA = `
   *,
   detalle_venta (*),
   abonos (*),
-  anulaciones_venta (*)
+  anulaciones_venta (*),
+  devoluciones_de_venta (*)
 `
 
 function fallo(error, queHacia) {
@@ -58,6 +59,20 @@ const aAbonoDeApp = (fila) => ({
   isoDate: fila.fecha,
   timestamp: new Date(fila.fecha).getTime(),
   note: fila.nota || "",
+  // El ajuste de una devolución a crédito (0052): rebaja el saldo, pero no es dinero que entró.
+  ajuste: Boolean(fila.devolucion_id),
+})
+
+// Cada devolución registrada (0052): lo que vale, el cargo devuelto y en qué se fue.
+const aDevolucionDeApp = (fila) => ({
+  id: fila.id,
+  isoDate: fila.devuelto_en,
+  motivo: fila.motivo,
+  valor: Number(fila.valor),
+  cargo: Number(fila.cargo),
+  ajusteCredito: Number(fila.ajuste_credito),
+  aFavor: Number(fila.a_favor),
+  usuarioNombre: fila.usuario_nombre,
 })
 
 /*
@@ -124,6 +139,7 @@ export function aVentaDeApp(fila, empresa) {
     // Factura de un pedido interubicación (0045): la mercadería salió de otra ubicación.
     pedidoId: fila.pedido_id || null,
     anulacion: aAnulacionDeApp(fila.anulaciones_venta),
+    devoluciones: (fila.devoluciones_de_venta || []).map(aDevolucionDeApp).sort((a, b) => a.isoDate.localeCompare(b.isoDate)),
 
     /*
       Si la venta no es fiscal, NO lleva bloque fiscal.
@@ -223,6 +239,14 @@ const MOTIVOS_DE_VENTA = {
   LM007: "porcentaje-cambiado",
   LN001: "precio-negociado-invalido",
   42501: "sin-permiso",
+  // Devoluciones y reembolsos (0052). Los mensajes de la base ya dicen qué corregir.
+  DV001: "datos-invalidos",
+  DV002: "no-encontrada",
+  DV003: "anulada",
+  DV004: "fiscal",
+  DV005: "excede-lo-vendido",
+  DV006: "clave-reusada",
+  DV007: "reembolso-invalido",
 }
 
 export class ErrorDeVenta extends Error {
@@ -370,6 +394,8 @@ const MOTIVOS_DE_ANULACION = {
   AV007: "inventario-no-cuadra",
   AV008: "conciliacion",
   AV009: "clave-reusada",
+  // La venta ya tiene devoluciones (0052): no se anula; se devuelve lo que falta.
+  AV010: "con-devoluciones",
   // Factura de un pedido (0051): el pedido ya no está facturado, o su efectivo está en una liquidación por confirmar.
   PI001: "datos-invalidos",
   PI012: "estado-del-pedido",
@@ -386,7 +412,7 @@ export class ErrorDeAnulacion extends Error {
   }
 }
 
-async function llamarAnulacion(funcion, argumentos) {
+async function llamarAnulacion(funcion, argumentos, queHacia = "anular la venta") {
   const { data, error, status } = await supabase.rpc(funcion, argumentos)
 
   if (error) {
@@ -404,7 +430,7 @@ async function llamarAnulacion(funcion, argumentos) {
       )
     }
 
-    fallo(error, "anular la venta")
+    fallo(error, queHacia)
   }
 
   return data
@@ -420,3 +446,25 @@ export const anularVenta = (ventaId, { motivo, tratamientoDinero = null, clave =
 */
 export const anularFacturaDePedido = (ventaId, { motivo, clave }) =>
   llamarAnulacion("anular_factura_de_pedido", { p_venta_id: ventaId, p_motivo: motivo, p_clave_idempotencia: clave })
+
+/*
+  Devoluciones después de facturar (0052, etapas C4 y C5). La base decide el
+  valor, el ajuste del crédito, lo que queda a favor del cliente y quién puede;
+  desde aquí viajan los productos, el motivo, dónde se recibieron y la clave.
+  Mismos errores que anular: el mensaje de la base dice qué corregir.
+*/
+export const traerDevolucion = (ventaId) => llamarAnulacion("devolucion_de_venta", { p_venta: ventaId }, "cargar las devoluciones")
+
+export const registrarDevolucion = (ventaId, { motivo, productos, ubicacionId = null, clave }) =>
+  llamarAnulacion(
+    "registrar_devolucion_de_venta",
+    { p_venta: ventaId, p_motivo: motivo, p_productos: productos, p_ubicacion: ubicacionId, p_clave_idempotencia: clave },
+    "registrar la devolución"
+  )
+
+export const registrarReembolsoDeVenta = (ventaId, { medio, importe, referencia = "", clave }) =>
+  llamarAnulacion(
+    "registrar_reembolso_de_venta",
+    { p_venta: ventaId, p_medio: medio, p_importe: importe, p_referencia: referencia, p_clave_idempotencia: clave },
+    "registrar el reembolso"
+  )
