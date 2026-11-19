@@ -267,7 +267,12 @@ describe("quién cancela", () => {
       ["Ruta local", false],
       ["Camión 01", true],
     ])
-    expect(delAdmin.ubicaciones_para_reembolsar.map((u) => u.nombre)).toEqual(["Bodega", "Ruta local"])
+    // Desde la 0050 el administrador también puede devolver efectivo desde una tercera ubicación.
+    expect(delAdmin.ubicaciones_para_reembolsar.map((u) => [u.nombre, u.otra])).toEqual([
+      ["Bodega", false],
+      ["Ruta local", false],
+      ["Camión 01", true],
+    ])
     expect(delAdmin.puede_reembolsar_electronico).toBe(true)
 
     await cancelar(e.cancelaBodega, p.pedido_id)
@@ -439,7 +444,7 @@ describe("el dinero del cliente", () => {
     })
   })
 
-  it("el efectivo sale del origen o del destino; desde una tercera ubicación, todavía no", async () => {
+  it("el efectivo sale del origen o del destino; desde una tercera ubicación, solo el administrador y con referencia (0050)", async () => {
     const e = await escenario()
     const p = await entregar(e)
 
@@ -533,7 +538,7 @@ describe("liquidaciones", () => {
     expect((await control(e)).pedidos).toEqual([])
   })
 
-  it("con una entrega por confirmar o confirmada no se cancela; con una rechazada, sí", async () => {
+  it("con una entrega por confirmar no se cancela; con una rechazada o confirmada, sí (0050)", async () => {
     const e = await escenario()
     const porConfirmar = await entregar(e)
     const liq = await liquidar(e, 100)
@@ -551,8 +556,7 @@ describe("liquidaciones", () => {
     const parcial = await liquidar(e, 50)
 
     await resolverLiquidacion(e, parcial.id, true)
-    expect((await falla(cancelar(e.admin, confirmado.pedido_id))).code).toBe("PI013")
-    expect((await elPedido(confirmado.pedido_id)).estado).toBe("pendiente")
+    expect((await cancelar(e.admin, confirmado.pedido_id)).estado).toBe("cancelado")
   })
 
   it("los pedidos activos siguen exactamente igual", async () => {

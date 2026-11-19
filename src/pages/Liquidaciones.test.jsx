@@ -160,7 +160,7 @@ describe("Liquidaciones: los saldos", () => {
 
     await screen.findByText("Lunacell Store → Camión 01")
 
-    fireEvent.change(screen.getByLabelText("Ubicación que entrega"), { target: { value: "store" } })
+    fireEvent.change(screen.getByLabelText("Ubicación que debe y entrega"), { target: { value: "store" } })
 
     expect(screen.queryByText("Bodega → Camión 01")).not.toBeInTheDocument()
     expect(cifra(resumen(), "Pendiente por liquidar")).toHaveTextContent("L 50.00")
@@ -344,5 +344,119 @@ describe("Liquidaciones: confirmar o rechazar", () => {
     expect(within(tarjeta).getByText(/Registró Encargado de Bodega/)).toHaveTextContent("Rechazó Encargado del camión")
     expect(within(tarjeta).getByText("Motivo del rechazo: Faltaron 20 lempiras")).toBeInTheDocument()
     expect(within(tarjeta).getByText(/Entrega en efectivo · .* · Ref. Sobre 12/)).toBeInTheDocument()
+  })
+})
+
+describe("Liquidaciones: obligaciones en cualquier sentido (etapa C2b)", () => {
+  /*
+    PED-000009: Bodega cobró L 400 y entregó L 100 a Ruta local; se canceló y
+    Camión 01 devolvió los L 400. Bodega le debe L 300 a Camión 01 y Ruta local
+    L 100. PED-000010: liquidado completo a Ruta local y devuelto por Bodega:
+    Ruta local le devuelve L 400 a Bodega.
+  */
+  const cancelado = (cambios) =>
+    pedido({
+      estado: "cancelado",
+      numero_factura: null,
+      electronico: 0,
+      cargo: 0,
+      motivo: "cancelacion",
+      pedido_origen_id: "bodega",
+      pedido_origen: "Bodega",
+      pedido_destino_id: "ruta",
+      pedido_destino: "Ruta local",
+      medios: [{ medio: "efectivo", monto: 400, cargo: 0 }],
+      ...cambios,
+    })
+
+  const C2B = {
+    pares: [
+      par({ origen_id: "ruta", origen: "Ruta local", destino_id: "bodega", destino: "Bodega", efectivo: 400, electronico: 0, cargo: 0, pendiente: 400, por_cancelaciones: true }),
+      par({ origen_id: "bodega", origen: "Bodega", destino_id: "camion-01", destino: "Camión 01", efectivo: 300, electronico: 0, cargo: 0, pendiente: 300, por_cancelaciones: true, puede_registrar: true }),
+    ],
+    pedidos: [
+      cancelado({ pedido_id: "ped-9", numero: "PED-000009", origen_id: "bodega", origen: "Bodega", destino_id: "camion-01", destino: "Camión 01", efectivo: 300, pendiente: 300 }),
+      cancelado({ pedido_id: "ped-9", numero: "PED-000009", origen_id: "ruta", origen: "Ruta local", destino_id: "camion-01", destino: "Camión 01", efectivo: 100, pendiente: 100 }),
+      cancelado({ pedido_id: "ped-10", numero: "PED-000010", origen_id: "ruta", origen: "Ruta local", destino_id: "bodega", destino: "Bodega", efectivo: 400, pendiente: 400 }),
+    ],
+    liquidaciones: [
+      liquidacion({
+        id: "liq-7",
+        numero: "LIQ-000007",
+        origen_id: "ruta",
+        origen: "Ruta local",
+        destino_id: "bodega",
+        destino: "Bodega",
+        monto: 400,
+        contraliquidacion: true,
+        pedidos: [{ numero: "PED-000010", monto: 400, motivo: "cancelacion" }],
+      }),
+    ],
+  }
+
+  it("dice quién le debe a quién, en cualquier sentido, y que incluye pedidos cancelados", async () => {
+    await renderLiquidaciones({ control: C2B })
+
+    const inversa = (await screen.findByText("Ruta local → Bodega")).closest(".liquidaciones-tarjeta")
+
+    expect(within(inversa).getByText("Ruta local le debe a Bodega · incluye pedidos cancelados")).toBeInTheDocument()
+    expect(cifra(inversa, "Total a entregar")).toHaveTextContent("L 400.00")
+    expect(screen.getByText("Bodega → Camión 01").closest(".liquidaciones-tarjeta")).toHaveTextContent("Bodega le debe a Camión 01")
+  })
+
+  it("un pedido cancelado con dos obligaciones sale dos veces, con su motivo y su ruta real", async () => {
+    await renderLiquidaciones({ control: C2B })
+
+    fireEvent.click(await screen.findByRole("button", { name: "Pedidos" }))
+
+    const tarjetas = screen.getAllByText("PED-000009").map((n) => n.closest(".liquidaciones-tarjeta"))
+
+    expect(tarjetas).toHaveLength(2)
+    expect(tarjetas[0]).toHaveTextContent("Ferremax · Bodega → Ruta local · Cancelado")
+    expect(tarjetas[0]).toHaveTextContent("Pedido cancelado: Camión 01 devolvió al cliente efectivo que conserva Bodega.")
+    expect(tarjetas[1]).toHaveTextContent("Pedido cancelado: Camión 01 devolvió al cliente efectivo que conserva Ruta local.")
+    expect(cifra(tarjetas[0], "Por la cancelación")).toHaveTextContent("L 300.00")
+    expect(cifra(tarjetas[1], "Por la cancelación")).toHaveTextContent("L 100.00")
+    expect(screen.queryByText(/Sin facturar/)).not.toBeInTheDocument()
+  })
+
+  it("la contraliquidación la registra quien debe, hacia quien recibe", async () => {
+    const { llamadas } = await renderLiquidaciones({ control: C2B })
+
+    const inversa = (await screen.findByText("Ruta local → Bodega")).closest(".liquidaciones-tarjeta")
+
+    fireEvent.click(within(inversa).getByRole("button", { name: "Registrar entrega" }))
+
+    const ventana = await screen.findByRole("dialog", { name: "Registrar entrega de efectivo" })
+
+    expect(within(ventana).getByText("Ruta local")).toBeInTheDocument()
+    expect(within(ventana).getByRole("option", { name: /PED-000010/ })).toBeInTheDocument()
+    expect(within(ventana).queryByRole("option", { name: /PED-000009/ })).not.toBeInTheDocument()
+
+    fireEvent.click(within(ventana).getByRole("button", { name: "Registrar entrega" }))
+
+    await waitFor(() => expect(llamadas.registrar).toHaveLength(1))
+    expect(llamadas.registrar[0]).toMatchObject({ p_origen: "ruta", p_destino: "bodega", p_monto: 400 })
+  })
+
+  it("en el historial, la contraliquidación se distingue y dice qué pedido cancelado paga", async () => {
+    await renderLiquidaciones({ control: C2B })
+
+    fireEvent.click(await screen.findByRole("button", { name: "Historial" }))
+
+    const tarjeta = screen.getByText("LIQ-000007").closest(".liquidaciones-tarjeta")
+
+    expect(within(tarjeta).getByText("Contraliquidación")).toBeInTheDocument()
+    expect(within(tarjeta).getByText("Pedidos: PED-000010 (L 400.00, por cancelación)")).toBeInTheDocument()
+    expect(within(tarjeta).getByText("Ruta local → Bodega")).toBeInTheDocument()
+  })
+
+  it("una liquidación de siempre no lleva la marca de contraliquidación", async () => {
+    await renderLiquidaciones({ control: { ...CONTROL, liquidaciones: [liquidacion()] } })
+
+    fireEvent.click(await screen.findByRole("button", { name: "Historial" }))
+
+    expect(screen.queryByText("Contraliquidación")).not.toBeInTheDocument()
+    expect(screen.getByText(/Pedidos: PED-000001 \(L 100.00\)$/)).toBeInTheDocument()
   })
 })

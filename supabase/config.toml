@@ -136,6 +136,7 @@ sql_paths = [
   "./migrations/0047_caja_fila_sin_ubicacion.sql",
   "./migrations/0048_rechazo_resolucion_pedidos.sql",
   "./migrations/0049_cancelacion_pedidos_interubicacion.sql",
+  "./migrations/0050_contraliquidaciones_entre_ubicaciones.sql",
   "./seed.sql",
 ]
 

@@ -229,12 +229,17 @@ export async function resolverPedido(pedidoId, { decision, destinoId = null, not
   Cancelar antes de facturar (0049, etapa C2a). Tres hechos aparte: la
   cancelación, los productos que vuelven y el dinero que se devuelve. Los dos
   últimos pueden ir con la cancelación o registrarse después.
+
+  Desde la 0050 (C2b): solo una liquidación por confirmar bloquea cancelar o
+  devolver efectivo; el administrador puede devolverlo desde otra ubicación,
+  y el pedido cancelado dice quién le debe a quién.
 */
 const aCancelacionDeApp = (fila) => ({
   puedeCancelar: Boolean(fila.puede_cancelar),
   puedeRegistrar: Boolean(fila.puede_registrar),
   esAdmin: Boolean(fila.es_admin),
   bloqueoPorLiquidacion: fila.bloqueo_por_liquidacion || null,
+  bloqueoDeReembolsos: fila.bloqueo_de_reembolsos || null,
   cancelacion: fila.cancelacion
     ? {
         motivo: fila.cancelacion.motivo,
@@ -275,10 +280,19 @@ const aCancelacionDeApp = (fila) => ({
     referencia: r.referencia || "",
     usuario: r.usuario,
     fecha: r.fecha,
+    enOtraUbicacion: Boolean(r.en_otra_ubicacion),
   })),
   ubicacionesParaRecibir: (fila.ubicaciones_para_recibir || []).map((u) => ({ id: u.id, nombre: u.nombre, otra: Boolean(u.otra) })),
-  ubicacionesParaReembolsar: (fila.ubicaciones_para_reembolsar || []).map((u) => ({ id: u.id, nombre: u.nombre })),
+  ubicacionesParaReembolsar: (fila.ubicaciones_para_reembolsar || []).map((u) => ({ id: u.id, nombre: u.nombre, otra: Boolean(u.otra) })),
   puedeReembolsarElectronico: Boolean(fila.puede_reembolsar_electronico),
+  obligaciones: (fila.obligaciones || []).map((o) => ({
+    debe: o.debe,
+    recibe: o.recibe,
+    monto: numero(o.monto),
+    porConfirmar: numero(o.por_confirmar),
+    liquidado: numero(o.liquidado),
+    pendiente: numero(o.pendiente),
+  })),
 })
 
 export async function traerCancelacion(pedidoId) {

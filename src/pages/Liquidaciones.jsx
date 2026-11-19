@@ -26,7 +26,12 @@ import "../styles/liquidaciones.css"
   En un pedido, la ubicación que entrega cobra y otra factura. Lo cobrado en
   efectivo para la otra queda por liquidar desde el cobro; lo electrónico y su
   cargo llegan a la cuenta de la empresa y no se liquidan. La entrega va en dos
-  pasos: quien cobró la registra y quien factura confirma haberla recibido.
+  pasos: quien debe la registra y quien recibe confirma haberla recibido.
+
+  Desde la 0050 (C2b), en un pedido cancelado la deuda puede ir en cualquier
+  sentido: la ubicación que conserva el efectivo le debe a la que se lo
+  devolvió al cliente. Se paga igual, con una contraliquidación, y la
+  liquidación original no cambia. No es una venta ni un cobro.
 
   Qué ve y qué puede hacer cada uno lo decide la base; esta pantalla solo
   dibuja los botones que la base dice que valen.
@@ -67,6 +72,15 @@ function ubicacionesDe(lista, campoId, campoNombre) {
   for (const fila of lista) vistas.set(fila[campoId], fila[campoNombre])
 
   return [...vistas].map(([id, nombre]) => ({ id, nombre })).sort((a, b) => a.nombre.localeCompare(b.nombre, "es"))
+}
+
+// Por qué una ubicación le debe a otra por ese pedido.
+function textoDelMotivo(pedido) {
+  if (pedido.motivo === "cancelacion") {
+    return `Pedido cancelado: ${pedido.destino} devolvió al cliente efectivo que conserva ${pedido.origen}.`
+  }
+
+  return `${pedido.origen} cobró en efectivo un pedido que factura ${pedido.destino}.`
 }
 
 function Cifra({ etiqueta, valor, destacada = false }) {
@@ -188,7 +202,7 @@ function Liquidaciones() {
 
   return (
     <div className="view active crud liquidaciones">
-      <PageHeader descripcion="El efectivo que una ubicación cobró en pedidos facturados por otra, y su entrega. Lo electrónico llega a la cuenta de la empresa y no se liquida." />
+      <PageHeader descripcion="Lo que una ubicación le debe a otra por pedidos: el efectivo cobrado para quien factura y, en pedidos cancelados, el que otra ubicación devolvió al cliente. Lo electrónico llega a la cuenta de la empresa y no se liquida." />
 
       {sinConexion && (
         <p className="alert-banner" role="alert">
@@ -213,8 +227,8 @@ function Liquidaciones() {
 
         <div className="liquidaciones-filtros">
           <label>
-            <span>Entrega</span>
-            <select className="filter-select" value={origen} onChange={(evento) => setOrigen(evento.target.value)} aria-label="Ubicación que entrega">
+            <span>Debe</span>
+            <select className="filter-select" value={origen} onChange={(evento) => setOrigen(evento.target.value)} aria-label="Ubicación que debe y entrega">
               <option value={TODAS}>Todas</option>
               {origenes.map((u) => (
                 <option key={u.id} value={u.id}>
@@ -263,9 +277,13 @@ function Liquidaciones() {
                   </b>
                   {par.pendiente === 0 && par.porConfirmar === 0 && par.efectivo > 0 && <span className="badge badge-paid">Liquidado</span>}
                 </div>
+                <p className="liquidaciones-suave">
+                  {par.origen} le debe a {par.destino}
+                  {par.porCancelaciones ? " · incluye pedidos cancelados" : ""}
+                </p>
 
                 <div className="liquidaciones-cifras">
-                  <Cifra etiqueta="Efectivo cobrado" valor={par.efectivo} />
+                  <Cifra etiqueta="Total a entregar" valor={par.efectivo} />
                   <Cifra etiqueta="Pendiente" valor={par.pendiente} destacada />
                   <Cifra etiqueta="Por confirmar" valor={par.porConfirmar} />
                   <Cifra etiqueta="Liquidado" valor={par.liquidado} />
@@ -289,26 +307,32 @@ function Liquidaciones() {
         ) : (
           <ul className="liquidaciones-lista">
             {pedidos.map((pedido) => (
-              <li key={pedido.id} className="liquidaciones-tarjeta">
+              <li key={pedido.clave} className="liquidaciones-tarjeta">
                 <div className="liquidaciones-tarjeta-fila">
                   <b>{pedido.numero}</b>
                   <span className={CLASE_DEL_PEDIDO[pedido.estadoLiquidacion] || "badge"}>{ESTADO_DEL_PEDIDO[pedido.estadoLiquidacion] || pedido.estadoLiquidacion}</span>
                 </div>
                 <div className="liquidaciones-tarjeta-fila liquidaciones-suave">
                   <span>
-                    {pedido.cliente} · {pedido.origen} → {pedido.destino}
-                    {pedido.numeroFactura ? ` · ${pedido.numeroFactura}` : " · Sin facturar"}
+                    {pedido.cliente} · {pedido.pedidoOrigen} → {pedido.pedidoDestino}
+                    {pedido.estado === "cancelado" ? " · Cancelado" : pedido.numeroFactura ? ` · ${pedido.numeroFactura}` : " · Sin facturar"}
                   </span>
                   <span>{fechaYHora(pedido.entregadoEn)}</span>
                 </div>
+                <p className="liquidaciones-suave">
+                  <b>
+                    {pedido.origen} → {pedido.destino}
+                  </b>{" "}
+                  · {textoDelMotivo(pedido)}
+                </p>
                 <div className="liquidaciones-tarjeta-fila liquidaciones-suave">
                   <span>
                     {pedido.medios.map((m) => `${etiquetaDelMedio(m.medio)} ${formatMoney(m.monto)}${m.cargo > 0 ? ` + ${formatMoney(m.cargo)}` : ""}`).join(" · ")}
                   </span>
                 </div>
                 <div className="liquidaciones-cifras">
-                  {/* Un pedido cancelado (0049) solo debe lo que el destino devolvió al cliente por cuenta del origen. */}
-                  <Cifra etiqueta={pedido.estado === "cancelado" ? `Cancelado: devuelto por ${pedido.destino}` : "Efectivo"} valor={pedido.efectivo} />
+                  {/* Un pedido cancelado (0050) solo debe lo que otra ubicación devolvió al cliente con efectivo que conserva esta. */}
+                  <Cifra etiqueta={pedido.motivo === "cancelacion" ? "Por la cancelación" : "Efectivo"} valor={pedido.efectivo} />
                   <Cifra etiqueta="Pendiente" valor={pedido.pendiente} destacada />
                   <Cifra etiqueta="Por confirmar" valor={pedido.porConfirmar} />
                   <Cifra etiqueta="Liquidado" valor={pedido.liquidado} />
@@ -328,7 +352,10 @@ function Liquidaciones() {
               <li key={l.id} className={l.puedeResolver ? "liquidaciones-tarjeta is-por-confirmar" : "liquidaciones-tarjeta"}>
                 <div className="liquidaciones-tarjeta-fila">
                   <b>{l.numero}</b>
-                  <span className={CLASE_DE_LIQUIDACION[l.estado] || "badge"}>{ESTADO_DE_LIQUIDACION[l.estado] || l.estado}</span>
+                  <span className="liquidaciones-insignias">
+                    {l.contraliquidacion && <span className="badge badge-credit">Contraliquidación</span>}
+                    <span className={CLASE_DE_LIQUIDACION[l.estado] || "badge"}>{ESTADO_DE_LIQUIDACION[l.estado] || l.estado}</span>
+                  </span>
                 </div>
                 <div className="liquidaciones-tarjeta-fila">
                   <span>
@@ -347,7 +374,9 @@ function Liquidaciones() {
                   {l.resueltaPor ? ` · ${l.estado === "rechazada" ? "Rechazó" : "Confirmó"} ${l.resueltaPor} el ${fechaYHora(l.resueltaEn)}` : ""}
                 </p>
                 {l.pedidos.length > 0 && (
-                  <p className="liquidaciones-suave">Pedidos: {l.pedidos.map((p) => `${p.numero} (${formatMoney(p.monto)})`).join(", ")}</p>
+                  <p className="liquidaciones-suave">
+                    Pedidos: {l.pedidos.map((p) => `${p.numero} (${formatMoney(p.monto)}${p.motivo === "cancelacion" ? ", por cancelación" : ""})`).join(", ")}
+                  </p>
                 )}
                 {l.observacion && <p className="liquidaciones-suave">Observación: {l.observacion}</p>}
                 {l.motivoRechazo && <p className="liquidaciones-rechazo">Motivo del rechazo: {l.motivoRechazo}</p>}

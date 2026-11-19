@@ -11,10 +11,18 @@ const IMPORTE = /^\d+(\.\d{1,2})?$/
 
 const centavos = (valor) => Math.round(Number(valor) * 100)
 
-// Lo que este usuario puede devolver de cada medio: el efectivo desde una ubicación suya; lo electrónico, el administrador.
+/*
+  Lo que este usuario puede devolver de cada medio: el efectivo desde una
+  ubicación que puede usar, mientras ninguna liquidación del pedido esté por
+  confirmar (0050); lo electrónico, el administrador.
+*/
 export function mediosQuePuedeDevolver(cancelacion) {
   return cancelacion.dinero.filter(
-    (d) => d.pendiente > 0 && (d.medio === "efectivo" ? cancelacion.ubicacionesParaReembolsar.length > 0 : cancelacion.puedeReembolsarElectronico)
+    (d) =>
+      d.pendiente > 0 &&
+      (d.medio === "efectivo"
+        ? cancelacion.ubicacionesParaReembolsar.length > 0 && !cancelacion.bloqueoDeReembolsos
+        : cancelacion.puedeReembolsarElectronico)
   )
 }
 
@@ -91,6 +99,13 @@ export function leerFormulario(cancelacion, modo, f) {
         return { problema: `Escribe la referencia de la devolución por ${etiquetaDelMedio(d.medio)}.` }
       }
 
+      // Desde una ubicación que no es ni el origen ni el destino (solo el administrador), con la referencia de la entrega real.
+      const desde = d.medio === "efectivo" ? cancelacion.ubicacionesParaReembolsar.find((u) => u.id === f.desdeId) : null
+
+      if (desde?.otra && !referencia) {
+        return { problema: `«${desde.nombre}» no es el origen ni el destino: escribe la referencia de la entrega (recibo, quién entregó).` }
+      }
+
       reembolsos.push({ medio: d.medio, importe: Number(texto), ubicacionId: d.medio === "efectivo" ? f.desdeId : null, referencia })
     }
 
@@ -124,6 +139,11 @@ export function resumen(cancelacion, modo, datos) {
     if (porDevolver - devuelto > 0.004) lineas.push(`Quedan ${formatMoney(porDevolver - devuelto)} pendientes de devolver al cliente: no salen de ninguna caja hasta que se devuelvan.`)
   }
 
+  const enEfectivo = datos.reembolsos.find((r) => r.medio === "efectivo")
+  const desde = enEfectivo ? cancelacion.ubicacionesParaReembolsar.find((u) => u.id === enEfectivo.ubicacionId) : null
+
+  if (desde) lineas.push(`El efectivo sale de la caja de ${desde.nombre}. Si lo conserva otra ubicación, se lo deberá a ${desde.nombre} en Liquidaciones.`)
+
   if (modo === "cancelar") lineas.push("Lo cobrado se conserva tal como se registró y ya no se le debe a la ubicación destino.")
 
   return lineas
@@ -155,8 +175,6 @@ export function pendientesQuePuedeCompletar(cancelacion) {
 
   return {
     recibir: cancelacion.productos.some((p) => p.pendiente > 0) && cancelacion.ubicacionesParaRecibir.length > 0,
-    reembolsar: cancelacion.dinero.some(
-      (d) => d.pendiente > 0 && (d.medio === "efectivo" ? cancelacion.ubicacionesParaReembolsar.length > 0 : cancelacion.puedeReembolsarElectronico)
-    ),
+    reembolsar: mediosQuePuedeDevolver(cancelacion).length > 0,
   }
 }

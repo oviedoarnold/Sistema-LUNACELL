@@ -39,7 +39,7 @@ const CONDICIONES = { buen_estado: "buen estado", danado: "dañado" }
   cliente y lo ya registrado. Las acciones para completar lo pendiente van al pie.
 */
 function SeccionDeCancelacion({ cancelacion }) {
-  const { cancelacion: c, productos, dinero, recepciones, reembolsos } = cancelacion
+  const { cancelacion: c, productos, dinero, recepciones, reembolsos, obligaciones = [] } = cancelacion
 
   return (
     <section className="pedidos-cancelacion" aria-label="Cancelación">
@@ -103,8 +103,39 @@ function SeccionDeCancelacion({ cancelacion }) {
             {reembolsos.map((r, i) => (
               <li key={`d-${i}`}>
                 Devuelto {formatMoney(r.importe)} con {etiquetaDelMedio(r.medio)}
-                {r.ubicacion ? ` desde ${r.ubicacion}` : " desde la cuenta de la empresa"} · {r.usuario} · {fechaYHora(r.fecha)}
+                {r.ubicacion ? ` desde ${r.ubicacion}` : " desde la cuenta de la empresa"}
+                {r.enOtraUbicacion ? " (otra ubicación)" : ""} · {r.usuario} · {fechaYHora(r.fecha)}
                 {r.referencia && <span className="pedidos-evento-motivo">Referencia: {r.referencia}</span>}
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
+
+      {cancelacion.bloqueoDeReembolsos && (
+        <p className="alert-banner" role="alert">
+          El efectivo de este pedido está en {cancelacion.bloqueoDeReembolsos}. Mientras no se confirme o se rechace en Liquidaciones, no se registran
+          devoluciones en efectivo.
+        </p>
+      )}
+
+      {obligaciones.length > 0 && (
+        <>
+          {/* 0050: quién devolvió efectivo que conserva otra ubicación. Se liquida en Liquidaciones; no es venta ni cobro. */}
+          <h3 className="pedidos-subtitulo">Entre ubicaciones</h3>
+          <ul className="pedidos-cobros">
+            {obligaciones.map((o) => (
+              <li key={`${o.debe}|${o.recibe}`}>
+                <span>
+                  {o.debe} le debe a {o.recibe}
+                  <small>
+                    {formatMoney(o.monto)} · liquidado {formatMoney(o.liquidado)}
+                    {o.porConfirmar > 0 ? ` · por confirmar ${formatMoney(o.porConfirmar)}` : ""}
+                  </small>
+                </span>
+                <span className={o.pendiente > 0 ? "pedidos-pendiente" : "pos-importe"}>
+                  {o.pendiente > 0 ? `Pendiente ${formatMoney(o.pendiente)}` : o.porConfirmar > 0 ? "Por confirmar" : "Liquidado"}
+                </span>
               </li>
             ))}
           </ul>

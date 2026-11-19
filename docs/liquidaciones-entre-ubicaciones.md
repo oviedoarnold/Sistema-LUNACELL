@@ -34,7 +34,7 @@ Desde la 0048 (etapa C1), el efectivo se le debe al **destino final** del pedido
 - un pedido por resolver tampoco: mientras no se sepa quién lo factura, su efectivo no se liquida;
 - un pedido con efectivo en una liquidación por confirmar o confirmada no se rechaza ni cambia de ubicación (`PI013`).
 
-Desde la 0049 (etapa C2a), un pedido **cancelado** ya no se le debe al destino. Solo queda el efectivo que el destino devolvió al cliente por cuenta del origen: el origen se lo debe y lo liquida en el mismo par. Lo que devolvió el origen y lo pendiente de devolver no son deudas entre ubicaciones. Con efectivo en una liquidación por confirmar o confirmada no se cancela.
+Desde la 0049 (etapa C2a), un pedido **cancelado** ya no se le debe al destino. Desde la 0050 (etapa C2b), lo que se deben las ubicaciones por un pedido cancelado sale de dónde quedó el efectivo; ver «Pedidos cancelados» más abajo.
 
 Estados que muestra la pantalla:
 
@@ -104,19 +104,46 @@ Con solo ventas normales, los reportes de caja dan exactamente lo mismo que los 
 
 En producción, el reporte diario de caja del 16/11/2026 mostraba la fila «Sin ubicación» con cobros que no eran suyos. Esa fila existe por un abono antiguo sin ubicación, y recibía las facturas y los cobros de pedidos de todas las ubicaciones. La 0047 separa `sumar_de()` en dos firmas (todo, o una ubicación comparada tal cual) sin cambiar el código de los reportes: los totales, las demás filas y el reporte de medios no cambian.
 
-## Pendiente para la etapa C2
+## Pedidos cancelados: contraliquidaciones (0050, etapa C2b)
 
-Anular o cancelar un pedido cuyo efectivo ya se liquidó exige revertir o ajustar esa liquidación. Ni la 0046 ni la 0048 tienen esa operación:
+**La regla.** El sistema representa dónde está el efectivo de un pedido cancelado y quién lo desembolsó de verdad. Para cada ubicación:
 
-- una liquidación confirmada no se modifica;
-- un pedido no puede cancelarse todavía;
-- por eso la 0048 bloquea el rechazo y la resolución de un pedido con efectivo ya liquidado o por confirmar.
+```
+conserva = cobrado en efectivo
+         + recibido por liquidaciones confirmadas
+         − entregado por liquidaciones confirmadas
+         − devuelto en efectivo al cliente
+```
 
-La etapa C2 debe definir:
+Las ubicaciones en negativo (devolvieron más de lo que tenían) reciben de las que están en positivo. Lo que sobra entre todas es lo que falta devolver al cliente, y no es deuda de nadie.
 
-- un ajuste o contraliquidación con su propio registro;
-- qué pasa con lo pendiente y con lo entregado por confirmar de un pedido cancelado;
-- cómo se reflejan en los saldos las devoluciones parciales.
+**Sin contabilidad paralela.** Las obligaciones no se guardan: `obligaciones_de_pedidos()` las calcula de los cobros, las liquidaciones confirmadas y los reembolsos, que ya están registrados y no se modifican. No se duplican, no se desfasan y un reintento no puede crearlas dos veces. Se pagan con una liquidación de siempre (`liquidaciones_ubicacion`) en el sentido que toque: la registra quien debe y la confirma quien recibe. La liquidación original no se toca.
+
+**Ejemplos** (pedido de L 400 que Bodega cobra para Ruta local):
+
+| Caso | Resultado |
+|---|---|
+| Bodega devuelve L 400 | Nadie le debe a nadie |
+| Ruta local devuelve L 400 | Bodega le debe L 400 a Ruta local |
+| Bodega ya le entregó L 400 a Ruta local y Bodega devuelve | Ruta local le devuelve L 400 a Bodega (contraliquidación) |
+| Bodega ya le entregó L 400 y Ruta local devuelve | Nadie le debe a nadie |
+| Bodega le entregó L 100 y Bodega devuelve todo | Ruta local le devuelve L 100 a Bodega |
+| Camión 01 devuelve L 400 | Bodega le debe L 400 a Camión 01 (con L 100 ya entregados a Ruta local: Bodega L 300 y Ruta local L 100) |
+| Bodega devuelve L 100 y Ruta local L 150 | Bodega le debe L 150 a Ruta local; quedan L 150 por devolver al cliente |
+| Efectivo L 200 y tarjeta L 203.40 | Lo electrónico lo devuelve la empresa; solo el efectivo crea obligaciones |
+
+**Decisiones del propietario (2026-11-19):**
+
+- **Reparto con dinero por devolver.** Si varias ubicaciones conservan efectivo, lo que se le debe a quien devolvió lo cubre primero la que cobró; después el origen, el destino y las demás por nombre. Quien recibe se atiende en el mismo orden (origen, destino, y las demás por su primera devolución). Ejemplo: Bodega conserva L 300, Ruta local L 100 y Camión 01 devuelve L 200 de L 400: Bodega le debe L 200 a Camión 01.
+- **Bloqueo.** Mientras el pedido tenga una liquidación por confirmar, no se cancela ni se devuelve efectivo (`PI013`). Con una confirmada o rechazada, sí. Lo electrónico se puede devolver siempre.
+- **Tercera ubicación.** Solo el administrador registra una devolución en efectivo desde una ubicación que no es el origen ni el destino, con la referencia de la entrega real. No se abren los pedidos a los empleados de esa ubicación: ven en Liquidaciones lo que se les debe, sin abrir el pedido.
+- **Sin compensaciones automáticas.** Dos obligaciones opuestas no se cancelan solas.
+
+**Las reglas de antes que siguen.** El rechazo y la resolución de C1 siguen bloqueados con efectivo en una liquidación por confirmar o confirmada. Un pedido facturado no se cancela: su anulación es de la etapa C3. Una contraliquidación no es venta, cobro, abono ni ingreso.
+
+**Concurrencia.** Registrar una liquidación bloquea cada pedido antes de tomar su parte y vuelve a leer su saldo ya bloqueado: cancelar, devolver y liquidar el mismo pedido se ponen en fila. Si mientras tanto el saldo dejó de alcanzar, `LQ002` y no se registra nada.
+
+**La pantalla.** Los saldos van por par en cualquier sentido («Ruta local le debe a Bodega»), con la marca «incluye pedidos cancelados». Cada pedido dice por qué debe (cobro o cancelación) y su ruta real. Un cancelado puede salir más de una vez, una por obligación. En el historial, las contraliquidaciones llevan su marca. El detalle del pedido cancelado muestra «Entre ubicaciones».
 
 ## Errores
 

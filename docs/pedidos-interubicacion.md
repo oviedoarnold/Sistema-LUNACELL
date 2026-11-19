@@ -142,12 +142,12 @@ Lo pendiente no es un registro: es lo entregado menos lo recibido, y lo cobrado 
   - el efectivo se devuelve en efectivo desde el origen o el destino;
   - transferencia, tarjeta y enlace los devuelve solo el administrador, con referencia;
   - se puede devolver en varias entregas, nunca más de lo pendiente de cada medio (`PI015`);
-  - devolver efectivo desde una tercera ubicación queda para la etapa C2b.
-- **Liquidaciones:**
-  - con efectivo del pedido en una liquidación por confirmar o confirmada, no se cancela (`PI013`); una rechazada no bloquea;
+  - desde la 0050 (C2b), el administrador también puede devolver el efectivo desde una tercera ubicación, con la referencia de la entrega real (`PI015` sin ella). Los empleados, solo desde su ubicación si es el origen o el destino.
+- **Liquidaciones** (reglas de la 0050, etapa C2b; ver [liquidaciones-entre-ubicaciones.md](liquidaciones-entre-ubicaciones.md)):
+  - con efectivo del pedido en una liquidación **por confirmar** no se cancela ni se devuelve efectivo (`PI013`); con una confirmada o rechazada, sí;
   - un pedido cancelado ya no se le debe al destino;
-  - si el destino devuelve efectivo al cliente, el origen se lo debe y lo liquida como siempre;
-  - lo que devuelve el origen y lo pendiente de devolver no son deudas entre ubicaciones.
+  - quien devolvió al cliente efectivo que conserva otra ubicación recibe de ella lo que puso: el origen le debe al destino o a una tercera ubicación, o el destino le devuelve al origen lo que ya le habían liquidado (contraliquidación);
+  - lo pendiente de devolver al cliente no es deuda entre ubicaciones.
 - **Reportes de caja:**
   - si ese día hubo devoluciones de pedidos, o quedan pendientes, agregan lo devuelto (por medio y por ubicación), el neto y lo pendiente;
   - lo pendiente no baja ninguna caja;
@@ -185,7 +185,7 @@ Desde la etapa C1, «Resolver pedidos interubicación» permite resolver los ped
 - **Etapa C**
   - C1 (0048): rechazo y resolución antes de facturar. Hecho; ver arriba.
   - C2a (0049): cancelación antes de facturar, productos que vuelven y reembolsos. Hecho; ver arriba.
-  - C2b: obligaciones entre ubicaciones en ambos sentidos (contraliquidación), reembolsos desde terceras ubicaciones y cancelar con efectivo ya liquidado.
+  - C2b (0050): obligaciones entre ubicaciones en ambos sentidos (contraliquidación), reembolsos desde terceras ubicaciones y cancelar con efectivo ya liquidado. Hecho; ver [liquidaciones-entre-ubicaciones.md](liquidaciones-entre-ubicaciones.md).
   - C3 y siguientes: anulación de facturas de pedido, devoluciones después de facturar y ajustes de crédito.
   - Una factura de pedido no se anula con la anulación actual: `anular_venta()` la rechaza y la pantalla explica por qué.
 - **Sin conexión**: los pedidos se crean, revisan, facturan, rechazan y resuelven solo con conexión. La venta sin conexión de siempre no cambió.
@@ -206,6 +206,6 @@ Desde la etapa C1, «Resolver pedidos interubicación» permite resolver los ped
 | `PI010` | Prima igual o mayor que el total |
 | `PI011` | Clave usada para otra operación (rechazar o resolver) |
 | `PI012` | El pedido no está en el estado que la operación necesita, o cambió mientras se revisaba |
-| `PI013` | El efectivo del pedido ya está en una liquidación por confirmar o confirmada |
+| `PI013` | El efectivo del pedido está en una liquidación que lo bloquea: por confirmar o confirmada para rechazar o resolver (C1); por confirmar para cancelar o devolver efectivo (C2b) |
 | `PI014` | Recepción de productos no válida: cantidades, estado, ubicación o falta la nota |
-| `PI015` | Reembolso no válido: medio que el cliente no usó, más de lo pendiente, sin referencia o desde una tercera ubicación |
+| `PI015` | Reembolso no válido: medio que el cliente no usó, más de lo pendiente, o sin referencia (electrónico, o efectivo desde una tercera ubicación) |
