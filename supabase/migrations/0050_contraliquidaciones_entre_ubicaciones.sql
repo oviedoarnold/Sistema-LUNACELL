@@ -31,7 +31,8 @@
 -- - mientras el pedido tenga una liquidación por confirmar no se registran
 --   reembolsos en efectivo (PI013);
 -- - el efectivo se puede devolver desde una tercera ubicación solo si lo
---   registra el administrador, y con referencia (PI015);
+--   registra el administrador, con referencia y si esa ubicación está
+--   activa (PI015);
 -- - las obligaciones opuestas no se compensan solas.
 --
 -- Cambian las reglas de la 0049:
@@ -427,9 +428,11 @@ end $$;
   La de la 0049, con dos cambios en el efectivo:
   - no se devuelve mientras el pedido tenga una liquidación por confirmar
     (PI013): primero se confirma o se rechaza;
-  - el administrador puede devolverlo desde una tercera ubicación, con la
-    referencia de la entrega real (PI015 sin ella). Los empleados siguen
-    devolviendo solo desde su ubicación, si es el origen o el destino.
+  - el administrador puede devolverlo desde una tercera ubicación activa de
+    la empresa, con la referencia de la entrega real (PI015 si está
+    desactivada o sin referencia). Los empleados siguen devolviendo solo
+    desde su ubicación, si es el origen o el destino. El origen y el destino
+    valen aunque se hayan desactivado después (pedidos históricos).
 */
 create or replace function public.reembolsar_al_cliente(
   p_pedido     public.pedidos_ubicacion,
@@ -496,10 +499,16 @@ begin
       raise exception 'Elige la ubicación desde la que se devuelve el efectivo' using errcode = 'PI015';
     end if;
 
+    -- El origen y el destino valen aunque después se hayan desactivado (pedidos históricos).
     if v_desde not in (p_pedido.origen_id, p_pedido.destino_id) then
       if p_usuario.rol <> 'admin' then
         raise exception 'El efectivo se devuelve desde el origen o el destino del pedido. Desde otra ubicación, solo el administrador'
           using errcode = '42501';
+      end if;
+
+      -- Una tercera ubicación, solo si está activa: lo mismo que ofrece la pantalla, también por RPC directo.
+      if not exists (select 1 from public.ubicaciones u where u.id = v_desde and u.empresa_id = p_pedido.empresa_id and u.activa) then
+        raise exception 'La ubicación desde la que se devuelve el efectivo está desactivada' using errcode = 'PI015';
       end if;
 
       if v_referencia = '' then

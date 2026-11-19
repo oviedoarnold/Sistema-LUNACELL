@@ -462,6 +462,102 @@ describe("reembolso desde una tercera ubicación", () => {
     expect((await info(e.cancelaRuta, p.pedido_id)).ubicaciones_para_reembolsar.map((u) => u.nombre)).toEqual(["Ruta local"])
   })
 
+  describe("la ubicación desde la que sale el efectivo", () => {
+    const registrados = async (pedido) =>
+      (await db.query("select u.nombre, r.importe from reembolsos_de_pedido r join ubicaciones u on u.id = r.ubicacion_id where r.pedido_id = $1 order by r.reembolsado_en, r.id", [pedido])).rows.map((x) => [x.nombre, num(x.importe)])
+
+    it("1. el administrador devuelve desde una tercera ubicación activa", async () => {
+      const e = await escenario()
+      const p = await entregar(e)
+
+      await cancelar(e.cancelaBodega, p.pedido_id)
+      expect(await reembolsar(e.admin, p.pedido_id, { importe: 50, ubicacion: e.camion1, referencia: "Recibo 90" })).toMatchObject({ repetido: false })
+      expect(await registrados(p.pedido_id)).toEqual([["Camión 01", 50]])
+    })
+
+    it("2. desde una tercera ubicación desactivada, no; tampoco por RPC directo", async () => {
+      const e = await escenario()
+      const p = await entregar(e)
+
+      await cancelar(e.cancelaBodega, p.pedido_id)
+
+      // Una ubicación no se desactiva mientras sea la de algún usuario: se los cambia antes, como haría el administrador.
+      await db.query("update usuarios set ubicacion_id = $1 where ubicacion_id = $2", [e.bodega, e.camion1])
+      await db.query("update ubicaciones set activa = false where id = $1", [e.camion1])
+
+      const r = await falla(reembolsar(e.admin, p.pedido_id, { importe: 50, ubicacion: e.camion1, referencia: "Recibo 91" }))
+
+      expect(r.code).toBe("PI015")
+      expect(r.message).toContain("desactivada")
+      expect((await info(e.admin, p.pedido_id)).ubicaciones_para_reembolsar.map((u) => u.nombre)).toEqual(["Bodega", "Ruta local"])
+      expect(await registrados(p.pedido_id)).toEqual([])
+    })
+
+    it("3. una ubicación de otra empresa, nunca", async () => {
+      const e = await escenario()
+      const p = await entregar(e)
+      const otra = await crearEmpresa(db, "Otra empresa")
+      const ajena = (await db.query("insert into ubicaciones (empresa_id, nombre, tipo) values ($1, 'Bodega ajena', 'bodega') returning id", [otra.empresa])).rows[0].id
+
+      await cancelar(e.cancelaBodega, p.pedido_id)
+
+      expect((await falla(reembolsar(e.admin, p.pedido_id, { importe: 50, ubicacion: ajena, referencia: "Recibo 92" }))).code).toBe("PI015")
+      expect(await registrados(p.pedido_id)).toEqual([])
+    })
+
+    it("4. un empleado no la usa, aunque tenga «Autorizar cancelación» en el origen o el destino", async () => {
+      const e = await escenario()
+      const p = await entregar(e)
+
+      await cancelar(e.cancelaBodega, p.pedido_id)
+
+      for (const quien of [e.cancelaBodega, e.cancelaRuta]) {
+        expect((await falla(reembolsar(quien, p.pedido_id, { importe: 50, ubicacion: e.camion1, referencia: "Recibo 93" }))).code).toBe("42501")
+      }
+
+      expect((await falla(reembolsar(e.enBodega, p.pedido_id, { importe: 50 }))).code).toBe("42501")
+      expect(await registrados(p.pedido_id)).toEqual([])
+    })
+
+    it("5. la referencia es obligatoria desde una tercera ubicación", async () => {
+      const e = await escenario()
+      const p = await entregar(e)
+
+      await cancelar(e.cancelaBodega, p.pedido_id)
+
+      for (const referencia of ["", "   "]) {
+        const r = await falla(reembolsar(e.admin, p.pedido_id, { importe: 50, ubicacion: e.camion1, referencia }))
+
+        expect(r.code).toBe("PI015")
+        expect(r.message).toContain("referencia")
+      }
+    })
+
+    it("6. desde el origen y el destino sigue como antes, sin referencia, aunque se hayan desactivado después", async () => {
+      const e = await escenario()
+      const p = await entregar(e)
+
+      await cancelar(e.cancelaBodega, p.pedido_id)
+      await reembolsar(e.cancelaBodega, p.pedido_id, { importe: 100 })
+      await reembolsar(e.cancelaRuta, p.pedido_id, { importe: 100 })
+      await reembolsar(e.admin, p.pedido_id, { importe: 50, ubicacion: e.ruta })
+
+      await db.query("update usuarios set ubicacion_id = $1 where ubicacion_id in ($2, $3)", [e.camion1, e.bodega, e.ruta])
+      await db.query("update ubicaciones set activa = false where id in ($1, $2)", [e.bodega, e.ruta])
+      await reembolsar(e.admin, p.pedido_id, { importe: 50 })
+      await reembolsar(e.admin, p.pedido_id, { importe: 50, ubicacion: e.ruta })
+
+      expect(await registrados(p.pedido_id)).toEqual([
+        ["Bodega", 100],
+        ["Ruta local", 100],
+        ["Ruta local", 50],
+        ["Bodega", 50],
+        ["Ruta local", 50],
+      ])
+      expect(await deudas(e, p.pedido_id)).toEqual([["Bodega", "Ruta local", 200, 200]])
+    })
+  })
+
   it("baja la caja de Camión 01 en el reporte diario, no la de Bodega", async () => {
     const e = await escenario()
     const p = await entregar(e)

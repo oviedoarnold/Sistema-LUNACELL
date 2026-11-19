@@ -142,7 +142,7 @@ Lo pendiente no es un registro: es lo entregado menos lo recibido, y lo cobrado 
   - el efectivo se devuelve en efectivo desde el origen o el destino;
   - transferencia, tarjeta y enlace los devuelve solo el administrador, con referencia;
   - se puede devolver en varias entregas, nunca más de lo pendiente de cada medio (`PI015`);
-  - desde la 0050 (C2b), el administrador también puede devolver el efectivo desde una tercera ubicación, con la referencia de la entrega real (`PI015` sin ella). Los empleados, solo desde su ubicación si es el origen o el destino.
+  - desde la 0050 (C2b), el administrador también puede devolver el efectivo desde una tercera ubicación activa, con la referencia de la entrega real (`PI015` si está desactivada o sin referencia). Los empleados, solo desde su ubicación si es el origen o el destino.
 - **Liquidaciones** (reglas de la 0050, etapa C2b; ver [liquidaciones-entre-ubicaciones.md](liquidaciones-entre-ubicaciones.md)):
   - con efectivo del pedido en una liquidación **por confirmar** no se cancela ni se devuelve efectivo (`PI013`); con una confirmada o rechazada, sí;
   - un pedido cancelado ya no se le debe al destino;
