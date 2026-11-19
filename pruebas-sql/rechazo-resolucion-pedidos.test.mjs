@@ -10,34 +10,19 @@
 */
 
 import { randomUUID } from "node:crypto"
-import { describe, it, expect, beforeAll, afterAll } from "vitest"
+import { describe, it, expect } from "vitest"
 
-import { levantarBase, consultarComo, enDosSesiones } from "./arnes.mjs"
+import { enDosSesiones } from "./arnes.mjs"
+import { usarBaseDePrueba, num, falla } from "./ayudantes.mjs"
 import { crearEmpresa, crearCliente, crearVendedor, deudaDe, contar } from "./fixtures.mjs"
 
 let base
 let db
 
-beforeAll(async () => {
-  base = await levantarBase()
-  db = base.admin
-}, 180000)
-
-afterAll(() => base?.cerrar())
-
-const como = (authId, consulta, valores = []) => consultarComo(db, authId, consulta, valores)
-const fila = async (authId, consulta, valores) => (await como(authId, consulta, valores)).rows[0]?.r
-const num = (valor) => (valor === null || valor === undefined ? valor : Number(valor))
-
-async function falla(promesa) {
-  try {
-    await promesa
-  } catch (error) {
-    return { code: error.code, message: error.message }
-  }
-
-  throw new Error("Se esperaba un error y la operación pasó")
-}
+const { como, fila } = usarBaseDePrueba((levantada) => {
+  base = levantada
+  db = levantada.admin
+})
 
 async function escenario() {
   const admin = await crearEmpresa(db, "Lunacell de prueba")
