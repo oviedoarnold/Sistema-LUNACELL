@@ -38,6 +38,8 @@ function FormularioDeCancelacion({ pedido, cancelacion, modo, enviando, onEnviar
   const recibido = cancelacion.dinero.reduce((n, d) => n + d.total, 0)
   const lectura = leerFormulario(cancelacion, modo, f)
   const ubicacion = cancelacion.ubicacionesParaRecibir.find((u) => u.id === f.ubicacionId)
+  // El efectivo que sale de una ubicación que no es del pedido lleva la referencia de la entrega real (0050).
+  const desdeOtra = Boolean(cancelacion.ubicacionesParaReembolsar.find((u) => u.id === f.desdeId)?.otra)
 
   const muestraProductos = modo !== "reembolsar" && productos.length > 0
   const muestraDinero = modo !== "recibir" && cancelacion.dinero.some((d) => d.pendiente > 0)
@@ -180,7 +182,14 @@ function FormularioDeCancelacion({ pedido, cancelacion, modo, enviando, onEnviar
               </div>
             )}
 
-            {medios.length === 0 && (
+            {cancelacion.bloqueoDeReembolsos && cancelacion.dinero.some((d) => d.medio === "efectivo" && d.pendiente > 0) && (
+              <p className="alert-banner" role="alert">
+                El efectivo de este pedido está en {cancelacion.bloqueoDeReembolsos}. Mientras no se confirme o se rechace en Liquidaciones, no se
+                registran devoluciones en efectivo.
+              </p>
+            )}
+
+            {medios.length === 0 && !cancelacion.bloqueoDeReembolsos && (
               <p className="crud-nota">
                 {cancelacion.dinero.some((d) => d.medio !== "efectivo" && d.pendiente > 0)
                   ? "Las devoluciones por transferencia, tarjeta o enlace las registra el administrador."
@@ -204,18 +213,34 @@ function FormularioDeCancelacion({ pedido, cancelacion, modo, enviando, onEnviar
                     </label>
 
                     {d.medio === "efectivo" ? (
-                      cancelacion.ubicacionesParaReembolsar.length > 1 && (
-                        <label className="field" htmlFor="cancelacion-desde">
-                          <span>Sale de la caja de</span>
-                          <select id="cancelacion-desde" value={f.desdeId} onChange={(evento) => cambiar({ desdeId: evento.target.value })}>
-                            {cancelacion.ubicacionesParaReembolsar.map((u) => (
-                              <option key={u.id} value={u.id}>
-                                {u.nombre}
-                              </option>
-                            ))}
-                          </select>
-                        </label>
-                      )
+                      <>
+                        {cancelacion.ubicacionesParaReembolsar.length > 1 && (
+                          <label className="field" htmlFor="cancelacion-desde">
+                            <span>Sale de la caja de</span>
+                            <select id="cancelacion-desde" value={f.desdeId} onChange={(evento) => cambiar({ desdeId: evento.target.value })}>
+                              {cancelacion.ubicacionesParaReembolsar.map((u) => (
+                                <option key={u.id} value={u.id}>
+                                  {u.nombre}
+                                  {u.otra ? " (otra ubicación)" : ""}
+                                </option>
+                              ))}
+                            </select>
+                          </label>
+                        )}
+                        {desdeOtra && (
+                          <label className="field" htmlFor="cancelacion-referencia-efectivo">
+                            <span>Referencia de la entrega</span>
+                            <input
+                              id="cancelacion-referencia-efectivo"
+                              type="text"
+                              maxLength={120}
+                              placeholder="Recibo o quién entregó el efectivo"
+                              value={f.referencias.efectivo || ""}
+                              onChange={(evento) => cambiar({ referencias: { ...f.referencias, efectivo: evento.target.value } })}
+                            />
+                          </label>
+                        )}
+                      </>
                     ) : (
                       <label className="field" htmlFor={`cancelacion-referencia-${d.medio}`}>
                         <span>Referencia de la devolución</span>

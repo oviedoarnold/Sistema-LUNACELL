@@ -14,6 +14,10 @@ export { ESTADO_DE_LIQUIDACION, ESTADO_DEL_PEDIDO, METODOS } from "../../utils/l
   Una liquidación no es venta, cobro ni abono. Los saldos, los repartos entre
   pedidos y los permisos los decide la base; desde aquí solo viaja la
   intención y la clave del intento, que hace seguro reintentar.
+
+  Desde la 0050 (C2b) las obligaciones van en cualquier sentido: en un pedido
+  cancelado, la ubicación que conserva el efectivo le debe a la que se lo
+  devolvió al cliente (motivo «cancelacion»). Un pedido puede tener varias.
 */
 
 const MOTIVOS = {
@@ -70,10 +74,13 @@ const aPar = (fila) => ({
   porConfirmar: numero(fila.por_confirmar),
   liquidado: numero(fila.liquidado),
   pendiente: numero(fila.pendiente),
+  porCancelaciones: Boolean(fila.por_cancelaciones),
   puedeRegistrar: Boolean(fila.puede_registrar),
 })
 
 const aPedido = (fila) => ({
+  // Un pedido cancelado puede deber en más de un sentido: la fila es el pedido y su par.
+  clave: `${fila.pedido_id}|${fila.origen_id}|${fila.destino_id}`,
   id: fila.pedido_id,
   numero: fila.numero,
   estado: fila.estado,
@@ -92,6 +99,9 @@ const aPedido = (fila) => ({
   liquidado: numero(fila.liquidado),
   pendiente: numero(fila.pendiente),
   estadoLiquidacion: fila.estado_liquidacion,
+  motivo: fila.motivo || "cobro",
+  pedidoOrigen: fila.pedido_origen ?? fila.origen,
+  pedidoDestino: fila.pedido_destino ?? fila.destino,
   medios: (fila.medios || []).map((m) => ({ medio: m.medio, monto: numero(m.monto), cargo: numero(m.cargo) })),
 })
 
@@ -114,7 +124,8 @@ export const aLiquidacionDeApp = (fila) => ({
   resueltaEn: fila.resuelta_en,
   motivoRechazo: fila.motivo_rechazo || "",
   puedeResolver: Boolean(fila.puede_resolver),
-  pedidos: (fila.pedidos || []).map((p) => ({ numero: p.numero, monto: numero(p.monto) })),
+  contraliquidacion: Boolean(fila.contraliquidacion),
+  pedidos: (fila.pedidos || []).map((p) => ({ numero: p.numero, monto: numero(p.monto), motivo: p.motivo || "cobro" })),
   repetida: Boolean(fila.repetida),
 })
 

@@ -118,6 +118,53 @@ describe("pendientesQuePuedeCompletar", () => {
   })
 })
 
+describe("C2b: tercera ubicación y bloqueo por liquidación por confirmar", () => {
+  const conTercera = (cambios = {}) =>
+    cancelacion({
+      puedeRegistrar: true,
+      puedeReembolsarElectronico: true,
+      ubicacionesParaReembolsar: [
+        { id: "bodega", nombre: "Bodega", otra: false },
+        { id: "camion-01", nombre: "Camión 01", otra: true },
+      ],
+      ...cambios,
+    })
+
+  it("el efectivo desde otra ubicación exige la referencia de la entrega", () => {
+    const c = conTercera()
+    const desdeCamion = formulario(c, "reembolsar", { desdeId: "camion-01", importes: { efectivo: "100", tarjeta: "" } })
+
+    expect(leerFormulario(c, "reembolsar", desdeCamion).problema).toMatch(/«Camión 01» no es el origen ni el destino: escribe la referencia/)
+
+    expect(leerFormulario(c, "reembolsar", { ...desdeCamion, referencias: { efectivo: " Recibo 80 " } }).datos.reembolsos).toEqual([
+      { medio: "efectivo", importe: 100, ubicacionId: "camion-01", referencia: "Recibo 80" },
+    ])
+  })
+
+  it("desde el origen o el destino, sin referencia, como siempre", () => {
+    const c = conTercera()
+
+    expect(leerFormulario(c, "reembolsar", formulario(c, "reembolsar", { importes: { efectivo: "100", tarjeta: "" } })).datos.reembolsos).toEqual([
+      { medio: "efectivo", importe: 100, ubicacionId: "bodega", referencia: "" },
+    ])
+  })
+
+  it("con una liquidación por confirmar no se devuelve efectivo; lo electrónico sí", () => {
+    const c = conTercera({ bloqueoDeReembolsos: "LIQ-000003 (por confirmar)" })
+
+    expect(mediosQuePuedeDevolver(c).map((d) => d.medio)).toEqual(["tarjeta"])
+    expect(pendientesQuePuedeCompletar(c).reembolsar).toBe(true)
+    expect(pendientesQuePuedeCompletar(conTercera({ bloqueoDeReembolsos: "LIQ-000003 (por confirmar)", puedeReembolsarElectronico: false })).reembolsar).toBe(false)
+  })
+
+  it("el resumen dice de qué caja sale el efectivo y que la diferencia va a Liquidaciones", () => {
+    const c = conTercera()
+    const { datos } = leerFormulario(c, "reembolsar", formulario(c, "reembolsar", { desdeId: "camion-01", importes: { efectivo: "100", tarjeta: "" }, referencias: { efectivo: "R" } }))
+
+    expect(resumen(c, "reembolsar", datos)).toContain("El efectivo sale de la caja de Camión 01. Si lo conserva otra ubicación, se lo deberá a Camión 01 en Liquidaciones.")
+  })
+})
+
 describe("cifrasDeCancelado: un pedido cancelado ya no debe nada", () => {
   const conDinero = (dinero) => ({ cancelacion: { motivo: "x" }, dinero })
 

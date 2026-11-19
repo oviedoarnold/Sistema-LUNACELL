@@ -878,6 +878,86 @@ describe("Pedidos: cancelar antes de facturar (etapa C2a)", () => {
     expect(within(ventana).queryByText("Saldo vigente por cobrar")).not.toBeInTheDocument()
   })
 
+  // C2b (0050): reembolso desde una tercera ubicación, bloqueo por liquidación y obligaciones del pedido.
+  const canceladoC2b = (cambios = {}) =>
+    sinCancelacion({
+      puede_registrar: true,
+      es_admin: true,
+      puede_reembolsar_electronico: true,
+      cancelacion: { motivo: "El cliente ya no lo quiere", usuario: "Administrador", fecha: "2026-11-19T15:00:00Z", principal: 400, cargo: 0 },
+      productos: [{ producto_id: "p1", nombre: "Cargador", entregado: 2, buen_estado: 2, danado: 0, pendiente: 0 }],
+      dinero: [{ medio: "efectivo", monto: 400, cargo: 0, total: 400, devuelto: 0, pendiente: 400 }],
+      ubicaciones_para_reembolsar: [
+        { id: "bodega", nombre: "Bodega", otra: false },
+        { id: "camion-01", nombre: "Camión 01", otra: false },
+        { id: "camion-02", nombre: "Camión 02", otra: true },
+      ],
+      ...cambios,
+    })
+
+  it("el administrador devuelve efectivo desde otra ubicación solo con la referencia de la entrega", async () => {
+    const { llamadas, ventana } = await abrirElPedido({
+      rpcs: { detalle: () => detalle({ estado: "cancelado", puede_facturar: false }), cancelacion: () => canceladoC2b() },
+    })
+
+    fireEvent.click(within(ventana).getByRole("button", { name: "Registrar reembolso" }))
+
+    const formulario = await screen.findByRole("dialog", { name: "Registrar reembolso PED-000001" })
+
+    expect(within(formulario).queryByLabelText("Referencia de la entrega")).not.toBeInTheDocument()
+    fireEvent.change(within(formulario).getByLabelText("Sale de la caja de"), { target: { value: "camion-02" } })
+    expect(within(formulario).getByRole("option", { name: "Camión 02 (otra ubicación)" })).toBeInTheDocument()
+    expect(within(formulario).getByText(/«Camión 02» no es el origen ni el destino/)).toBeInTheDocument()
+    expect(within(formulario).getByRole("button", { name: "Registrar reembolso" })).toBeDisabled()
+
+    fireEvent.change(within(formulario).getByLabelText("Referencia de la entrega"), { target: { value: "Recibo 80" } })
+    fireEvent.click(within(formulario).getByRole("button", { name: "Registrar reembolso" }))
+
+    await waitFor(() =>
+      expect(llamadas.reembolsar).toEqual([
+        { p_pedido: "ped-1", p_medio: "efectivo", p_importe: 400, p_ubicacion: "camion-02", p_referencia: "Recibo 80", p_clave_idempotencia: expect.any(String) },
+      ])
+    )
+  })
+
+  it("con una liquidación por confirmar no ofrece devolver efectivo y dice por qué", async () => {
+    const { ventana } = await abrirElPedido({
+      rpcs: {
+        detalle: () => detalle({ estado: "cancelado", puede_facturar: false }),
+        cancelacion: () => canceladoC2b({ bloqueo_de_reembolsos: "LIQ-000003 (por confirmar)" }),
+      },
+    })
+
+    const seccion = within(ventana).getByRole("region", { name: "Cancelación" })
+
+    expect(seccion).toHaveTextContent("El efectivo de este pedido está en LIQ-000003 (por confirmar)")
+    expect(within(ventana).queryByRole("button", { name: "Registrar reembolso" })).not.toBeInTheDocument()
+  })
+
+  it("el pedido cancelado dice quién le debe a quién entre ubicaciones, y desde dónde se devolvió", async () => {
+    const { ventana } = await abrirElPedido({
+      rpcs: {
+        detalle: () => detalle({ estado: "cancelado", puede_facturar: false }),
+        cancelacion: () =>
+          canceladoC2b({
+            dinero: [{ medio: "efectivo", monto: 400, cargo: 0, total: 400, devuelto: 400, pendiente: 0 }],
+            reembolsos: [{ medio: "efectivo", importe: 400, ubicacion: "Camión 02", referencia: "Recibo 80", usuario: "Administrador", fecha: "2026-11-19T16:00:00Z", en_otra_ubicacion: true }],
+            obligaciones: [
+              { debe: "Bodega", recibe: "Camión 02", monto: 300, por_confirmar: 0, liquidado: 0, pendiente: 300 },
+              { debe: "Camión 01", recibe: "Camión 02", monto: 100, por_confirmar: 0, liquidado: 100, pendiente: 0 },
+            ],
+          }),
+      },
+    })
+
+    const seccion = within(ventana).getByRole("region", { name: "Cancelación" })
+
+    expect(within(seccion).getByRole("heading", { name: "Entre ubicaciones" })).toBeInTheDocument()
+    expect(within(seccion).getByText("Bodega le debe a Camión 02").closest("li")).toHaveTextContent("Pendiente L 300.00")
+    expect(within(seccion).getByText("Camión 01 le debe a Camión 02").closest("li")).toHaveTextContent("Liquidado")
+    expect(seccion).toHaveTextContent("Devuelto L 400.00 con Efectivo desde Camión 02 (otra ubicación)")
+  })
+
   it("el filtro «Cancelados» pide los pedidos cancelados", async () => {
     const { llamadas } = await renderPedidos()
 
