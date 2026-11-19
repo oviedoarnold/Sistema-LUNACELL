@@ -10,60 +10,27 @@
 */
 
 import { randomUUID } from "node:crypto"
-import { describe, it, expect, beforeAll, afterAll } from "vitest"
+import { describe, it, expect } from "vitest"
 
-import { levantarBase, consultarComo, enDosSesiones } from "./arnes.mjs"
-import { crearEmpresa, crearCliente, crearVendedor, deudaDe, contar } from "./fixtures.mjs"
+import { enDosSesiones } from "./arnes.mjs"
+import { usarBaseDePrueba, num, falla, empresaConTresUbicaciones } from "./ayudantes.mjs"
+import { crearEmpresa, crearVendedor, deudaDe, contar } from "./fixtures.mjs"
 
 let base
 let db
 
-beforeAll(async () => {
-  base = await levantarBase()
-  db = base.admin
-}, 180000)
-
-afterAll(() => base?.cerrar())
-
-const como = (authId, consulta, valores = []) => consultarComo(db, authId, consulta, valores)
-const fila = async (authId, consulta, valores) => (await como(authId, consulta, valores)).rows[0]?.r
-const num = (valor) => (valor === null || valor === undefined ? valor : Number(valor))
-
-async function falla(promesa) {
-  try {
-    await promesa
-  } catch (error) {
-    return { code: error.code, message: error.message }
-  }
-
-  throw new Error("Se esperaba un error y la operación pasó")
-}
+const { como, fila } = usarBaseDePrueba((levantada) => {
+  base = levantada
+  db = levantada.admin
+})
 
 async function escenario() {
-  const admin = await crearEmpresa(db, "Lunacell de prueba")
-  const { empresa } = admin
-
-  await db.query("update empresas set tasa_isv = 15, tasa_cargo_tarjeta = 1.7, tasa_cargo_enlace = 1.7 where id = $1", [empresa])
-  await db.query("update usuarios set ubicacion_id = null where id = $1", [admin.usuario])
-
-  const ubicacion = async (nombre, tipo) =>
-    (await db.query(`insert into ubicaciones (empresa_id, nombre, tipo) values ($1, $2, $3) returning id`, [empresa, nombre, tipo])).rows[0].id
-
-  const bodega = await ubicacion("Bodega", "bodega")
-  const ruta = await ubicacion("Ruta local", "camion")
-  const camion1 = await ubicacion("Camión 01", "camion")
-
-  const cargador = (
-    await db.query(`insert into productos (empresa_id, codigo, nombre, precio, costo) values ($1, $2, 'Cargador', 100, 37) returning id`, [
-      empresa,
-      `C-${randomUUID().slice(0, 8)}`,
-    ])
-  ).rows[0].id
-
-  await db.query(`insert into inventario_ubicacion (empresa_id, ubicacion_id, producto_id, cantidad) values ($1, $2, $3, 50)`, [empresa, bodega, cargador])
-
-  const cliente = await crearCliente(db, empresa, "Cliente A")
-  const vendedor = (u, permisos) => crearVendedor(db, { empresa, ubicacion: u, permisos })
+  const { admin, empresa, bodega, ruta, camion1, cargador, cliente, vendedor } = await empresaConTresUbicaciones(db, {
+    nombre: "Lunacell de prueba",
+    tasaIsv: 15,
+    existencia: 50,
+    nombreCliente: "Cliente A",
+  })
 
   const enBodega = await vendedor(bodega, ["pos"])
   const cancelaBodega = await vendedor(bodega, ["pos", "orders-cancel"])
