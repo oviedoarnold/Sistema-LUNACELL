@@ -362,6 +362,36 @@ describe("doble clic, reintentos y concurrencia", () => {
     expect(r.error.code).toBe("LQ004")
     expect((await db.query("select estado from liquidaciones_ubicacion where id = $1", [l.id])).rows[0].estado).toBe("confirmada")
   })
+
+  /*
+    El caso real: el vendedor confirma desde su teléfono y el administrador,
+    con la pantalla desactualizada, confirma casi a la vez. La segunda espera
+    al candado, recibe la misma confirmación marcada `repetida` y no mueve
+    nada: el monto se cuenta una sola vez y queda quien confirmó primero.
+  */
+  it("dos usuarios confirmando a la vez: una sola confirmación y el monto una sola vez", async () => {
+    const e = await escenario()
+
+    await pedido(e)
+
+    const l = await registrar(e, e.enBodega, { monto: 100 })
+    const confirmar = (c) => c.query("select public.resolver_liquidacion($1, true) as r", [l.id])
+
+    const r = await enDosSesiones(base, db, {
+      primera: { authId: e.enCamion1.authId, hacer: confirmar },
+      segunda: { authId: e.admin.authId, hacer: confirmar },
+    })
+
+    expect(r.error).toBeUndefined()
+    expect(r.respuesta.rows[0].r).toMatchObject({ estado: "confirmada", resuelta_por: e.enCamion1.usuario, repetida: true })
+
+    const guardada = (await db.query("select estado, resuelta_por from liquidaciones_ubicacion where id = $1", [l.id])).rows[0]
+
+    expect(guardada).toEqual({ estado: "confirmada", resuelta_por: e.enCamion1.usuario })
+    expect(await contar(db, "liquidaciones_ubicacion", "empresa_id = $1", [e.empresa])).toBe(1)
+    expect(await contar(db, "liquidacion_detalle", "empresa_id = $1", [e.empresa])).toBe(1)
+    expect(cifras(par(await control(e.admin), e))).toMatchObject({ por_confirmar: 0, liquidado: 100, pendiente: 130 })
+  })
 })
 
 describe("quién ve y quién opera", () => {
