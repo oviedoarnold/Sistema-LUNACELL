@@ -4,6 +4,7 @@ import { screen, fireEvent, act, within } from "@testing-library/react"
 import { AuthProvider } from "../context/AuthContext"
 import ProductProvider from "../context/ProductContext"
 import LocationsProvider from "../context/LocationsContext"
+import { EVENTO_VENTAS_SINCRONIZADAS } from "../lib/sinConexion/eventos"
 import { renderizarPantalla } from "../test/pantallas"
 import Products from "./Products"
 
@@ -20,6 +21,17 @@ const PRODUCTOS = [
   { id: "p3", code: "P-001", name: "Brocha 3 pulgadas", category: "Pinturas", price: 45, costPrice: 26, stock: 0, minStock: 5, supplierId: "" },
 ]
 
+/*
+  Por omisión el usuario trabaja en la bodega, que tiene todo el stock: los
+  estados de la pantalla son los de la ubicación a la vista.
+*/
+const BODEGA = { id: "bodega", name: "Lunacell Bodega", type: "bodega" }
+
+const EN_LA_BODEGA = [
+  { locationId: "bodega", productId: "p1", quantity: 20 },
+  { locationId: "bodega", productId: "p2", quantity: 3 },
+]
+
 function renderProducts(productos = PRODUCTOS, extra = {}) {
   return renderizarPantalla(
     <AuthProvider>
@@ -31,6 +43,9 @@ function renderProducts(productos = PRODUCTOS, extra = {}) {
     </AuthProvider>,
     {
       productos,
+      ubicaciones: [BODEGA],
+      existencias: EN_LA_BODEGA,
+      ubicacionOperativa: "bodega",
       esperar: ["productos_con_stock", "ubicaciones", "existencias_por_ubicacion"],
       ...extra,
     }
@@ -50,14 +65,14 @@ describe("Products", () => {
     expect(screen.getByText("Cemento gris")).toBeInTheDocument()
   })
 
-  it("marca con existencias, no «Disponible», el producto con stock total suficiente", async () => {
+  it("marca con existencias el producto con suficiente en la ubicación a la vista", async () => {
     await renderProducts()
     expect(screen.getByText("Con existencias")).toBeInTheDocument()
-    expect(screen.queryByText("Disponible")).not.toBeInTheDocument()
   })
 
-  it("dice que el stock es el total de todas las ubicaciones", async () => {
+  it("el administrador ve lo disponible en su ubicación y, aparte, el stock total", async () => {
     await renderProducts()
+    expect(screen.getByRole("columnheader", { name: "Disponible en Lunacell Bodega" })).toBeInTheDocument()
     expect(screen.getByRole("columnheader", { name: "Stock total" })).toBeInTheDocument()
     expect(screen.getByText(/la suma de todas las ubicaciones/)).toBeInTheDocument()
   })
@@ -211,7 +226,7 @@ describe("Products: existencia por ubicación", () => {
   ]
 
   const renderConUbicaciones = () =>
-    renderProducts(PRODUCTOS, { ubicaciones: UBICACIONES, existencias: EXISTENCIAS })
+    renderProducts(PRODUCTOS, { ubicaciones: UBICACIONES, existencias: EXISTENCIAS, ubicacionOperativa: null })
 
   const escribir = (etiqueta, valor) =>
     fireEvent.change(screen.getByLabelText(etiqueta), { target: { value: valor } })
@@ -419,5 +434,214 @@ describe("Products: el costo solo para el administrador", () => {
     await guardar()
 
     expect(falso.datos.productos.find((p) => p.id === "p1").costo).toBe(120)
+  })
+})
+
+/*
+  Inventario por ubicación, con el caso real después del traslado entre
+  Lunacell Bodega y Ruta local. Lo principal es lo disponible en la ubicación
+  a la vista; el stock total, aparte y solo para quien puede ver todas.
+*/
+describe("Products: inventario de la ubicación del usuario", () => {
+  const RUTA = { id: "ruta", name: "Ruta local", type: "camion" }
+
+  // El stock del catálogo es el total de la empresa.
+  const CATALOGO = [
+    { id: "aur", code: "AUR-01", name: "Auriculares Iphone", category: "Audio", price: 150, costPrice: 90, stock: 39, minStock: 5, supplierId: "" },
+    { id: "cubo", code: "CUB-01", name: "Cubo Iphone", category: "Cargadores", price: 120, costPrice: 70, stock: 42, minStock: 5, supplierId: "" },
+    { id: "parl", code: "PAR-01", name: "Parlante inalámbrico", category: "Audio", price: 600, costPrice: 400, stock: 9, minStock: 5, supplierId: "" },
+    { id: "vid", code: "VID-01", name: "Vidrio privado caja", category: "Protectores", price: 80, costPrice: 30, stock: 99, minStock: 5, supplierId: "" },
+    { id: "carg", code: "CAR-01", name: "Cargador rápido", category: "Cargadores", price: 200, costPrice: 120, stock: 5, minStock: 2, supplierId: "" },
+  ]
+
+  const EN_BODEGA = [
+    { locationId: "bodega", productId: "aur", quantity: 29 },
+    { locationId: "bodega", productId: "cubo", quantity: 27 },
+    { locationId: "bodega", productId: "parl", quantity: 7 },
+    { locationId: "bodega", productId: "vid", quantity: 69 },
+  ]
+
+  // El cargador está agotado en la bodega y tiene 5 en la ruta.
+  const EN_RUTA = [
+    { locationId: "ruta", productId: "aur", quantity: 10 },
+    { locationId: "ruta", productId: "cubo", quantity: 15 },
+    { locationId: "ruta", productId: "parl", quantity: 2 },
+    { locationId: "ruta", productId: "vid", quantity: 30 },
+    { locationId: "ruta", productId: "carg", quantity: 5 },
+  ]
+
+  const comoAdmin = (ubicacionOperativa = "bodega") => ({
+    ubicaciones: [BODEGA, RUTA],
+    existencias: [...EN_BODEGA, ...EN_RUTA],
+    ubicacionOperativa,
+  })
+
+  // Lo que la base le devuelve a un vendedor con inventory-own: solo su ubicación.
+  const comoVendedorDe = (ubicacion, existencias) => ({
+    rolDelUsuario: "vendedor",
+    permisosDelUsuario: ["products", "inventory-own"],
+    ubicaciones: [ubicacion],
+    existencias,
+    ubicacionOperativa: ubicacion.id,
+  })
+
+  const fila = (producto) => screen.getByText(producto).closest("tr")
+
+  const estadoDe = (producto) => within(fila(producto)).queryByText(/^(Agotado|Stock bajo|Con existencias)$/)?.textContent ?? null
+  const selector = () => screen.queryByLabelText(/cambiar de ubicación/i)
+  const cambiarA = (id) => fireEvent.change(selector(), { target: { value: id } })
+
+  it("abre automáticamente en la ubicación asignada", async () => {
+    await renderProducts(CATALOGO, comoAdmin())
+
+    expect(screen.getByText(/Ubicación actual:/)).toHaveTextContent("Ubicación actual: Lunacell Bodega (tu ubicación)")
+    expect(selector()).toHaveValue("bodega")
+  })
+
+  it("el administrador de Bodega ve lo de Bodega y, aparte, el stock total", async () => {
+    await renderProducts(CATALOGO, comoAdmin())
+
+    expect(screen.getByRole("columnheader", { name: "Disponible en Lunacell Bodega" })).toBeInTheDocument()
+    expect(screen.getByRole("columnheader", { name: "Stock total" })).toBeInTheDocument()
+    expect(within(fila("Auriculares Iphone")).getByText("29 u.")).toBeInTheDocument()
+    expect(within(fila("Auriculares Iphone")).getByText("39 u.")).toBeInTheDocument()
+    expect(within(fila("Cubo Iphone")).getByText("27 u.")).toBeInTheDocument()
+    expect(within(fila("Parlante inalámbrico")).getByText("7 u.")).toBeInTheDocument()
+    expect(within(fila("Vidrio privado caja")).getByText("69 u.")).toBeInTheDocument()
+  })
+
+  it("el administrador que cambia a Ruta local ve lo de la ruta en el acto", async () => {
+    await renderProducts(CATALOGO, comoAdmin())
+
+    cambiarA("ruta")
+
+    expect(screen.getByRole("columnheader", { name: "Disponible en Ruta local" })).toBeInTheDocument()
+    expect(screen.getByText(/Ubicación actual:/)).toHaveTextContent("Ubicación actual: Ruta local.")
+    expect(within(fila("Auriculares Iphone")).getByText("10 u.")).toBeInTheDocument()
+    expect(within(fila("Cubo Iphone")).getByText("15 u.")).toBeInTheDocument()
+    expect(within(fila("Parlante inalámbrico")).getByText("2 u.")).toBeInTheDocument()
+    expect(within(fila("Vidrio privado caja")).getByText("30 u.")).toBeInTheDocument()
+    expect(within(fila("Auriculares Iphone")).getByText("39 u.")).toBeInTheDocument()
+  })
+
+  it("el vendedor de Bodega ve 29, 27, 7 y 69, sin selector ni stock total", async () => {
+    await renderProducts(CATALOGO, comoVendedorDe(BODEGA, EN_BODEGA))
+
+    expect(within(fila("Auriculares Iphone")).getByText("29 u.")).toBeInTheDocument()
+    expect(within(fila("Cubo Iphone")).getByText("27 u.")).toBeInTheDocument()
+    expect(within(fila("Parlante inalámbrico")).getByText("7 u.")).toBeInTheDocument()
+    expect(within(fila("Vidrio privado caja")).getByText("69 u.")).toBeInTheDocument()
+    expect(selector()).not.toBeInTheDocument()
+  })
+
+  it("el vendedor de Ruta local ve 10, 15, 2 y 30", async () => {
+    await renderProducts(CATALOGO, comoVendedorDe(RUTA, EN_RUTA))
+
+    expect(screen.getByRole("columnheader", { name: "Disponible en Ruta local" })).toBeInTheDocument()
+    expect(within(fila("Auriculares Iphone")).getByText("10 u.")).toBeInTheDocument()
+    expect(within(fila("Cubo Iphone")).getByText("15 u.")).toBeInTheDocument()
+    expect(within(fila("Parlante inalámbrico")).getByText("2 u.")).toBeInTheDocument()
+    expect(within(fila("Vidrio privado caja")).getByText("30 u.")).toBeInTheDocument()
+  })
+
+  it("el vendedor sin permiso global no ve el stock de la empresa en ninguna parte", async () => {
+    await renderProducts(CATALOGO, comoVendedorDe(BODEGA, EN_BODEGA))
+
+    expect(screen.queryByRole("columnheader", { name: "Stock total" })).not.toBeInTheDocument()
+    expect(screen.queryByText(/la suma de todas las ubicaciones/)).not.toBeInTheDocument()
+
+    for (const total of ["39 u.", "42 u.", "9 u.", "99 u."]) expect(screen.queryByText(total)).not.toBeInTheDocument()
+
+    // Tampoco en la ayuda del ajuste.
+    await act(async () => {
+      fireEvent.click(within(fila("Auriculares Iphone")).getByRole("button", { name: /editar/i }))
+    })
+
+    expect(screen.getByText(/hoy hay 29 en lunacell bodega\./i)).toBeInTheDocument()
+    expect(screen.queryByText(/en todas las ubicaciones/i)).not.toBeInTheDocument()
+  })
+
+  it("agotado en la ubicación aunque haya unidades en otra", async () => {
+    await renderProducts(CATALOGO, comoAdmin())
+
+    expect(estadoDe("Cargador rápido")).toBe("Agotado")
+    expect(within(fila("Cargador rápido")).getByText("0 u.")).toBeInTheDocument()
+    expect(within(fila("Cargador rápido")).getByText("5 u.")).toBeInTheDocument()
+
+    cambiarA("ruta")
+
+    expect(estadoDe("Cargador rápido")).toBe("Con existencias")
+  })
+
+  it("el stock bajo y su alerta son los de la ubicación", async () => {
+    await renderProducts(CATALOGO, comoAdmin())
+
+    expect(estadoDe("Parlante inalámbrico")).toBe("Con existencias")
+    expect(screen.getByText(/1 producto con stock bajo \(1 agotado\)/)).toBeInTheDocument()
+
+    cambiarA("ruta")
+
+    expect(estadoDe("Parlante inalámbrico")).toBe("Stock bajo")
+    expect(screen.getByText(/1 producto con stock bajo$/)).toBeInTheDocument()
+    expect(screen.getByText("Parlante inalámbrico · 2")).toBeInTheDocument()
+  })
+
+  it("una sesión nueva vuelve a abrir en la ubicación asignada", async () => {
+    const { unmount } = await renderProducts(CATALOGO, comoAdmin())
+
+    cambiarA("ruta")
+    unmount()
+
+    await renderProducts(CATALOGO, comoAdmin())
+
+    expect(selector()).toHaveValue("bodega")
+    expect(within(fila("Auriculares Iphone")).getByText("29 u.")).toBeInTheDocument()
+  })
+
+  it("sin ubicación asignada avisa y no usa el stock global", async () => {
+    await renderProducts(CATALOGO, { ...comoVendedorDe(BODEGA, []), ubicaciones: [], ubicacionOperativa: null })
+
+    expect(screen.getByRole("note")).toHaveTextContent(/No tienes una ubicación asignada\. Pide al administrador/)
+    expect(screen.queryByText("39 u.")).not.toBeInTheDocument()
+    expect(estadoDe("Auriculares Iphone")).toBeNull()
+    expect(screen.queryByText(/con stock bajo/)).not.toBeInTheDocument()
+  })
+
+  it("el administrador sin ubicación elige una; no se asume la bodega", async () => {
+    await renderProducts(CATALOGO, comoAdmin(null))
+
+    expect(screen.getByRole("note")).toHaveTextContent(/elige una para ver sus existencias/)
+    expect(selector()).toHaveValue("")
+    expect(screen.queryByText("29 u.")).not.toBeInTheDocument()
+
+    cambiarA("ruta")
+
+    expect(screen.queryByRole("note")).not.toBeInTheDocument()
+    expect(within(fila("Auriculares Iphone")).getByText("10 u.")).toBeInTheDocument()
+  })
+
+  it("al sincronizar ventas vuelve a pedir las existencias", async () => {
+    const { falso } = await renderProducts(CATALOGO, comoAdmin())
+
+    falso.datos.inventario_ubicacion.find((c) => c.ubicacion_id === "bodega" && c.producto_id === "aur").cantidad = 28
+
+    act(() => {
+      window.dispatchEvent(new CustomEvent(EVENTO_VENTAS_SINCRONIZADAS, { detail: { registradas: 1 } }))
+    })
+
+    expect(await within(fila("Auriculares Iphone")).findByText("28 u.")).toBeInTheDocument()
+  })
+
+  it("el ajuste propone la ubicación que se está mirando", async () => {
+    await renderProducts(CATALOGO, comoAdmin())
+
+    cambiarA("ruta")
+
+    await act(async () => {
+      fireEvent.click(within(fila("Cubo Iphone")).getByRole("button", { name: /editar/i }))
+    })
+
+    expect(screen.getByLabelText(/^ubicación del ajuste$/i)).toHaveValue("ruta")
+    expect(screen.getByText(/hoy hay 15 en ruta local \(42 en todas las ubicaciones\)/i)).toBeInTheDocument()
   })
 })

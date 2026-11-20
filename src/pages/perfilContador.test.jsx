@@ -126,7 +126,10 @@ describe("perfil contador: las pantallas no ofrecen escribir", () => {
     expect(screen.getByText("M-001")).toBeInTheDocument()
     expect(screen.getByText("Herramientas")).toBeInTheDocument()
     expect(screen.getByText("L 180.00")).toBeInTheDocument()
-    expect(screen.getByText("20 u.")).toBeInTheDocument()
+
+    // Sin permiso de inventario no ve existencias, y el total de la empresa no las sustituye.
+    expect(screen.queryByText("20 u.")).not.toBeInTheDocument()
+    expect(screen.getByRole("note")).toHaveTextContent(/No tienes permiso para consultar existencias/)
 
     expect(screen.queryByText(/costo|margen|utilidad/i)).not.toBeInTheDocument()
     expect(screen.queryByRole("button", { name: /nuevo producto|editar|eliminar/i })).not.toBeInTheDocument()

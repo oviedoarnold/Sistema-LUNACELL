@@ -12,6 +12,8 @@ import { LocationsContext, ProductContext } from "../context/contexts"
 import { PERMISSIONS } from "../context/permissions"
 import { useAuth } from "../hooks/useAuth"
 import { useExistencias } from "../hooks/useExistencias"
+import { useRecargaDeExistencias } from "../hooks/useRecargaDeExistencias"
+import { ubicacionInicial, ubicacionesPresentes } from "../utils/inventario"
 import {
   MiniaturaDeProducto,
   SelectorDeImagen,
@@ -57,6 +59,30 @@ function useCostos(esAdmin) {
   return { costos: esAdmin ? costos : null, recargar }
 }
 
+/*
+  Por qué no hay una ubicación a la vista. Nunca se sustituye por el total
+  de la empresa ni se asume la bodega: se dice qué pasa.
+*/
+const AVISO_SIN_UBICACION = {
+  "sin-ubicacion": {
+    conOpciones: "No tienes una ubicación asignada: elige una para ver sus existencias.",
+    sinOpciones: "No tienes una ubicación asignada. Pide al administrador que te asigne una para ver sus existencias.",
+  },
+  "no-visible": {
+    conOpciones: "Tu ubicación asignada no está entre las que puedes consultar: elige una de las disponibles.",
+    sinOpciones: "Tu ubicación asignada no está entre las que puedes consultar: puede estar desactivada o te falta el permiso de inventario.",
+  },
+}
+
+/*
+  El estado de un producto en la ubicación a la vista: un producto agotado
+  en la bodega está agotado allí aunque haya unidades en otra ubicación.
+*/
+const estadoDeExistencia = (cantidad, minimo) =>
+  cantidad <= 0 ? ["Agotado", "out"] : cantidad <= minimo ? ["Stock bajo", "low"] : ["Con existencias", "ok"]
+
+const minimoDe = (p) => Number(p.minStock ?? 5)
+
 function Products() {
   const {
     products = [],
@@ -94,15 +120,69 @@ function Products() {
   const conCostos = costos !== null
 
   /*
-    La existencia se carga y se corrige en UNA ubicación, no en el total.
-    La de la ubicación elegida es la referencia del ajuste: el formulario
-    la muestra para que quede claro qué número se está cambiando.
+    La existencia por ubicación, la misma fuente que Existencias y el punto
+    de venta (`existencias_por_ubicacion`). La base solo devuelve las
+    ubicaciones que el usuario puede consultar. Es de este usuario: con otra
+    sesión deja de valer en el acto.
   */
+  const usuarioId = user?.id || ""
+
+  // Sin permiso de inventario la base no le devolvería ninguna fila: ni se pide.
+  const puedeConsultarExistencias = hasPermission(PERMISSIONS.INVENTORY_OWN)
+
   const {
     existencias,
     cargando: cargandoExistencias,
+    error: errorDeExistencias,
     recargar: recargarExistencias,
-  } = useExistencias({ activo: puedeAdministrar })
+  } = useExistencias({ clave: usuarioId, activo: puedeConsultarExistencias })
+
+  // Ventas sincronizadas u otros dispositivos: las cantidades se vuelven a pedir solas.
+  useRecargaDeExistencias(recargarExistencias, { activo: puedeConsultarExistencias })
+
+  /*
+    El stock total de la empresa solo para quien puede ver todas las
+    ubicaciones. A los demás no se les presenta como si fuera el suyo.
+  */
+  const puedeVerElTotal = hasPermission(PERMISSIONS.INVENTORY_ALL)
+
+  /*
+    Se abre en la ubicación asignada. Otra elegida se recuerda solo en
+    memoria y para este usuario: una sesión nueva vuelve a la suya.
+  */
+  const ubicacionesVisibles = useMemo(() => ubicacionesPresentes(existencias), [existencias])
+  const inicial = ubicacionInicial(ubicacionesVisibles, user?.locationId)
+  const [eleccion, setEleccion] = useState(null)
+
+  const eligio =
+    eleccion !== null &&
+    eleccion.usuarioId === usuarioId &&
+    ubicacionesVisibles.some((u) => String(u.locationId) === eleccion.locationId)
+
+  const vistaId = eligio ? eleccion.locationId : String(inicial.locationId)
+  const ubicacionVista = ubicacionesVisibles.find((u) => String(u.locationId) === vistaId)
+  const esLaSuya = Boolean(ubicacionVista) && vistaId === String(user?.locationId)
+
+  const cantidadEnLaVista = useMemo(
+    () =>
+      new Map(
+        existencias
+          .filter((e) => String(e.locationId) === vistaId)
+          .map((e) => [String(e.productId), e.quantity])
+      ),
+    [existencias, vistaId]
+  )
+
+  // Lo disponible en la ubicación a la vista; null si no hay ninguna a la vista.
+  const disponible = (p) => (ubicacionVista ? cantidadEnLaVista.get(String(p.id)) ?? 0 : null)
+
+  let avisoDeUbicacion = ""
+
+  if (!puedeConsultarExistencias) avisoDeUbicacion = "No tienes permiso para consultar existencias por ubicación: aquí ves el catálogo y sus precios."
+  else if (errorDeExistencias) avisoDeUbicacion = errorDeExistencias
+  else if (!cargandoExistencias && !ubicacionVista && inicial.motivo) {
+    avisoDeUbicacion = AVISO_SIN_UBICACION[inicial.motivo][ubicacionesVisibles.length > 0 ? "conOpciones" : "sinOpciones"]
+  }
 
   const [ubicacionId, setUbicacionId] = useState("")
 
@@ -114,22 +194,22 @@ function Products() {
     return products.filter((p) => [p.name, p.category, p.code].some((v) => coincideBusqueda(v, search)))
   }, [products, search])
 
-  const lowProducts = products.filter((p) => Number(p.stock) <= Number(p.minStock ?? 5))
-  const outCount = products.filter((p) => Number(p.stock) <= 0).length
+  /*
+    Alertas, estados y resúmenes son de la ubicación a la vista, nunca del
+    total: sin ubicación no hay alerta que dar.
+  */
+  const lowProducts = ubicacionVista ? products.filter((p) => disponible(p) <= minimoDe(p)) : []
+  const outCount = lowProducts.filter((p) => disponible(p) <= 0).length
 
   /*
-    El estado sale del stock que ya trae el producto; la variante es solo
-    el nombre del color con el que se pinta.
+    En el ajuste, primero la ubicación que se está mirando; si no está
+    activa, la operativa del usuario; si tampoco, que elija.
   */
-  /*
-    El stock de esta pantalla es el TOTAL de todas las ubicaciones. Por eso no
-    se dice «Disponible»: un vendedor lo leería como lo que puede vender en la
-    suya, que se ve al facturar y en Inventario.
-  */
-  const status = (p) => Number(p.stock) <= 0 ? ["Agotado", "out"] : Number(p.stock) <= Number(p.minStock ?? 5) ? ["Stock bajo", "low"] : ["Con existencias", "ok"]
-  // La ubicación operativa del usuario, si sigue activa; si no, que elija.
-  const ubicacionPorOmision = () =>
-    ubicacionesActivas.some((u) => u.id === user?.locationId) ? user.locationId : ""
+  const ubicacionPorOmision = () => {
+    if (ubicacionesActivas.some((u) => u.id === vistaId)) return vistaId
+
+    return ubicacionesActivas.some((u) => u.id === user?.locationId) ? user.locationId : ""
+  }
 
   const ubicacionElegida = ubicacionesActivas.find((u) => u.id === ubicacionId)
 
@@ -221,7 +301,11 @@ function Products() {
   if (form.id) {
     if (!ubicacionId) ayudaExistencia = "Elige primero la ubicación que vas a ajustar."
     else if (referencia === null) ayudaExistencia = cargandoExistencias ? "Cargando la existencia de esta ubicación…" : `No se puede leer la existencia de ${nombreUbicacion}, así que no se puede ajustar desde aquí.`
-    else ayudaExistencia = `Hoy hay ${referencia} en ${nombreUbicacion} (${products.find((p) => p.id === form.id)?.stock ?? 0} en todas las ubicaciones). Déjalo vacío para no cambiarla; el cambio se registra como ajuste solo en ${nombreUbicacion}.`
+    else {
+      const total = puedeVerElTotal ? ` (${products.find((p) => p.id === form.id)?.stock ?? 0} en todas las ubicaciones)` : ""
+
+      ayudaExistencia = `Hoy hay ${referencia} en ${nombreUbicacion}${total}. Déjalo vacío para no cambiarla; el cambio se registra como ajuste solo en ${nombreUbicacion}.`
+    }
   }
 
   const remove = async (id) => {
@@ -249,7 +333,7 @@ function Products() {
       <div>
         <strong>{lowProducts.length} producto{lowProducts.length !== 1 ? "s" : ""} con stock bajo{outCount ? ` (${outCount} agotado${outCount !== 1 ? "s" : ""})` : ""}</strong>
 
-        <div className="chips">{lowProducts.map((p) => <span className="chip" key={p.id}>{p.name} · {p.stock}</span>)}</div>
+        <div className="chips">{lowProducts.map((p) => <span className="chip" key={p.id}>{p.name} · {disponible(p)}</span>)}</div>
       </div>
     </div>}
 
@@ -260,9 +344,30 @@ function Products() {
         placeholder="Buscar producto, código o categoría..."
         etiqueta="Buscar en el inventario"
       />
+
+      {(ubicacionesVisibles.length > 1 || (!ubicacionVista && ubicacionesVisibles.length > 0)) && (
+        <select
+          className="filter-select"
+          value={ubicacionVista ? vistaId : ""}
+          onChange={(e) => setEleccion({ usuarioId, locationId: e.target.value })}
+          aria-label="Cambiar de ubicación"
+        >
+          {!ubicacionVista && <option value="">Elige una ubicación</option>}
+          {ubicacionesVisibles.map((u) => (
+            <option key={u.locationId} value={u.locationId}>{u.locationName}</option>
+          ))}
+        </select>
+      )}
     </div>
 
-    <p className="crud-nota">Stock total: la suma de todas las ubicaciones. Lo que se puede vender en tu ubicación se ve al facturar y en Inventario.</p>
+    {avisoDeUbicacion && <p className="alert-banner" role="note">{avisoDeUbicacion}</p>}
+
+    {ubicacionVista && (
+      <p className="crud-nota">
+        Ubicación actual: <strong>{ubicacionVista.locationName}</strong>{esLaSuya ? " (tu ubicación)" : ""}.
+        {" "}Estados y alertas son de esta ubicación.{puedeVerElTotal ? " Stock total: la suma de todas las ubicaciones." : ""}
+      </p>
+    )}
 
     <div className="table-wrap">
       <table>
@@ -273,7 +378,8 @@ function Products() {
             <th scope="col">Código</th>
             <th scope="col" className="num">Precio</th>
             {isAdmin && <th scope="col" className="num">Costo</th>}
-            <th scope="col" className="num">Stock total</th>
+            <th scope="col" className="num">{ubicacionVista ? `Disponible en ${ubicacionVista.locationName}` : "Disponible"}</th>
+            {puedeVerElTotal && <th scope="col" className="num">Stock total</th>}
             <th scope="col">Estado</th>
             {puedeAdministrar && <th></th>}
           </tr>
@@ -281,7 +387,8 @@ function Products() {
 
         <tbody>
           {filtered.map((p) => {
-            const [label, variante] = status(p)
+            const aqui = disponible(p)
+            const [label, variante] = aqui === null ? [] : estadoDeExistencia(aqui, minimoDe(p))
 
             return <tr key={p.id}>
               <td className="celda-miniatura"><MiniaturaDeProducto url={p.imageUrl} nombre={p.name} /></td>
@@ -289,8 +396,9 @@ function Products() {
               <td><span className="celda-codigo">{p.code || "—"}</span></td>
               <td className="num">{formatMoney(p.price)}</td>
               {isAdmin && <td className="num celda-secundaria">{conCostos ? formatMoney(costos[p.id]) : "—"}</td>}
-              <td className="num">{p.stock} u.</td>
-              <td><StatusBadge variante={variante}>{label}</StatusBadge></td>
+              <td className="num">{aqui === null ? "—" : `${aqui} u.`}</td>
+              {puedeVerElTotal && <td className="num celda-secundaria">{p.stock} u.</td>}
+              <td>{label ? <StatusBadge variante={variante}>{label}</StatusBadge> : "—"}</td>
               {puedeAdministrar && <td><div className="row-actions">
                 <button className="btn btn-secondary btn-sm" onClick={() => openEdit(p)}><FaPen aria-hidden="true" />Editar</button>
                 <button className="btn btn-danger btn-sm" onClick={() => remove(p.id)}><FaTrash aria-hidden="true" />Eliminar</button>
