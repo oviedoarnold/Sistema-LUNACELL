@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react"
+import { useState } from "react"
 import Swal from "sweetalert2"
 import { FaMoneyBillWave } from "react-icons/fa"
 
@@ -7,6 +7,7 @@ import PageHeader from "../components/crud/PageHeader"
 import RegistrarEntrega from "../components/liquidaciones/RegistrarEntrega"
 import { useAuth } from "../hooks/useAuth"
 import { useBloqueoDeActualizacion } from "../hooks/useBloqueoDeActualizacion"
+import { useControlDeLiquidaciones } from "../hooks/useControlDeLiquidaciones"
 import { useSinConexion } from "../hooks/useSinConexion"
 import {
   ESTADO_DE_LIQUIDACION,
@@ -14,7 +15,6 @@ import {
   METODOS,
   confirmarLiquidacion,
   rechazarLiquidacion,
-  traerControlDeLiquidaciones,
 } from "../lib/api/liquidaciones"
 import { fechaYHora, formatDateForDisplay, formatMoney } from "../utils/format"
 import { etiquetaDelMedio } from "../utils/mediosDePago"
@@ -83,6 +83,24 @@ function textoDelMotivo(pedido) {
   return `${pedido.origen} cobró en efectivo un pedido que factura ${pedido.destino}.`
 }
 
+/*
+  Una liquidación que otro ya resolvió —desde otro dispositivo, o un instante
+  antes que este— se informa como lo que es: algo que ya pasó. Nunca como una
+  confirmación nueva de quien está mirando, porque no movió dinero.
+*/
+function avisarYaResuelta(liquidacion) {
+  const confirmada = liquidacion.estado === "confirmada"
+  const quien = liquidacion.resueltaPor
+    ? ` La ${confirmada ? "confirmó" : "rechazó"} ${liquidacion.resueltaPor}${liquidacion.resueltaEn ? ` el ${fechaYHora(liquidacion.resueltaEn)}` : ""}.`
+    : ""
+
+  return Swal.fire({
+    icon: "info",
+    title: `Esta liquidación ya fue ${confirmada ? "confirmada" : "rechazada"}`,
+    text: `${liquidacion.numero}.${quien} No se registró ningún movimiento nuevo.`,
+  })
+}
+
 function Cifra({ etiqueta, valor, destacada = false }) {
   return (
     <div className={destacada ? "liquidaciones-cifra is-destacada" : "liquidaciones-cifra"}>
@@ -106,25 +124,20 @@ function Liquidaciones() {
   // Confirmar o rechazar no se interrumpe por actualizar.
   useBloqueoDeActualizacion(Boolean(resolviendo), "liquidacion")
 
-  const [version, setVersion] = useState(0)
-  const [datos, setDatos] = useState({ version: -1, pares: [], pedidos: [], liquidaciones: [], error: "" })
-
-  useEffect(() => {
-    let vigente = true
-
-    traerControlDeLiquidaciones().then(
-      (control) => vigente && setDatos({ version, ...control, error: "" }),
-      (problema) => vigente && setDatos({ version, pares: [], pedidos: [], liquidaciones: [], error: problema.message })
-    )
-
-    return () => {
-      vigente = false
-    }
-  }, [version])
+  /*
+    Al día con lo que hacen otros dispositivos. Mientras se registra o se
+    resuelve una entrega, la recarga automática espera: no cambia los datos
+    debajo de una operación en curso. La pestaña y los filtros son estado de
+    esta pantalla y una recarga no los toca.
+  */
+  const datos = useControlDeLiquidaciones({
+    conConexion: !sinConexion,
+    pausado: Boolean(registrando) || Boolean(resolviendo),
+  })
 
   // Solo la primera vez: al recargar se siguen viendo los datos anteriores.
-  const cargando = datos.version === -1
-  const recargar = () => setVersion((v) => v + 1)
+  const cargando = !datos.cargado
+  const recargar = () => datos.recargar().catch(() => {})
 
   const delFiltro = (fila) => (!origen || fila.origenId === origen) && (!destino || fila.destinoId === destino)
   const pares = datos.pares.filter(delFiltro)
@@ -148,11 +161,24 @@ function Liquidaciones() {
     })
   }
 
-  const resolver = async (liquidacion, confirmar) => {
-    if (resolviendo) return
+  /*
+    El estado de la liquidación según la base, ahora: la pantalla pudo quedar
+    abierta mientras otro dispositivo la resolvía. Sin respuesta se sigue con
+    lo que se tenía, y decide la base, que resuelve una sola vez de forma
+    atómica (`repetida` o LQ004).
+  */
+  const estadoActual = async (liquidacion) => {
+    try {
+      const control = await datos.recargar()
 
-    let motivo = null
+      return control.liquidaciones.find((l) => l.id === liquidacion.id) ?? liquidacion
+    } catch {
+      return liquidacion
+    }
+  }
 
+  // Lo que decide quien resuelve: null si se arrepiente, o el motivo del rechazo.
+  const pedirDecision = async (liquidacion, confirmar) => {
     if (confirmar) {
       const respuesta = await Swal.fire({
         icon: "question",
@@ -163,29 +189,54 @@ function Liquidaciones() {
         cancelButtonText: "Volver",
       })
 
-      if (!respuesta.isConfirmed) return
-    } else {
-      const respuesta = await Swal.fire({
-        icon: "warning",
-        title: `¿Rechazar ${liquidacion.numero}?`,
-        text: "El monto vuelve a quedar pendiente por liquidar. Escribe por qué se rechaza.",
-        input: "textarea",
-        inputPlaceholder: "Por ejemplo: el sobre traía 20 lempiras menos",
-        inputValidator: (valor) => (valor?.trim().length >= 5 ? undefined : "Escribe el motivo (al menos 5 caracteres)."),
-        showCancelButton: true,
-        confirmButtonText: "Rechazar entrega",
-        cancelButtonText: "Volver",
-      })
-
-      if (!respuesta.isConfirmed) return
-
-      motivo = respuesta.value.trim()
+      return respuesta?.isConfirmed ? { motivo: null } : null
     }
 
+    const respuesta = await Swal.fire({
+      icon: "warning",
+      title: `¿Rechazar ${liquidacion.numero}?`,
+      text: "El monto vuelve a quedar pendiente por liquidar. Escribe por qué se rechaza.",
+      input: "textarea",
+      inputPlaceholder: "Por ejemplo: el sobre traía 20 lempiras menos",
+      inputValidator: (valor) => (valor?.trim().length >= 5 ? undefined : "Escribe el motivo (al menos 5 caracteres)."),
+      showCancelButton: true,
+      confirmButtonText: "Rechazar entrega",
+      cancelButtonText: "Volver",
+    })
+
+    return respuesta?.isConfirmed ? { motivo: respuesta.value.trim() } : null
+  }
+
+  const resolver = async (liquidacion, confirmar) => {
+    if (resolviendo) return
+
+    // Desde aquí los botones quedan quietos y la recarga automática espera.
     setResolviendo(liquidacion.id)
 
+    let envio = false
+
     try {
-      const resultado = confirmar ? await confirmarLiquidacion(liquidacion.id) : await rechazarLiquidacion(liquidacion.id, motivo)
+      const actual = await estadoActual(liquidacion)
+
+      if (actual.estado !== "por_confirmar") {
+        avisarYaResuelta(actual)
+
+        return
+      }
+
+      const decision = await pedirDecision(actual, confirmar)
+
+      if (!decision) return
+
+      envio = true
+
+      const resultado = confirmar ? await confirmarLiquidacion(actual.id) : await rechazarLiquidacion(actual.id, decision.motivo)
+
+      if (resultado.repetida) {
+        avisarYaResuelta(resultado)
+
+        return
+      }
 
       Swal.fire({
         icon: "success",
@@ -193,10 +244,12 @@ function Liquidaciones() {
         text: resultado.estado === "confirmada" ? "El monto pasa a liquidado." : "El monto vuelve a quedar pendiente por liquidar.",
       })
     } catch (problema) {
+      // LQ004: se resolvió en el otro sentido. Se dice tal cual y se recarga.
       Swal.fire({ icon: "error", title: "No se pudo completar", text: problema.message })
     } finally {
       setResolviendo(null)
-      recargar()
+
+      if (envio) recargar()
     }
   }
 

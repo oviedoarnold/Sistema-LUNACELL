@@ -1,9 +1,11 @@
-import { describe, it, expect, vi } from "vitest"
-import { screen, fireEvent, waitFor, within } from "@testing-library/react"
+import { afterEach, beforeEach, describe, it, expect, vi } from "vitest"
+import { act, screen, fireEvent, waitFor, within } from "@testing-library/react"
 import { MemoryRouter } from "react-router-dom"
 import Swal from "sweetalert2"
 
 import { AuthProvider } from "../context/AuthContext"
+import { ESPERA_ENTRE_RECARGAS } from "../hooks/useAlVolverALaApp"
+import { CADA_CUANTO } from "../hooks/useControlDeLiquidaciones"
 import { renderizarPantalla } from "../test/pantallas"
 import Liquidaciones from "./Liquidaciones"
 
@@ -314,7 +316,8 @@ describe("Liquidaciones: confirmar o rechazar", () => {
     fireEvent.click(screen.getByRole("button", { name: "Confirmar recepción" }))
 
     await waitFor(() => expect(llamadas.resolver).toEqual([{ p_liquidacion: "liq-1", p_confirmar: true }]))
-    await waitFor(() => expect(llamadas.control).toBe(2))
+    // Al abrir, al revisar el estado antes de preguntar y después de confirmar.
+    await waitFor(() => expect(llamadas.control).toBe(3))
   })
 
   it("rechazar pide el motivo y lo envía", async () => {
@@ -458,5 +461,203 @@ describe("Liquidaciones: obligaciones en cualquier sentido (etapa C2b)", () => {
 
     expect(screen.queryByText("Contraliquidación")).not.toBeInTheDocument()
     expect(screen.getByText(/Pedidos: PED-000001 \(L 100.00\)$/)).toBeInTheDocument()
+  })
+})
+
+/*
+  Dos dispositivos con la misma liquidación: el administrador la tiene abierta
+  en la PC y el vendedor la confirma desde su teléfono. La pantalla del
+  administrador tiene que enterarse sola, y una confirmación repetida nunca
+  puede presentarse como un movimiento nuevo.
+*/
+describe("Liquidaciones: al día con otros dispositivos", () => {
+  const VENDEDOR = "Vendedor Prueba Camión 01"
+
+  const porConfirmar = {
+    ...CONTROL,
+    pares: [par({ por_confirmar: 100, pendiente: 310 })],
+    liquidaciones: [liquidacion({ puede_resolver: true })],
+  }
+
+  // Lo mismo después de que el vendedor confirmara desde otro dispositivo.
+  const yaConfirmada = {
+    ...CONTROL,
+    pares: [par({ liquidado: 100, pendiente: 310 })],
+    liquidaciones: [liquidacion({ estado: "confirmada", resuelta_por_nombre: VENDEDOR, resuelta_en: "2026-11-20T21:04:53Z" })],
+  }
+
+  // La primera consulta ve la entrega por confirmar; las siguientes, ya confirmada.
+  const confirmadaEnOtroDispositivo = (n) => (n === 1 ? porConfirmar : yaConfirmada)
+
+  const dialogo = (titulo) => Swal.fire.mock.calls.map(([opciones]) => opciones).find((o) => o?.title === titulo)
+  const verHistorial = async () => fireEvent.click(await screen.findByRole("button", { name: "Historial" }))
+  const tarjeta = () => screen.getByText("LIQ-000001").closest(".liquidaciones-tarjeta")
+  const comoAdmin = { rol: "admin", permisos: [] }
+
+  beforeEach(() => {
+    Swal.fire.mockClear()
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
+    vi.restoreAllMocks()
+  })
+
+  it("el administrador y el vendedor ven la misma liquidación por confirmar", async () => {
+    await renderLiquidaciones({ control: porConfirmar, ...comoAdmin })
+    await verHistorial()
+
+    expect(within(tarjeta()).getByText("Pendiente de confirmación")).toBeInTheDocument()
+    expect(within(tarjeta()).getByRole("button", { name: "Confirmar recepción" })).toBeInTheDocument()
+  })
+
+  it("si otro dispositivo ya la confirmó, no la ofrece como nueva y actualiza saldos e historial", async () => {
+    const { llamadas } = await renderLiquidaciones({ control: confirmadaEnOtroDispositivo, ...comoAdmin })
+    await verHistorial()
+
+    fireEvent.click(within(tarjeta()).getByRole("button", { name: "Confirmar recepción" }))
+
+    await waitFor(() => expect(dialogo("Esta liquidación ya fue confirmada")).toBeDefined())
+
+    const aviso = dialogo("Esta liquidación ya fue confirmada")
+
+    expect(aviso.icon).toBe("info")
+    expect(aviso.text).toContain(`La confirmó ${VENDEDOR}`)
+    expect(aviso.text).toContain("No se registró ningún movimiento nuevo")
+    expect(llamadas.resolver).toEqual([])
+    expect(dialogo("¿Confirmar LIQ-000001?")).toBeUndefined()
+
+    await waitFor(() => expect(within(tarjeta()).getByText("Confirmada")).toBeInTheDocument())
+    expect(within(tarjeta()).queryByRole("button", { name: "Confirmar recepción" })).not.toBeInTheDocument()
+    expect(within(tarjeta()).getByText(new RegExp(`Confirmó ${VENDEDOR}`))).toBeInTheDocument()
+    expect(screen.queryByText(/Tienes una entrega por confirmar/)).not.toBeInTheDocument()
+
+    // Los L 100 cuentan una sola vez: liquidados, y ya no por confirmar.
+    expect(cifra(resumen(), "Liquidado")).toHaveTextContent("L 100.00")
+    expect(cifra(resumen(), "Pendiente de confirmación")).toHaveTextContent("L 0.00")
+    expect(cifra(resumen(), "Pendiente por liquidar")).toHaveTextContent("L 310.00")
+  })
+
+  it("se actualiza al volver a la aplicación", async () => {
+    let visibilidad = "visible"
+    vi.spyOn(document, "visibilityState", "get").mockImplementation(() => visibilidad)
+
+    const { llamadas } = await renderLiquidaciones({ control: confirmadaEnOtroDispositivo, ...comoAdmin })
+    await verHistorial()
+
+    expect(within(tarjeta()).getByText("Pendiente de confirmación")).toBeInTheDocument()
+
+    const ahora = Date.now()
+    vi.spyOn(Date, "now").mockReturnValue(ahora + ESPERA_ENTRE_RECARGAS + 1000)
+
+    act(() => {
+      visibilidad = "hidden"
+      document.dispatchEvent(new Event("visibilitychange"))
+      visibilidad = "visible"
+      document.dispatchEvent(new Event("visibilitychange"))
+    })
+
+    await waitFor(() => expect(within(tarjeta()).getByText("Confirmada")).toBeInTheDocument())
+    expect(llamadas.control).toBe(2)
+  })
+
+  it("se actualiza sola cada cierto tiempo mientras está a la vista, y no si está oculta", async () => {
+    vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] })
+    let visibilidad = "visible"
+    vi.spyOn(document, "visibilityState", "get").mockImplementation(() => visibilidad)
+
+    const { llamadas } = await renderLiquidaciones({ control: confirmadaEnOtroDispositivo, ...comoAdmin })
+    await verHistorial()
+
+    visibilidad = "hidden"
+    act(() => vi.advanceTimersByTime(CADA_CUANTO))
+    expect(llamadas.control).toBe(1)
+
+    visibilidad = "visible"
+    act(() => vi.advanceTimersByTime(CADA_CUANTO))
+
+    await waitFor(() => expect(within(tarjeta()).getByText("Confirmada")).toBeInTheDocument())
+    expect(llamadas.control).toBe(2)
+  })
+
+  it("conserva la pestaña y los filtros al actualizarse", async () => {
+    vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] })
+    vi.spyOn(document, "visibilityState", "get").mockReturnValue("visible")
+
+    await renderLiquidaciones({ control: confirmadaEnOtroDispositivo, ...comoAdmin })
+    await verHistorial()
+
+    fireEvent.change(screen.getByLabelText("Ubicación que recibe"), { target: { value: "camion-01" } })
+    act(() => vi.advanceTimersByTime(CADA_CUANTO))
+
+    await waitFor(() => expect(within(tarjeta()).getByText("Confirmada")).toBeInTheDocument())
+    expect(screen.getByRole("button", { name: "Historial" })).toHaveAttribute("aria-pressed", "true")
+    expect(screen.getByLabelText("Ubicación que recibe")).toHaveValue("camion-01")
+  })
+
+  /*
+    El estado cambió entre la consulta previa y el clic: decide la base, que
+    resuelve una sola vez y responde `repetida`. Es un aviso, no un éxito.
+  */
+  it("si la confirmaron mientras el diálogo estaba abierto, informa sin decir que confirmó", async () => {
+    Swal.fire.mockResolvedValueOnce({ isConfirmed: true })
+
+    const { llamadas } = await renderLiquidaciones({
+      control: porConfirmar,
+      ...comoAdmin,
+      resolver: () => ({
+        data: { ...liquidacion({ estado: "confirmada", resuelta_en: "2026-11-20T21:04:53Z" }), resuelta_por_nombre: VENDEDOR, repetida: true },
+        error: null,
+      }),
+    })
+    await verHistorial()
+
+    fireEvent.click(within(tarjeta()).getByRole("button", { name: "Confirmar recepción" }))
+
+    await waitFor(() => expect(dialogo("Esta liquidación ya fue confirmada")).toBeDefined())
+    expect(llamadas.resolver).toHaveLength(1)
+    expect(dialogo("LIQ-000001 confirmada")).toBeUndefined()
+    expect(Swal.fire.mock.calls.some(([o]) => o?.icon === "success")).toBe(false)
+    expect(dialogo("Esta liquidación ya fue confirmada").text).toContain(`La confirmó ${VENDEDOR}`)
+
+    // Y se vuelve a pedir: al abrir, al revisar antes de preguntar y después de la respuesta.
+    await waitFor(() => expect(llamadas.control).toBe(3))
+  })
+
+  it("un rechazo repetido también se informa como algo que ya pasó", async () => {
+    Swal.fire.mockResolvedValueOnce({ isConfirmed: true, value: "No llegó el sobre" })
+
+    await renderLiquidaciones({
+      control: porConfirmar,
+      ...comoAdmin,
+      resolver: () => ({
+        data: { ...liquidacion({ estado: "rechazada", resuelta_en: "2026-11-20T21:04:53Z" }), resuelta_por_nombre: VENDEDOR, repetida: true },
+        error: null,
+      }),
+    })
+    await verHistorial()
+
+    fireEvent.click(within(tarjeta()).getByRole("button", { name: "Rechazar" }))
+
+    await waitFor(() => expect(dialogo("Esta liquidación ya fue rechazada")).toBeDefined())
+    expect(dialogo("LIQ-000001 rechazada")).toBeUndefined()
+  })
+
+  it("si ya se resolvió en el otro sentido, conserva el error LQ004 y actualiza", async () => {
+    Swal.fire.mockResolvedValueOnce({ isConfirmed: true, value: "No llegó el sobre" })
+
+    const { llamadas } = await renderLiquidaciones({
+      control: porConfirmar,
+      ...comoAdmin,
+      resolver: () => ({ data: null, error: { code: "LQ004", message: "La liquidación LIQ-000001 ya está confirmada" } }),
+    })
+    await verHistorial()
+
+    fireEvent.click(within(tarjeta()).getByRole("button", { name: "Rechazar" }))
+
+    await waitFor(() =>
+      expect(Swal.fire).toHaveBeenCalledWith(expect.objectContaining({ icon: "error", text: "La liquidación LIQ-000001 ya está confirmada" }))
+    )
+    await waitFor(() => expect(llamadas.control).toBe(3))
   })
 })
