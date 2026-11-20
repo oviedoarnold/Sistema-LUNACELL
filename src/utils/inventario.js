@@ -148,3 +148,50 @@ export function ubicacionesPresentes(filas = []) {
 
   return [...vistas.values()]
 }
+
+/*
+  La ubicación con la que se abre la pantalla: la asignada al usuario, si
+  está entre las que llegaron.
+
+  Si no tiene ninguna, o la suya no llegó (desactivada, o sin permiso de
+  inventario), devuelve "" —todas las visibles— y `motivo` dice por qué.
+  No se elige otra en su lugar: abrir en la bodega a quien no es de la
+  bodega es decirle que lo que hay allí es lo que él tiene.
+*/
+export function ubicacionInicial(ubicaciones = [], ubicacionDelUsuario = "") {
+  if (!ubicacionDelUsuario) return { locationId: "", motivo: "sin-ubicacion" }
+
+  const suya = ubicaciones.find(
+    (u) => String(u.locationId) === String(ubicacionDelUsuario)
+  )
+
+  return suya
+    ? { locationId: suya.locationId, motivo: "" }
+    : { locationId: "", motivo: "no-visible" }
+}
+
+/*
+  Lo que hay en una ubicación, producto por producto, con el total de cada
+  producto en todas las ubicaciones que llegaron.
+
+  El total solo es el de la empresa cuando llegaron todas, es decir, con
+  `inventory-all`; decidir si se muestra le toca a la pantalla. Aquí se
+  calcula sobre lo recibido y nada más, por la misma regla de arriba.
+*/
+export function existenciaDeLaUbicacion(filas = [], locationId = "") {
+  const totales = new Map()
+
+  for (const fila of filas) {
+    totales.set(fila.productId, (totales.get(fila.productId) || 0) + fila.quantity)
+  }
+
+  return filtrarPorUbicacion(filas, locationId)
+    .map((fila) => ({
+      productId: fila.productId,
+      code: fila.code,
+      productName: fila.productName,
+      quantity: fila.quantity,
+      total: totales.get(fila.productId) || 0,
+    }))
+    .sort((a, b) => a.productName.localeCompare(b.productName, "es"))
+}

@@ -1,9 +1,10 @@
 import { describe, it, expect, vi } from "vitest"
-import { screen, fireEvent, within } from "@testing-library/react"
+import { act, screen, fireEvent, waitFor, within } from "@testing-library/react"
 
 import { MemoryRouter } from "react-router-dom"
 
 import { AuthProvider } from "../context/AuthContext"
+import { EVENTO_VENTAS_SINCRONIZADAS } from "../lib/sinConexion/eventos"
 import { renderizarPantalla } from "../test/pantallas"
 import Inventory from "./Inventory"
 
@@ -226,14 +227,14 @@ describe("Inventory · la ubicación prohibida no se dibuja", () => {
     })
 
     expect(
-      screen.queryByLabelText(/filtrar por ubicación/i)
+      screen.queryByLabelText(/cambiar de ubicación/i)
     ).not.toBeInTheDocument()
   })
 
   it("el selector solo ofrece las ubicaciones recibidas", async () => {
     await renderInventory()
 
-    const selector = screen.getByLabelText(/filtrar por ubicación/i)
+    const selector = screen.getByLabelText(/cambiar de ubicación/i)
     const opciones = within(selector)
       .getAllByRole("option")
       .map((o) => o.textContent)
@@ -284,29 +285,154 @@ describe("Inventory · búsqueda", () => {
   })
 })
 
-describe("Inventory · filtro por ubicación", () => {
-  it("deja solo la ubicación elegida, sin cambiar el recorrido", async () => {
+/*
+  La tabla de una sola ubicación: una fila por producto, con lo que hay
+  allí y, si se puede ver, el total de la empresa.
+*/
+const tablaDeUbicacion = () => document.querySelector(".inventory-ubicacion table")
+
+const encabezados = () =>
+  within(tablaDeUbicacion())
+    .getAllByRole("columnheader")
+    .map((th) => th.textContent)
+
+const celdasDe = (producto) =>
+  [...within(tablaDeUbicacion()).getByText(producto).closest("tr").querySelectorAll("td")]
+    .slice(1)
+    .map((td) => td.textContent)
+
+const ubicacionActual = () =>
+  document.querySelector(".inventory-ubicacion-actual strong").textContent
+
+const selector = () => screen.getByLabelText(/cambiar de ubicación/i)
+
+describe("Inventory · cambio de ubicación", () => {
+  it("al elegir una ubicación muestra lo que hay allí y el total", async () => {
     await renderInventory()
 
-    fireEvent.change(screen.getByLabelText(/filtrar por ubicación/i), {
-      target: { value: "u-c2" },
-    })
+    fireEvent.change(selector(), { target: { value: "u-c2" } })
 
-    /* Siguen siendo productos con sus ubicaciones; la lista queda en una. */
-    expect(ubicacionesDe("Cargador")).toEqual(["Camión 02"])
-    expect(cantidadesDe("Cargador")).toEqual(["12"])
-    expect(totalDe("Cargador")).toBe("12")
+    expect(ubicacionActual()).toBe("Camión 02")
+    expect(encabezados()).toEqual(["Producto", "Disponible en Camión 02", "Stock total"])
+    expect(celdasDe("Cargador")).toEqual(["12", "30"])
+    expect(celdasDe("Cubo Iphone")).toEqual(["0 · sin existencia", "0"])
+  })
+
+  it("al cambiar otra vez las cantidades cambian en el acto", async () => {
+    await renderInventory({ ubicacionOperativa: "u-bodega" })
+
+    expect(celdasDe("Cargador")).toEqual(["15", "30"])
+
+    fireEvent.change(selector(), { target: { value: "u-c1" } })
+
+    expect(ubicacionActual()).toBe("Camión 01")
+    expect(celdasDe("Cargador")).toEqual(["3", "30"])
   })
 
   it("se puede volver a todas", async () => {
+    await renderInventory({ ubicacionOperativa: "u-bodega" })
+
+    fireEvent.change(selector(), { target: { value: "" } })
+
+    expect(ubicacionActual()).toBe("todas las que puedes consultar")
+    expect(ubicacionesDe("Cargador")).toHaveLength(4)
+    expect(tablaDeUbicacion()).toBeNull()
+  })
+
+  it("la búsqueda sigue funcionando dentro de una ubicación", async () => {
+    await renderInventory({ ubicacionOperativa: "u-bodega" })
+
+    buscar("cubo")
+
+    expect(celdasDe("Cubo Iphone")).toEqual(["0 · sin existencia", "0"])
+    expect(within(tablaDeUbicacion()).queryByText("Cargador")).not.toBeInTheDocument()
+  })
+})
+
+describe("Inventory · se abre en la ubicación del usuario", () => {
+  it("el administrador empieza en su ubicación asignada y puede cambiar", async () => {
+    await renderInventory({ ubicacionOperativa: "u-bodega" })
+
+    expect(ubicacionActual()).toBe("Lunacell Bodega")
+    expect(screen.getByText("tu ubicación")).toBeInTheDocument()
+    expect(selector()).toHaveValue("u-bodega")
+    expect(encabezados()).toEqual(["Producto", "Disponible en Lunacell Bodega", "Stock total"])
+    expect(celdasDe("Cargador")).toEqual(["15", "30"])
+  })
+
+  /*
+    Lo que la base le devuelve a un vendedor con inventory-own: solo su
+    camión. Sin selector y sin stock total, que sería el de lo visible
+    presentado como el de la empresa.
+  */
+  it("el vendedor ve su ubicación, sin selector ni stock total", async () => {
+    await renderInventory({
+      rolDelUsuario: "vendedor",
+      permisosDelUsuario: ["inventory-own"],
+      ubicacionOperativa: "u-c1",
+      ubicaciones: [UBICACIONES[2]],
+    })
+
+    expect(ubicacionActual()).toBe("Camión 01")
+    expect(screen.queryByLabelText(/cambiar de ubicación/i)).not.toBeInTheDocument()
+    expect(encabezados()).toEqual(["Producto", "Disponible en Camión 01"])
+    expect(celdasDe("Cargador")).toEqual(["3"])
+    expect(screen.queryByText(/stock total/i)).not.toBeInTheDocument()
+  })
+
+  it("el vendedor con inventario de todas empieza en la suya y ve el total", async () => {
+    await renderInventory({
+      rolDelUsuario: "vendedor",
+      permisosDelUsuario: ["inventory-all"],
+      ubicacionOperativa: "u-c1",
+    })
+
+    expect(ubicacionActual()).toBe("Camión 01")
+    expect(selector()).toHaveValue("u-c1")
+    expect(celdasDe("Cargador")).toEqual(["3", "30"])
+  })
+
+  it("sin ubicación asignada no asume la bodega y lo dice", async () => {
     await renderInventory()
 
-    const selector = screen.getByLabelText(/filtrar por ubicación/i)
-
-    fireEvent.change(selector, { target: { value: "u-c2" } })
-    fireEvent.change(selector, { target: { value: "" } })
-
+    expect(screen.getByRole("note")).toHaveTextContent(/no tienes una ubicación asignada/i)
+    expect(ubicacionActual()).toBe("todas las que puedes consultar")
+    expect(selector()).toHaveValue("")
+    expect(screen.queryByText(/disponible en lunacell bodega/i)).not.toBeInTheDocument()
     expect(ubicacionesDe("Cargador")).toHaveLength(4)
+  })
+
+  /*
+    La base no le devuelve nada a un vendedor sin ubicación. Decirle «no hay
+    existencias» sería mentirle: el problema es la asignación.
+  */
+  it("el vendedor sin ubicación recibe el motivo, no un inventario vacío", async () => {
+    await renderInventory({
+      rolDelUsuario: "vendedor",
+      permisosDelUsuario: ["inventory-own"],
+      ubicaciones: [],
+      existencias: [],
+    })
+
+    expect(screen.getByRole("note")).toHaveTextContent(/pide al administrador que te asigne una/i)
+    expect(screen.queryByText(/todav[íi]a no hay existencias/i)).not.toBeInTheDocument()
+    expect(document.querySelector(".inventory-ubicacion-actual")).toBeNull()
+  })
+
+  it("si su ubicación no llegó, avisa y no elige otra por él", async () => {
+    await renderInventory({ ubicacionOperativa: "u-desactivada" })
+
+    expect(screen.getByRole("note")).toHaveTextContent(/no está entre las que puedes consultar/i)
+    expect(selector()).toHaveValue("")
+    expect(tablaDeUbicacion()).toBeNull()
+  })
+
+  it("al elegir una ubicación el aviso se retira", async () => {
+    await renderInventory()
+
+    fireEvent.change(selector(), { target: { value: "u-c1" } })
+
+    expect(screen.queryByRole("note")).not.toBeInTheDocument()
   })
 })
 
@@ -385,5 +511,44 @@ describe("Existencias: acceso a Traslados", () => {
     await renderInventory({ rolDelUsuario: "vendedor", permisosDelUsuario: ["pos"] })
 
     expect(enlace()).not.toBeInTheDocument()
+  })
+})
+
+describe("Inventory · cantidades al día", () => {
+  /*
+    Una venta sincronizada desde el modo sin conexión ya descontó en el
+    servidor: la pantalla vuelve a pedir la existencia sin recargar.
+  */
+  it("al sincronizar ventas vuelve a pedir las existencias", async () => {
+    await renderInventory({ ubicacionOperativa: "u-bodega" })
+
+    expect(celdasDe("Cargador")).toEqual(["15", "30"])
+
+    const celda = globalThis.__supabaseFalso.datos.inventario_ubicacion.find(
+      (c) => c.ubicacion_id === "u-bodega" && c.producto_id === "p-cargador"
+    )
+    celda.cantidad = 14
+
+    act(() => {
+      window.dispatchEvent(new CustomEvent(EVENTO_VENTAS_SINCRONIZADAS, { detail: { registradas: 1 } }))
+    })
+
+    await waitFor(() => expect(celdasDe("Cargador")).toEqual(["14", "29"]))
+  })
+
+  /*
+    La elección no se guarda en el navegador: una sesión nueva vuelve a
+    abrir en la ubicación del usuario, no en la última que se miró.
+  */
+  it("una sesión nueva vuelve a abrir en la ubicación del usuario", async () => {
+    const { unmount } = await renderInventory({ ubicacionOperativa: "u-bodega" })
+
+    fireEvent.change(selector(), { target: { value: "u-c2" } })
+    expect(ubicacionActual()).toBe("Camión 02")
+
+    unmount()
+    await renderInventory({ ubicacionOperativa: "u-bodega" })
+
+    expect(ubicacionActual()).toBe("Lunacell Bodega")
   })
 })

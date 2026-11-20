@@ -18,11 +18,13 @@ import StatusBadge from "../components/crud/StatusBadge"
 import { PERMISSIONS } from "../context/permissions"
 import { useAuth } from "../hooks/useAuth"
 import { useExistencias } from "../hooks/useExistencias"
+import { useRecargaDeExistencias } from "../hooks/useRecargaDeExistencias"
 import {
   agruparPorProducto,
   etiquetaDeTipo,
+  existenciaDeLaUbicacion,
   filtrarPorTexto,
-  filtrarPorUbicacion,
+  ubicacionInicial,
   ubicacionesPresentes,
 } from "../utils/inventario"
 
@@ -45,6 +47,11 @@ import {
   de las filas que devolvió la base. Si las completara por su cuenta,
   inventaría un «0» para los camiones que el usuario no tiene permiso de
   ver, y un cero inventado es peor que una ausencia: parece un dato.
+
+  Se abre en la ubicación asignada a quien entra, que es lo que casi
+  siempre viene a mirar: lo que tiene él. Las demás que pueda consultar
+  quedan en el selector. Sin ubicación asignada no se elige ninguna en su
+  lugar: se dice, y se muestran las que puede consultar.
 */
 
 const ICONO_POR_TIPO = {
@@ -54,19 +61,69 @@ const ICONO_POR_TIPO = {
   otro: FaMapMarkerAlt,
 }
 
+/*
+  Por qué no se abre en la ubicación del usuario. Sin lista que mostrar el
+  aviso es todo lo que hay; con lista, explica qué se está viendo.
+*/
+const AVISOS = {
+  "sin-ubicacion": {
+    conDatos:
+      "No tienes una ubicación asignada: se muestran todas las que puedes consultar.",
+    sinDatos:
+      "No tienes una ubicación asignada. Pide al administrador que te asigne una para ver su inventario.",
+  },
+  "no-visible": {
+    conDatos:
+      "Tu ubicación asignada no está entre las que puedes consultar (puede estar desactivada): se muestran las demás.",
+    sinDatos:
+      "Tu ubicación asignada no está entre las que puedes consultar: puede estar desactivada o te falta el permiso de inventario.",
+  },
+}
+
+/*
+  El cero se distingue con palabra y con tono, no solo con el número: «0» y
+  «10» se parecen demasiado leídos de reojo, y la diferencia entre tener y
+  no tener es la que decide si se promete una venta.
+*/
+function Cantidad({ valor }) {
+  return valor === 0 ? (
+    <span className="inventory-cero">0 · sin existencia</span>
+  ) : (
+    <strong className="inventory-cantidad">{valor}</strong>
+  )
+}
+
 function Inventory() {
-  const { existencias, cargando, error } = useExistencias()
+  const { user, hasPermission } = useAuth()
+  const usuarioId = user?.id || ""
+
+  // Lo cargado es de este usuario: con otra sesión deja de valer en el acto.
+  const { existencias, cargando, error, recargar } = useExistencias({ clave: usuarioId })
+
+  // Ventas sincronizadas u otros dispositivos: las cantidades se vuelven a pedir solas.
+  useRecargaDeExistencias(recargar)
 
   /*
     El mismo permiso que protege /inventory/transfers, preguntado con la
     misma función que usa la ruta: si un día cambia, cambia en los dos
     sitios a la vez.
   */
-  const { hasPermission } = useAuth()
   const puedeTrasladar = hasPermission(PERMISSIONS.INVENTORY_OWN)
 
+  /*
+    El stock total solo es el de la empresa cuando se ven todas las
+    ubicaciones. Con menos, la suma sería la de lo visible presentada como
+    total, y se leería como lo que hay en la empresa.
+  */
+  const puedeVerElTotal = hasPermission(PERMISSIONS.INVENTORY_ALL)
+
   const [busqueda, setBusqueda] = useState("")
-  const [ubicacionElegida, setUbicacionElegida] = useState("")
+
+  /*
+    La elección se guarda con el usuario que la hizo y solo en memoria,
+    nunca en el navegador: una sesión nueva vuelve a abrir en su ubicación.
+  */
+  const [eleccion, setEleccion] = useState(null)
 
   /*
     El selector se arma con las ubicaciones que llegaron. Ofrecer una que
@@ -77,15 +134,60 @@ function Inventory() {
     [existencias]
   )
 
-  const grupos = useMemo(() => {
-    const porTexto = filtrarPorTexto(existencias, busqueda)
+  const inicial = ubicacionInicial(ubicaciones, user?.locationId)
 
-    return agruparPorProducto(
-      filtrarPorUbicacion(porTexto, ubicacionElegida)
-    )
-  }, [existencias, busqueda, ubicacionElegida])
+  /*
+    Una elección deja de valer si es de otra sesión o si su ubicación ya no
+    llega (se desactivó entre una carga y otra): entonces manda la inicial.
+  */
+  const eligio =
+    eleccion !== null &&
+    eleccion.usuarioId === usuarioId &&
+    (eleccion.locationId === "" ||
+      ubicaciones.some((u) => String(u.locationId) === eleccion.locationId))
 
-  const buscando = Boolean(busqueda.trim()) || Boolean(ubicacionElegida)
+  const ubicacionElegida = eligio ? eleccion.locationId : String(inicial.locationId)
+
+  const ubicacionActual = ubicaciones.find(
+    (u) => String(u.locationId) === ubicacionElegida
+  )
+
+  const esLaSuya =
+    Boolean(ubicacionActual) &&
+    String(ubicacionActual.locationId) === String(user?.locationId)
+
+  const aviso =
+    !eligio && inicial.motivo
+      ? AVISOS[inicial.motivo][existencias.length > 0 ? "conDatos" : "sinDatos"]
+      : ""
+
+  const porTexto = useMemo(
+    () => filtrarPorTexto(existencias, busqueda),
+    [existencias, busqueda]
+  )
+
+  // Una ubicación elegida se ve como tabla; todas, producto por producto.
+  const filas = useMemo(
+    () =>
+      ubicacionActual
+        ? existenciaDeLaUbicacion(porTexto, ubicacionActual.locationId)
+        : [],
+    [porTexto, ubicacionActual]
+  )
+
+  const grupos = useMemo(
+    () => (ubicacionActual ? [] : agruparPorProducto(porTexto)),
+    [porTexto, ubicacionActual]
+  )
+
+  const buscando = Boolean(busqueda.trim()) || eligio
+  const sinResultados = ubicacionActual ? filas.length === 0 : grupos.length === 0
+
+  /*
+    Sin ninguna fila y con el aviso de ubicación, el aviso ya lo explica,
+    salvo para quien ve todas: a él sí le falta mercadería registrada.
+  */
+  const callarVacio = existencias.length === 0 && Boolean(aviso) && !puedeVerElTotal
 
   return (
     <div className="view active crud inventory">
@@ -125,8 +227,10 @@ function Inventory() {
               <select
                 className="filter-select"
                 value={ubicacionElegida}
-                onChange={(e) => setUbicacionElegida(e.target.value)}
-                aria-label="Filtrar por ubicación"
+                onChange={(e) =>
+                  setEleccion({ usuarioId, locationId: e.target.value })
+                }
+                aria-label="Cambiar de ubicación"
               >
                 <option value="">Todas las ubicaciones</option>
 
@@ -139,7 +243,26 @@ function Inventory() {
             )}
           </div>
 
-          {grupos.length === 0 && (
+          {ubicaciones.length > 0 && (
+            <p className="inventory-ubicacion-actual">
+              <FaMapMarkerAlt aria-hidden="true" />
+              <span>Ubicación actual:</span>
+              <strong>
+                {ubicacionActual
+                  ? ubicacionActual.locationName
+                  : "todas las que puedes consultar"}
+              </strong>
+              {esLaSuya && <span className="inventory-ubicacion-suya">tu ubicación</span>}
+            </p>
+          )}
+
+          {aviso && (
+            <p className="inventory-aviso" role="note">
+              {aviso}
+            </p>
+          )}
+
+          {sinResultados && !callarVacio && (
             <EmptyState
               Icono={FaBoxOpen}
               titulo={
@@ -153,6 +276,47 @@ function Inventory() {
                   : "Cuando haya mercadería registrada en alguna ubicación aparecerá aquí."
               }
             />
+          )}
+
+          {filas.length > 0 && (
+            <div className="table-wrap inventory-ubicacion">
+              <table>
+                <thead>
+                  <tr>
+                    <th scope="col">Producto</th>
+                    <th scope="col" className="num">
+                      Disponible en {ubicacionActual.locationName}
+                    </th>
+                    {puedeVerElTotal && (
+                      <th scope="col" className="num">
+                        Stock total
+                      </th>
+                    )}
+                  </tr>
+                </thead>
+
+                <tbody>
+                  {filas.map((fila) => (
+                    <tr key={fila.productId}>
+                      <td>
+                        <span className="product-name">{fila.productName}</span>
+                        {fila.code && (
+                          <span className="inventory-codigo">{fila.code}</span>
+                        )}
+                      </td>
+
+                      <td className="num">
+                        <Cantidad valor={fila.quantity} />
+                      </td>
+
+                      {puedeVerElTotal && (
+                        <td className="num inventory-stock-total">{fila.total}</td>
+                      )}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           )}
 
           <div className="inventory-lista">
@@ -217,23 +381,8 @@ function Inventory() {
                             </StatusBadge>
                           </td>
 
-                          {/*
-                            El cero se distingue con palabra y con tono, no
-                            solo con el número: «0» y «10» se parecen
-                            demasiado leídos de reojo, y la diferencia entre
-                            tener y no tener es la que decide si se promete
-                            una venta.
-                          */}
                           <td className="num">
-                            {u.quantity === 0 ? (
-                              <span className="inventory-cero">
-                                0 · sin existencia
-                              </span>
-                            ) : (
-                              <strong className="inventory-cantidad">
-                                {u.quantity}
-                              </strong>
-                            )}
+                            <Cantidad valor={u.quantity} />
                           </td>
                         </tr>
                       ))}

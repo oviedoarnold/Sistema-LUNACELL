@@ -2,10 +2,12 @@ import { describe, it, expect } from "vitest"
 
 import {
   agruparPorProducto,
+  existenciaDeLaUbicacion,
   etiquetaDeTipo,
   filtrarPorTexto,
   filtrarPorUbicacion,
   totalVisible,
+  ubicacionInicial,
   ubicacionesPresentes,
 } from "./inventario"
 
@@ -244,5 +246,51 @@ describe("etiquetaDeTipo", () => {
   it("un tipo desconocido no se queda sin texto", () => {
     expect(etiquetaDeTipo("nave-espacial")).toBe("Otra")
     expect(etiquetaDeTipo(undefined)).toBe("Otra")
+  })
+})
+
+describe("ubicacionInicial", () => {
+  const ubicaciones = ubicacionesPresentes(DEL_ADMIN)
+
+  it("abre en la ubicación asignada si llegó", () => {
+    expect(ubicacionInicial(ubicaciones, "u-Camión 01")).toEqual({
+      locationId: "u-Camión 01",
+      motivo: "",
+    })
+  })
+
+  /* Sin asignación no se elige ninguna: ni la bodega ni la primera. */
+  it("sin ubicación asignada no elige ninguna", () => {
+    expect(ubicacionInicial(ubicaciones, "")).toEqual({
+      locationId: "",
+      motivo: "sin-ubicacion",
+    })
+  })
+
+  it("si la asignada no llegó, no la reemplaza por otra", () => {
+    expect(ubicacionInicial(ubicaciones, "u-desactivada")).toEqual({
+      locationId: "",
+      motivo: "no-visible",
+    })
+  })
+})
+
+describe("existenciaDeLaUbicacion", () => {
+  it("da lo de la ubicación y el total de lo recibido", () => {
+    expect(existenciaDeLaUbicacion(DEL_ADMIN, "u-Lunacell Bodega")).toEqual([
+      { productId: CARGADOR, code: "LCCOBERESAM", productName: "Cargador", quantity: 15, total: 30 },
+      { productId: CUBO, code: "LCCUBOESAM", productName: "Cubo Iphone", quantity: 0, total: 0 },
+    ])
+  })
+
+  /* El total sale de lo que llegó: para el vendedor, solo su camión. */
+  it("no suma ubicaciones que no llegaron", () => {
+    expect(
+      existenciaDeLaUbicacion(DEL_VENDEDOR, "u-Camión 01").map((f) => f.total)
+    ).toEqual([3, 0])
+  })
+
+  it("una ubicación que no llegó no tiene filas", () => {
+    expect(existenciaDeLaUbicacion(DEL_VENDEDOR, "u-Camión 02")).toEqual([])
   })
 })
