@@ -406,7 +406,7 @@ function Liquidaciones() {
                 <div className="liquidaciones-tarjeta-fila">
                   <b>{l.numero}</b>
                   <span className="liquidaciones-insignias">
-                    {l.contraliquidacion && <span className="badge badge-credit">Contraliquidación</span>}
+                    {l.contraliquidacion && <span className="badge badge-neutral">Contraliquidación</span>}
                     <span className={CLASE_DE_LIQUIDACION[l.estado] || "badge"}>{ESTADO_DE_LIQUIDACION[l.estado] || l.estado}</span>
                   </span>
                 </div>

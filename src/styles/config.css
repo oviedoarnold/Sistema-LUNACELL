@@ -256,21 +256,87 @@
   acabado, dicho una vez y con nombre.
 */
 
-/* Marca de quien esta viendo la pantalla, bajo su propio nombre. */
+/* Nombre arriba; usuario o correo y marcas debajo, en tono menor. */
+.config-usuario-nombre {
+  display: block;
+  font-weight: 700;
+}
+
+.config-usuario-id,
 .config-marca-sesion {
-  font-size: 11px;
+  display: block;
+  font-size: 12px;
+  color: var(--text-muted);
+  overflow-wrap: anywhere;
+}
+
+.config-bloqueo {
+  margin-top: 4px;
+}
+
+/* «8 permisos · Ver»: un resumen en una línea, en vez de una ficha por permiso. */
+.config-resumen-permisos {
+  font-size: 13.5px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.config-ver-permisos {
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-weight: 600;
+  color: var(--primary-text);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+
+.config-ver-permisos:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+/* El rol tiene su propio color, como en la propuesta aprobada. */
+.badge-rol-admin { background: #E8EFFD; color: #2450A6; border-color: #D2DEF8; }
+.badge-rol-contador { background: #F1EBFA; color: #5E3796; border-color: #E2D6F3; }
+.badge-rol-vendedor { background: #E7F5EC; color: #1D6A3A; border-color: #CDE9D6; }
+
+/* La ventana de permisos, por grupos. */
+.config-grupo-permisos + .config-grupo-permisos {
+  margin-top: var(--space-4);
+}
+
+.config-grupo-permisos h4 {
+  margin: 0 0 var(--space-2);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
   color: var(--text-muted);
 }
 
-/* Los permisos de un usuario no deben estirar la tabla a lo ancho. */
-.config-celda-permisos {
-  max-width: 360px;
-}
-
-.config-fichas-permisos {
+.config-grupo-permisos ul {
   display: flex;
   flex-wrap: wrap;
-  gap: 5px;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.config-grupo-permisos li {
+  padding: 4px 10px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface-secondary);
+  font-size: 13px;
+}
+
+/* Búsqueda y filtros en una línea; en el teléfono se apilan. */
+.config-filtros .search-box {
+  max-width: 320px;
 }
 
 /* "(opcional)" acompaña a la etiqueta sin competir con ella. */

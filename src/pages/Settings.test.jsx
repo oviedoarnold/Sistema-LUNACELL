@@ -141,6 +141,18 @@ async function renderSettings({
 
 const campo = (nombre) => document.querySelector(`[name="${nombre}"]`)
 
+/*
+  Las acciones de cada usuario viven en su menú «⋮»: se abre y se devuelven
+  las opciones que ofrece. Las acciones son las mismas de siempre.
+*/
+const accionesDe = (fila) => {
+  fireEvent.click(within(fila).getByRole("button", { name: /^acciones de/i }))
+
+  return within(fila).getByRole("menu")
+}
+
+const accion = (fila, nombre) => within(accionesDe(fila)).getByRole("menuitem", { name: nombre })
+
 const escribir = (nombre, valor) =>
   fireEvent.change(campo(nombre), { target: { value: valor } })
 
@@ -248,7 +260,7 @@ describe("Settings: datos fiscales", () => {
   it("recuerda confirmar la normativa con un contador", async () => {
     await renderSettings()
 
-    expect(screen.getByText(/contador/i)).toBeInTheDocument()
+    expect(screen.getByText(/confirma con tu\s+contador/i)).toBeInTheDocument()
   })
 })
 
@@ -424,7 +436,7 @@ describe("Settings: alta y acceso de empleados", () => {
     await renderSettings({ usuariosExtra: [{ ...VENDEDOR, nombre_usuario: "chofer01" }] })
 
     const fila = (await screen.findByText("Chofer Camión 01")).closest("tr")
-    fireEvent.click(within(fila).getByRole("button", { name: /editar/i }))
+    fireEvent.click(accion(fila, /editar/i))
     const modal = document.querySelector(".modal")
 
     expect(within(modal).getByLabelText(/nombre de usuario/i)).toHaveAttribute("readonly")
@@ -436,8 +448,10 @@ describe("Settings: alta y acceso de empleados", () => {
 
     const fila = (await screen.findByText("Chofer Camión 01")).closest("tr")
 
-    expect(within(fila).queryByRole("button", { name: /eliminar/i })).toBeNull()
-    expect(within(fila).getByRole("button", { name: /desactivar/i })).toBeInTheDocument()
+    const menu = accionesDe(fila)
+
+    expect(within(menu).queryByRole("menuitem", { name: /eliminar/i })).toBeNull()
+    expect(within(menu).getByRole("menuitem", { name: /desactivar/i })).toBeInTheDocument()
   })
 
   it("desactivar espera al servidor y muestra el error si falla", async () => {
@@ -447,7 +461,7 @@ describe("Settings: alta y acceso de empleados", () => {
       update: () => ({ eq: () => Promise.resolve({ error: { code: "P0001", message: "La empresa no puede quedarse sin un administrador activo." } }) }),
     }))
 
-    fireEvent.click(within(fila).getByRole("button", { name: /desactivar/i }))
+    fireEvent.click(accion(fila, /desactivar/i))
 
     const Swal = await dialogo()
     await waitFor(() => expect(textosDe(Swal)).toContain("La empresa no puede quedarse sin un administrador activo."))
@@ -465,7 +479,7 @@ describe("Settings: alta y acceso de empleados", () => {
     expect(await within(fila).findByText(/bloqueado/i)).toBeInTheDocument()
     expect(within(fila).getByText(/13 min/i)).toBeInTheDocument()
 
-    fireEvent.click(within(fila).getByRole("button", { name: /desbloquear usuario/i }))
+    fireEvent.click(accion(fila, /desbloquear usuario/i))
 
     await waitFor(() => expect(falso.rpc).toHaveBeenCalledWith("desbloquear_usuario", { p_usuario: "u-2" }))
     const Swal = await dialogo()
@@ -476,7 +490,7 @@ describe("Settings: alta y acceso de empleados", () => {
     await renderSettings({ usuariosExtra: [VENDEDOR] })
     const fila = (await screen.findByText("Chofer Camión 01")).closest("tr")
 
-    expect(within(fila).queryByRole("button", { name: /desbloquear usuario/i })).toBeNull()
+    expect(within(accionesDe(fila)).queryByRole("menuitem", { name: /desbloquear usuario/i })).toBeNull()
   })
 
   it("restablecer contraseña, al confirmar, muestra la temporal nueva una sola vez", async () => {
@@ -485,7 +499,7 @@ describe("Settings: alta y acceso de empleados", () => {
     const Swal = await dialogo()
     Swal.fire.mockResolvedValueOnce({ isConfirmed: true })
 
-    fireEvent.click(within(fila).getByRole("button", { name: /restablecer contraseña/i }))
+    fireEvent.click(accion(fila, /restablecer contraseña/i))
 
     await waitFor(() =>
       expect(falso.functions.invoke).toHaveBeenCalledWith("acceso", {
@@ -635,7 +649,7 @@ describe("Settings: cambiar la ubicación de un vendedor que vende sin conexión
   async function cambiarABodega() {
     const falso = await renderSettings({ usuariosExtra: [VENDEDOR_CAMION], ubicaciones: CON_CAMION_SIN_CONEXION })
     const fila = (await screen.findByText("Chofer Camión 01")).closest("tr")
-    fireEvent.click(within(fila).getByRole("button", { name: /editar/i }))
+    fireEvent.click(accion(fila, /editar/i))
     fireEvent.change(document.querySelector('.modal [name="locationId"]'), { target: { value: "u-bodega" } })
     fireEvent.submit(document.querySelector("#form-usuario"))
 
@@ -687,7 +701,7 @@ describe("Settings: el permiso «Anular ventas»", () => {
     const falso = await renderSettings({ usuariosExtra: [VENDEDOR] })
     const fila = (await screen.findByText("Chofer Camión 01")).closest("tr")
 
-    fireEvent.click(within(fila).getByRole("button", { name: /editar/i }))
+    fireEvent.click(accion(fila, /editar/i))
     fireEvent.click(screen.getByRole("checkbox", { name: /^historial de facturas/i }))
     fireEvent.click(screen.getByRole("checkbox", { name: /^anular ventas/i }))
     fireEvent.submit(document.querySelector("#form-usuario"))
@@ -712,7 +726,7 @@ describe("Settings: los privilegios de pedidos", () => {
   const editar = async () => {
     const fila = (await screen.findByText("Encargado de Bodega")).closest("tr")
 
-    fireEvent.click(within(fila).getByRole("button", { name: /editar/i }))
+    fireEvent.click(accion(fila, /editar/i))
   }
   const seccionesGuardadas = async (falso) => {
     await waitFor(() =>

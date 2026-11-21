@@ -17,6 +17,7 @@
 @import "./sinConexion.css";
 @import "./quotes.css";
 @import "./inventory.css";
+@import "./componentes.css";
 *{box-sizing:border-box;} html{scroll-behavior:smooth;}
 body{margin:0;font-family:var(--font-body);background:var(--cream);color:var(--charcoal);font-size:17px;line-height:1.5;-webkit-font-smoothing:antialiased;}
 h1,h2,h3{font-family:var(--font-display);font-weight:600;letter-spacing:.2px;margin:0;}
@@ -105,8 +106,8 @@ a{color:inherit;} ::selection{background:var(--orange-light);}
 /* ── TABLE ── */
 .table-wrap{overflow-x:auto;border-radius:var(--radius-lg);border:1px solid var(--line);background:#fff;box-shadow:var(--shadow-sm);} 
 table{width:100%;border-collapse:collapse;min-width:600px;} 
-thead th{text-align:left;font-family:var(--font-mono);font-size:12px;letter-spacing:.5px;text-transform:uppercase;color:var(--steel);background:var(--table-header);padding:12px 15px;border-bottom:1px solid var(--line);} 
-tbody td{padding:13px 15px;border-bottom:1px solid var(--line);font-size:15px;vertical-align:middle;} 
+thead th{text-align:left;font-family:var(--font-body);font-size:11.5px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;color:var(--steel);background:var(--table-header);padding:10px 14px;border-bottom:1px solid var(--line);} 
+tbody td{padding:10px 14px;border-bottom:1px solid var(--line);font-size:14.5px;vertical-align:middle;} 
 tbody tr:last-child td{border-bottom:none;} tbody tr:hover{background:var(--table-hover);} 
 td.num,th.num{text-align:right;font-family:var(--font-mono);} 
 .product-name{font-weight:600;} .product-cat{display:block;font-size:12px;color:var(--steel);margin-top:1px;} 
@@ -115,16 +116,23 @@ td.num,th.num{text-align:right;font-family:var(--font-mono);}
 .empty-state svg{width:34px;height:34px;color:var(--line-strong);margin-bottom:8px;} 
 .empty-state strong{display:block;color:var(--charcoal);font-size:15.5px;margin-bottom:3px;} 
 /* ── BADGES ── */
-.badge{display:inline-flex;align-items:center;gap:5px;padding:4px 10px;border-radius:20px;font-size:12.5px;font-weight:700;font-family:var(--font-mono);} 
-.badge-ok{background:var(--teal-light);color:var(--teal);} 
-/* El texto de estos dos no llegaba al minimo sobre su propio fondo:
-   ambar 3.30:1 y rojo 4.45:1. Se oscurece solo el texto del distintivo,
-   no los tokens --warning y --danger, que visten otras 17 reglas. */
-.badge-low{background:var(--amber-light);color:#8A6104;} 
-.badge-out{background:var(--red-light);color:#B23326;} 
-.badge-credit{background:var(--blue-light);color:var(--blue);} 
-.badge-overdue{background:var(--red-light);color:#B23326;} 
-.badge-paid{background:var(--green-light);color:var(--green);} 
+/*
+  Etiquetas de estado: compactas, redondeadas, fondo suave y texto intenso.
+  El color sigue el significado, igual en todo el sistema:
+    verde  (ok, paid)        confirmado, aplicado, pagada, activo, liquidado
+    azul   (credit, proceso) en preparación, en proceso, en revisión
+    ámbar  (low)             pendiente de confirmación o de pago, stock bajo
+    rojo   (out, overdue)    cancelado, anulada, rechazado, vencida, agotado
+    gris   (neutral)         inactivo, sin asignar, no aplica
+  El texto va siempre: el color no es lo único que distingue un estado.
+  Todos los textos superan 4.5:1 sobre su fondo.
+*/
+.badge{display:inline-flex;align-items:center;gap:5px;padding:3px 10px;border-radius:999px;border:1px solid transparent;font-family:var(--font-body);font-size:12px;font-weight:600;line-height:1.35;white-space:nowrap;}
+.badge-ok,.badge-paid{background:#E7F5EC;color:#1D6A3A;border-color:#CDE9D6;}
+.badge-credit,.badge-proceso{background:#E8EFFD;color:#2450A6;border-color:#D2DEF8;}
+.badge-low{background:#FFF5D9;color:#7A5300;border-color:#F3E0A6;}
+.badge-out,.badge-overdue{background:#FDECEB;color:#AE2A1F;border-color:#F6D2CF;}
+.badge-neutral{background:#F1F2F4;color:#4C5158;border-color:#E2E4E7;}
 .badge-dot{width:6px;height:6px;border-radius:50%;background:currentColor;} 
 .role-tag{display:inline-block;padding:2px 8px;border-radius:20px;font-size:11px;font-weight:700;font-family:var(--font-mono);text-transform:uppercase;letter-spacing:.4px;} 
 .role-tag.admin{background:var(--orange-light);color:var(--orange-dark);} 

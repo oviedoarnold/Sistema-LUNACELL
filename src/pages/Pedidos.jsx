@@ -1,7 +1,7 @@
 import { useContext, useEffect, useState } from "react"
 import { useSearchParams } from "react-router-dom"
 import Swal from "sweetalert2"
-import { FaInbox } from "react-icons/fa"
+import { FaEye, FaInbox } from "react-icons/fa"
 
 import EmptyState from "../components/crud/EmptyState"
 import PageHeader from "../components/crud/PageHeader"
@@ -28,6 +28,7 @@ import {
   traerDetalleDePedido,
 } from "../lib/api/pedidos"
 import { fechaYHora, formatMoney } from "../utils/format"
+import { claseDelPedido } from "../utils/coloresDeEstado"
 import { claveDeIdempotencia } from "../utils/ids"
 import { CERRAR_SIN_REINTENTAR, textoSinRespuesta } from "../utils/sinRespuesta"
 import "../styles/pedidos.css"
@@ -53,13 +54,6 @@ const FILTROS = [
   { id: "cancelado", etiqueta: "Cancelados" },
   { id: "todos", etiqueta: "Todos" },
 ]
-
-const CLASE_DEL_ESTADO = {
-  pendiente: "badge badge-low",
-  facturado: "badge badge-paid",
-  por_resolver: "badge badge-out",
-  cancelado: "badge badge-neutral",
-}
 
 /*
   Lo que se dice antes de facturar. Con un pago parcial, el resumen completo:
@@ -470,60 +464,75 @@ function Pedidos() {
       )}
 
       {pedidos.length > 0 && (
-        <ul className="pedidos-lista">
-          {pedidos.map((pedido) => {
-            // Nuevo: el pendiente que llegó aquí, o el rechazado que volvió aquí.
-            const nuevo =
-              !pedido.leido &&
-              ((vista === "recibidos" && pedido.estado === "pendiente") || (vista === "enviados" && pedido.estado === "por_resolver"))
+        <div className="pedidos-tabla">
+          {/* Los rótulos de las columnas; cada fila es un botón que abre el pedido. */}
+          <div className="pedidos-encabezado" aria-hidden="true">
+            <span>N.º pedido</span>
+            <span>Cliente y ruta</span>
+            <span>Fecha</span>
+            <span className="pedidos-col-importe">Total</span>
+            <span>Estado</span>
+            <span />
+          </div>
 
-            return (
-              <li key={pedido.id}>
-                <button
-                  type="button"
-                  className={nuevo ? "pedidos-tarjeta is-nuevo" : "pedidos-tarjeta"}
-                  onClick={() => abrir(pedido.id)}
-                  aria-label={`Abrir el pedido ${pedido.numero} de ${pedido.cliente}`}
-                >
-                  <span className="pedidos-tarjeta-fila">
-                    <b>{pedido.numero}</b>
-                    <span className="pedidos-insignias">
+          <ul className="pedidos-lista">
+            {pedidos.map((pedido) => {
+              // Nuevo: el pendiente que llegó aquí, o el rechazado que volvió aquí.
+              const nuevo =
+                !pedido.leido &&
+                ((vista === "recibidos" && pedido.estado === "pendiente") || (vista === "enviados" && pedido.estado === "por_resolver"))
+
+              return (
+                <li key={pedido.id}>
+                  <button
+                    type="button"
+                    className={nuevo ? "pedidos-tarjeta is-nuevo" : "pedidos-tarjeta"}
+                    onClick={() => abrir(pedido.id)}
+                    aria-label={`Abrir el pedido ${pedido.numero} de ${pedido.cliente}`}
+                  >
+                    <span className="pedidos-col pedidos-col-numero">
+                      <b>{pedido.numero}</b>
                       {nuevo && <span className="badge badge-credit">Nuevo</span>}
-                      <span className={CLASE_DEL_ESTADO[pedido.estado] || "badge"}>{ESTADOS_DE_PEDIDO[pedido.estado] || pedido.estado}</span>
                     </span>
-                  </span>
-                  <span className="pedidos-tarjeta-fila">
-                    <span className="pedidos-cliente">{pedido.cliente}</span>
-                    <span className="pos-importe">{formatMoney(pedido.total)}</span>
-                  </span>
-                  {pedido.estado === "cancelado" && (
-                    // Cancelado: lo pagado es historia y ya no se le cobra nada al cliente.
-                    <span className="pedidos-tarjeta-fila pedidos-tarjeta-suave">
-                      <span>{pedido.cobrado > 0 ? `Pagado antes de cancelar ${formatMoney(pedido.cobrado)} en ${pedido.origen}` : "Sin pagos recibidos"}</span>
-                      <span>Sin saldo por cobrar</span>
-                    </span>
-                  )}
-                  {pedido.estado !== "facturado" && pedido.estado !== "cancelado" && (
-                    <span className="pedidos-tarjeta-fila pedidos-tarjeta-suave">
-                      <span>
-                        Pagado {formatMoney(pedido.cobrado)}
-                        {pedido.cobrado > 0 ? ` en ${pedido.origen}` : ""}
+                    <span className="pedidos-col pedidos-col-cliente">
+                      <span className="pedidos-cliente">{pedido.cliente}</span>
+                      <span className="pedidos-tarjeta-suave">
+                        {etiquetaDeLaRuta(pedido)} · {pedido.formaPago === "credito" ? "Crédito" : "Contado"}
+                        {pedido.numeroFactura ? ` · ${pedido.numeroFactura}` : ""}
                       </span>
-                      <span>Pendiente {formatMoney(pedido.saldo)}</span>
                     </span>
-                  )}
-                  <span className="pedidos-tarjeta-fila pedidos-tarjeta-suave">
-                    <span>
-                      {etiquetaDeLaRuta(pedido)} · {pedido.formaPago === "credito" ? "Crédito" : "Contado"}
-                      {pedido.numeroFactura ? ` · ${pedido.numeroFactura}` : ""}
+                    <span className="pedidos-col pedidos-col-fecha pedidos-tarjeta-suave">{fechaYHora(pedido.entregadoEn)}</span>
+                    <span className="pedidos-col pedidos-col-importe">
+                      <span className="pos-importe">{formatMoney(pedido.total)}</span>
+                      {pedido.estado === "cancelado" && (
+                        // Cancelado: lo pagado es historia y ya no se le cobra nada al cliente.
+                        <span className="pedidos-tarjeta-suave pedidos-pagos">
+                          <span>{pedido.cobrado > 0 ? `Pagado antes de cancelar ${formatMoney(pedido.cobrado)} en ${pedido.origen}` : "Sin pagos recibidos"}</span>
+                          <span>Sin saldo por cobrar</span>
+                        </span>
+                      )}
+                      {pedido.estado !== "facturado" && pedido.estado !== "cancelado" && (
+                        <span className="pedidos-tarjeta-suave pedidos-pagos">
+                          <span>
+                            Pagado {formatMoney(pedido.cobrado)}
+                            {pedido.cobrado > 0 ? ` en ${pedido.origen}` : ""}
+                          </span>
+                          <span>Pendiente {formatMoney(pedido.saldo)}</span>
+                        </span>
+                      )}
                     </span>
-                    <span>{fechaYHora(pedido.entregadoEn)}</span>
-                  </span>
-                </button>
-              </li>
-            )
-          })}
-        </ul>
+                    <span className="pedidos-col pedidos-col-estado">
+                      <span className={claseDelPedido(pedido.estado)}>{ESTADOS_DE_PEDIDO[pedido.estado] || pedido.estado}</span>
+                    </span>
+                    <span className="pedidos-col pedidos-col-ver" aria-hidden="true">
+                      <FaEye />
+                    </span>
+                  </button>
+                </li>
+              )
+            })}
+          </ul>
+        </div>
       )}
 
       {abiertoId && formulario && detalle && cancelacion && (

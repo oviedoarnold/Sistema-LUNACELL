@@ -2,6 +2,7 @@ import { useCallback, useContext, useEffect, useMemo, useRef, useState } from "r
 import {
   FaBoxOpen,
   FaExclamationTriangle,
+  FaMapMarkerAlt,
   FaPen,
   FaPlus,
   FaSearch,
@@ -358,19 +359,21 @@ function Products() {
           ))}
         </select>
       )}
+
+      {ubicacionVista && (
+        <p className="chip-ubicacion">
+          <FaMapMarkerAlt aria-hidden="true" />
+          <span>Ubicación actual:</span>
+          <strong>{ubicacionVista.locationName}</strong>
+          {esLaSuya && <span className="chip-suya">Tu ubicación</span>}
+        </p>
+      )}
     </div>
 
     {avisoDeUbicacion && <p className="alert-banner" role="note">{avisoDeUbicacion}</p>}
 
-    {ubicacionVista && (
-      <p className="crud-nota">
-        Ubicación actual: <strong>{ubicacionVista.locationName}</strong>{esLaSuya ? " (tu ubicación)" : ""}.
-        {" "}Estados y alertas son de esta ubicación.{puedeVerElTotal ? " Stock total: la suma de todas las ubicaciones." : ""}
-      </p>
-    )}
-
     <div className="table-wrap">
-      <table>
+      <table className="tabla-adaptable">
         <thead>
           <tr>
             <th className="celda-miniatura"></th>
@@ -378,10 +381,10 @@ function Products() {
             <th scope="col">Código</th>
             <th scope="col" className="num">Precio</th>
             {isAdmin && <th scope="col" className="num">Costo</th>}
-            <th scope="col" className="num">{ubicacionVista ? `Disponible en ${ubicacionVista.locationName}` : "Disponible"}</th>
+            <th scope="col" className="num th-envuelve">{ubicacionVista ? `Disponible en ${ubicacionVista.locationName}` : "Disponible"}</th>
             {puedeVerElTotal && <th scope="col" className="num">Stock total</th>}
             <th scope="col">Estado</th>
-            {puedeAdministrar && <th></th>}
+            {puedeAdministrar && <th scope="col" className="th-acciones">Acciones</th>}
           </tr>
         </thead>
 
@@ -392,16 +395,16 @@ function Products() {
 
             return <tr key={p.id}>
               <td className="celda-miniatura"><MiniaturaDeProducto url={p.imageUrl} nombre={p.name} /></td>
-              <td><span className="product-name">{p.name}</span><span className="product-cat">{p.category}</span></td>
-              <td><span className="celda-codigo">{p.code || "—"}</span></td>
-              <td className="num">{formatMoney(p.price)}</td>
-              {isAdmin && <td className="num celda-secundaria">{conCostos ? formatMoney(costos[p.id]) : "—"}</td>}
-              <td className="num">{aqui === null ? "—" : `${aqui} u.`}</td>
-              {puedeVerElTotal && <td className="num celda-secundaria">{p.stock} u.</td>}
-              <td>{label ? <StatusBadge variante={variante}>{label}</StatusBadge> : "—"}</td>
-              {puedeAdministrar && <td><div className="row-actions">
-                <button className="btn btn-secondary btn-sm" onClick={() => openEdit(p)}><FaPen aria-hidden="true" />Editar</button>
-                <button className="btn btn-danger btn-sm" onClick={() => remove(p.id)}><FaTrash aria-hidden="true" />Eliminar</button>
+              <td className="celda-titulo"><span className="product-name">{p.name}</span><span className="product-cat">{p.category}</span></td>
+              <td data-etiqueta="Código"><span className="celda-codigo">{p.code || "—"}</span></td>
+              <td className="num" data-etiqueta="Precio">{formatMoney(p.price)}</td>
+              {isAdmin && <td className="num celda-secundaria" data-etiqueta="Costo">{conCostos ? formatMoney(costos[p.id]) : "—"}</td>}
+              <td className="num celda-disponible" data-etiqueta="Disponible">{aqui === null ? "—" : `${aqui} u.`}</td>
+              {puedeVerElTotal && <td className="num celda-secundaria" data-etiqueta="Stock total">{p.stock} u.</td>}
+              <td data-etiqueta="Estado">{label ? <StatusBadge variante={variante}>{label}</StatusBadge> : "—"}</td>
+              {puedeAdministrar && <td className="celda-acciones"><div className="row-actions">
+                <button type="button" className="btn-icono" aria-label={`Editar ${p.name}`} title="Editar" onClick={() => openEdit(p)}><FaPen aria-hidden="true" /></button>
+                <button type="button" className="btn-icono is-peligro" aria-label={`Eliminar ${p.name}`} title="Eliminar" onClick={() => remove(p.id)}><FaTrash aria-hidden="true" /></button>
               </div></td>}
             </tr>
           })}
@@ -422,6 +425,12 @@ function Products() {
         />
       ))}
     </div>
+
+    {ubicacionVista && (
+      <p className="crud-nota">
+        Estados y alertas son de {ubicacionVista.locationName}.{puedeVerElTotal ? " Stock total: la suma de todas las ubicaciones." : ""}
+      </p>
+    )}
 
     {modalOpen && (
       <ModalShell

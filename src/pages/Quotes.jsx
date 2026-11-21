@@ -49,7 +49,7 @@ const CLASE_POR_ESTADO = {
   vencida: "badge-overdue",
   "por-vencer": "badge-low",
   vigente: "badge-ok",
-  "sin-vigencia": "badge-credit",
+  "sin-vigencia": "badge-neutral",
 }
 
 function QuoteStatusBadge({ quote }) {

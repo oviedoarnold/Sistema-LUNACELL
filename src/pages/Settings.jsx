@@ -11,6 +11,7 @@ import { ProductContext } from "../context/contexts"
 import { SalesContext } from "../context/contexts"
 import { useAuth } from "../hooks/useAuth"
 import PorcentajeAdicional from "../components/configuracion/PorcentajeAdicional"
+import TablaDeUsuarios from "../components/configuracion/TablaDeUsuarios"
 
 import { FaPlus } from "react-icons/fa"
 
@@ -160,7 +161,7 @@ function Settings() {
     Solo las activas: una ubicación retirada no es un sitio desde el que
     nadie trabaje, y la base rechaza asignarla.
   */
-  const { ubicacionesActivas = [] } = useContext(LocationsContext)
+  const { locations = [], ubicacionesActivas = [] } = useContext(LocationsContext)
 
   const [
     companyForm,
@@ -1187,217 +1188,18 @@ function Settings() {
           )}
 
           {users.length > 0 && (
-            <div className="table-wrap">
-
-              <table aria-label="Usuarios">
-
-                <thead>
-                  <tr>
-                    <th>
-                      Nombre
-                    </th>
-
-                    <th>
-                      Usuario
-                    </th>
-
-                    <th>
-                      Rol
-                    </th>
-
-                    <th>
-                      Estado
-                    </th>
-
-                    <th>
-                      Permisos
-                    </th>
-
-                    <th>
-                      Acciones
-                    </th>
-                  </tr>
-                </thead>
-
-                <tbody>
-
-                  {users.map(
-                    (
-                      systemUser
-                    ) => (
-                      <tr
-                        key={
-                          systemUser.id
-                        }
-                      >
-
-                        <td>
-                          <strong>
-                            {
-                              systemUser.name
-                            }
-                          </strong>
-
-                          {String(
-                            systemUser.id
-                          ) ===
-                            String(
-                              user?.id
-                            ) && (
-                            <div className="config-marca-sesion">
-                              Sesión actual
-                            </div>
-                          )}
-                        </td>
-
-                        <td>
-                          {systemUser.username
-                            ? `@${systemUser.username}`
-                            : systemUser.email}
-
-                          {systemUser.bloqueadoHasta && (
-                            <div>
-                              <span className="badge badge-out">
-                                <span className="badge-dot" />
-                                Bloqueado · quedan {minutosDeBloqueo(systemUser.bloqueadoHasta)} min
-                              </span>
-                            </div>
-                          )}
-                        </td>
-
-                        <td>
-                          <span
-                            className={
-                              systemUser.role ===
-                              "admin"
-                                ? "badge badge-credit"
-                                : "badge badge-paid"
-                            }
-                          >
-                            <span className="badge-dot" />
-
-                            {getRoleLabel(
-                              systemUser.role
-                            )}
-                          </span>
-                        </td>
-
-                        <td>
-                          <span
-                            className={
-                              systemUser.active
-                                ? "badge badge-paid"
-                                : "badge badge-out"
-                            }
-                          >
-                            <span className="badge-dot" />
-
-                            {systemUser.active
-                              ? "Activo"
-                              : "Inactivo"}
-                          </span>
-                        </td>
-
-                        <td className="config-celda-permisos">
-                          {systemUser.role ===
-                          "admin" ? (
-                            <span className="sub">
-                              Acceso total
-                            </span>
-                          ) : systemUser
-                              .permissions
-                              ?.length ? (
-                            <div className="config-fichas-permisos">
-                              {systemUser.permissions.map(
-                                (
-                                  permission
-                                ) => (
-                                  <span
-                                    key={
-                                      permission
-                                    }
-                                    className="badge badge-ok"
-                                  >
-                                    {getPermissionLabel(
-                                      permission
-                                    )}
-                                  </span>
-                                )
-                              )}
-                            </div>
-                          ) : (
-                            <span className="sub">
-                              Sin permisos
-                            </span>
-                          )}
-                        </td>
-
-                        <td className="row-actions">
-
-                          <button
-                            type="button"
-                            className="btn btn-secondary btn-sm"
-                            onClick={() =>
-                              openEditUser(
-                                systemUser
-                              )
-                            }
-                          >
-                            Editar
-                          </button>
-
-                          {String(
-                            systemUser.id
-                          ) !==
-                            String(
-                              user?.id
-                            ) && (
-                            <>
-                              <button
-                                type="button"
-                                className="btn btn-secondary btn-sm"
-                                onClick={() =>
-                                  handleToggleActive(
-                                    systemUser
-                                  )
-                                }
-                              >
-                                {systemUser.active
-                                  ? "Desactivar"
-                                  : "Activar"}
-                              </button>
-
-                              {systemUser.bloqueadoHasta && (
-                                <button
-                                  type="button"
-                                  className="btn btn-primary btn-sm"
-                                  onClick={() => handleUnlock(systemUser)}
-                                >
-                                  Desbloquear usuario
-                                </button>
-                              )}
-
-                              <button
-                                type="button"
-                                className="btn btn-secondary btn-sm"
-                                onClick={() => handleResetPassword(systemUser)}
-                              >
-                                Restablecer contraseña
-                              </button>
-                            </>
-                          )}
-
-                        </td>
-
-                      </tr>
-                    )
-                  )}
-
-                </tbody>
-
-              </table>
-
-            </div>
+            <TablaDeUsuarios
+              usuarios={users}
+              usuarioEnSesion={user}
+              ubicaciones={locations}
+              etiquetaDelRol={getRoleLabel}
+              etiquetaDelPermiso={getPermissionLabel}
+              minutosDeBloqueo={minutosDeBloqueo}
+              onEditar={openEditUser}
+              onActivar={handleToggleActive}
+              onDesbloquear={handleUnlock}
+              onRestablecer={handleResetPassword}
+            />
           )}
 
         </div>
