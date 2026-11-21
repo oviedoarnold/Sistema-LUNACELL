@@ -1,5 +1,5 @@
 import { useContext, useRef, useState } from "react"
-import { FaExchangeAlt, FaEye, FaPlus, FaSearch, FaTimes, FaTrash } from "react-icons/fa"
+import { FaExchangeAlt, FaEye, FaLongArrowAltRight, FaPlus, FaSearch, FaTimes, FaTrash } from "react-icons/fa"
 import Swal from "sweetalert2"
 
 import { LocationsContext, ProductContext } from "../context/contexts"
@@ -10,9 +10,11 @@ import { useTraslados } from "../hooks/useTraslados"
 import { registrarTraslado } from "../lib/api/traslados"
 import { fechaYHora } from "../utils/format"
 import { claveDeIdempotencia } from "../utils/ids"
+import { coincideBusqueda } from "../utils/texto"
 import EmptyState from "../components/crud/EmptyState"
 import PageHeader from "../components/crud/PageHeader"
 import FormField from "../components/forms/FormField"
+import ModalShell from "../components/forms/ModalShell"
 import DetalleDeTraslado from "../components/transfers/DetalleDeTraslado"
 import "../styles/transfers.css"
 import { CAMPO_DE_CANTIDAD } from "../utils/camposNumericos"
@@ -33,6 +35,16 @@ let siguienteRenglon = 0
 const renglonVacio = () => ({ clave: ++siguienteRenglon, productId: "", qty: "" })
 
 const ESTADOS = { aplicado: "Aplicado" }
+
+const cuantosProductos = (n) => (n === 1 ? "1 producto" : `${n} productos`)
+
+/*
+  La búsqueda revisa los traslados ya cargados: ubicaciones, productos,
+  usuario, nota y fecha. Ignora tildes y mayúsculas. No consulta nada:
+  los filtros de ubicación y fechas siguen siendo los de la consulta.
+*/
+const coincideTraslado = (t, texto) =>
+  [t.origen, t.destino, t.productos, t.userName, t.note, t.fecha].some((campo) => coincideBusqueda(campo, texto))
 
 /*
   El estado con su color: aplicado es un estado terminado y bueno (verde).
@@ -57,6 +69,8 @@ function Transfers() {
   const [filtroDesde, setFiltroDesde] = useState("")
   const [filtroHasta, setFiltroHasta] = useState("")
 
+  const [busqueda, setBusqueda] = useState("")
+
   const rangoInvalido = Boolean(filtroDesde && filtroHasta && filtroDesde > filtroHasta)
   const hayFiltros = Boolean(filtroUbicacion || filtroDesde || filtroHasta)
 
@@ -80,6 +94,7 @@ function Transfers() {
     setFiltroUbicacion("")
     setFiltroDesde("")
     setFiltroHasta("")
+    setBusqueda("")
   }
 
   const veTodas = hasPermission(PERMISSIONS.INVENTORY_ALL)
@@ -95,6 +110,16 @@ function Transfers() {
   const [nota, setNota] = useState("")
   const [guardando, setGuardando] = useState(false)
   const [detalleAbierto, setDetalleAbierto] = useState(null)
+
+  /*
+    El formulario vive en una ventana. Cerrarla no borra lo escrito: el
+    estado es de la pantalla, no de la ventana. Mientras se registra no se
+    cierra, para que nadie crea que lo canceló.
+  */
+  const [formularioAbierto, setFormularioAbierto] = useState(false)
+  const cerrarFormulario = () => {
+    if (!enviando.current) setFormularioAbierto(false)
+  }
 
   // Un intento de traslado, no un clic: se renueva solo cuando se registra.
   const [clave, setClave] = useState(claveDeIdempotencia)
@@ -197,6 +222,7 @@ function Transfers() {
       setClave(claveDeIdempotencia())
       setRenglones([renglonVacio()])
       setNota("")
+      setFormularioAbierto(false)
 
       await Promise.all([recargarExistencias(), recargarHistorial()])
 
@@ -231,14 +257,42 @@ function Transfers() {
     }
   })
 
+  const buscado = busqueda.trim()
+  const visibles = buscado ? historial.filter((t) => coincideTraslado(t, buscado)) : historial
+
   const detalle = historial.find((t) => t.id === detalleAbierto)
 
   return (
     <div className="view active crud transfers">
-      <PageHeader descripcion="Mueve mercadería de una ubicación a otra. El traslado se aplica en el acto; uno equivocado se corrige con otro en sentido contrario." />
+      <PageHeader descripcion="Movimientos de mercadería entre ubicaciones. El traslado se aplica en el acto; uno equivocado se corrige con otro en sentido contrario.">
+        {!soloLectura && (
+          <button type="button" className="btn btn-primary" onClick={() => setFormularioAbierto(true)}>
+            <FaPlus aria-hidden="true" />Nuevo traslado
+          </button>
+        )}
+      </PageHeader>
 
-      {!soloLectura && <section className="card card-pad transfers-formulario" aria-labelledby="transfers-nuevo">
-        <h2 id="transfers-nuevo">Nuevo traslado</h2>
+      {!soloLectura && formularioAbierto && <ModalShell
+        titulo="Nuevo traslado"
+        onCerrar={cerrarFormulario}
+        ancho="modal-wide"
+        acciones={
+          <>
+            <button type="button" className="btn btn-secondary" onClick={cerrarFormulario} disabled={guardando}>
+              Cancelar
+            </button>
+            <button
+              type="button"
+              className="btn btn-primary"
+              onClick={enviar}
+              disabled={guardando || sinOrigen || sinExistencias}
+            >
+              <FaExchangeAlt aria-hidden="true" />{guardando ? "Trasladando…" : "Trasladar"}
+            </button>
+          </>
+        }
+      >
+       <div className="transfers-formulario">
 
         {sinOrigen && (
           <p className="alert-banner" role="status">
@@ -336,23 +390,32 @@ function Transfers() {
           >
             <FaPlus aria-hidden="true" />Agregar producto
           </button>
-
-          <button
-            type="button"
-            className="btn btn-primary"
-            onClick={enviar}
-            disabled={guardando || sinOrigen || sinExistencias}
-          >
-            <FaExchangeAlt aria-hidden="true" />{guardando ? "Trasladando…" : "Trasladar"}
-          </button>
         </div>
-      </section>}
+       </div>
+      </ModalShell>}
 
       <section className="transfers-historial" aria-labelledby="transfers-historial">
-        <h2 id="transfers-historial">Historial</h2>
+        <h2 id="transfers-historial" className="solo-lector">Historial</h2>
 
+        {/*
+          Búsqueda y filtros en una línea, cada filtro con su rótulo dentro
+          de la caja. Ubicación y fechas los aplica la consulta; la búsqueda,
+          lo ya cargado.
+        */}
         <div className="transfers-filtros">
-          <FormField etiqueta="Ubicación">
+          <div className="search-box">
+            <FaSearch aria-hidden="true" />
+            <input
+              type="search"
+              aria-label="Buscar traslado"
+              placeholder="Buscar traslado…"
+              value={busqueda}
+              onChange={(e) => setBusqueda(e.target.value)}
+            />
+          </div>
+
+          <div className="filtro-en-linea">
+            <label htmlFor="transfers-filtro-ubicacion">Ubicación</label>
             <select
               id="transfers-filtro-ubicacion"
               value={filtroUbicacion}
@@ -361,9 +424,10 @@ function Transfers() {
               <option value="">Todas</option>
               {locations.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
             </select>
-          </FormField>
+          </div>
 
-          <FormField etiqueta="Fecha desde">
+          <div className="filtro-en-linea">
+            <label htmlFor="transfers-filtro-desde">Desde</label>
             <input
               id="transfers-filtro-desde"
               type="date"
@@ -371,30 +435,36 @@ function Transfers() {
               max={filtroHasta || undefined}
               onChange={(e) => setFiltroDesde(e.target.value)}
             />
-          </FormField>
+          </div>
 
-          <FormField
-            etiqueta="Fecha hasta"
-            error={rangoInvalido ? "La fecha desde no puede ser posterior a la fecha hasta." : undefined}
-          >
+          <div className={rangoInvalido ? "filtro-en-linea is-error" : "filtro-en-linea"}>
+            <label htmlFor="transfers-filtro-hasta">Hasta</label>
             <input
               id="transfers-filtro-hasta"
               type="date"
               value={filtroHasta}
               min={filtroDesde || undefined}
+              aria-invalid={rangoInvalido ? "true" : undefined}
+              aria-describedby={rangoInvalido ? "transfers-error-fechas" : undefined}
               onChange={(e) => setFiltroHasta(e.target.value)}
             />
-          </FormField>
+          </div>
 
           <button
             type="button"
-            className="btn btn-secondary transfers-limpiar"
+            className="btn btn-secondary btn-sm transfers-limpiar"
             onClick={limpiarFiltros}
-            disabled={!hayFiltros}
+            disabled={!hayFiltros && !busqueda}
           >
             <FaTimes aria-hidden="true" />Limpiar filtros
           </button>
         </div>
+
+        {rangoInvalido && (
+          <p className="error-msg show transfers-error-fechas" id="transfers-error-fechas" role="alert">
+            La fecha desde no puede ser posterior a la fecha hasta.
+          </p>
+        )}
 
         {cargandoHistorial && <p className="crud-cargando" role="status">Cargando traslados…</p>}
 
@@ -418,37 +488,54 @@ function Transfers() {
           )
         )}
 
-        {historial.length > 0 && (
+        {historial.length > 0 && visibles.length === 0 && (
+          <EmptyState
+            Icono={FaSearch}
+            titulo="Ningún traslado coincide con la búsqueda"
+            descripcion={hayMas ? "La búsqueda revisa los traslados cargados: carga más o cambia la búsqueda." : "Cambia la búsqueda o límpiala."}
+          />
+        )}
+
+        {/*
+          Una fila por traslado, en una sola línea: origen, destino, cuántos
+          productos, fecha y estado. Qué productos y cuántos de cada uno,
+          quién lo hizo y la nota están en el detalle (el ojo).
+        */}
+        {visibles.length > 0 && (
           <div className="table-wrap">
-            <table aria-label="Historial de traslados" className="tabla-adaptable">
+            <table aria-label="Historial de traslados" className="tabla-adaptable transfers-tabla">
               <thead>
                 <tr>
-                  <th scope="col">Fecha</th>
-                  <th scope="col">Usuario</th>
-                  <th scope="col">Origen → destino</th>
+                  <th scope="col">Origen</th>
+                  <th scope="col">Destino</th>
                   <th scope="col">Productos</th>
-                  <th scope="col">Nota</th>
+                  <th scope="col">Fecha</th>
                   <th scope="col">Estado</th>
-                  <th scope="col"><span className="solo-lector">Detalle</span></th>
+                  <th scope="col" className="th-acciones">Acciones</th>
                 </tr>
               </thead>
               <tbody>
-                {historial.map((t) => (
+                {visibles.map((t) => (
                   <tr key={t.id}>
-                    <td className="transfers-fecha">{t.fecha}</td>
-                    <td data-etiqueta="Usuario">{t.userName || "—"}</td>
-                    <td data-etiqueta="Ruta"><span className="product-name">{t.ruta}</span></td>
-                    <td data-etiqueta="Productos" className="transfers-productos">{t.productos}</td>
-                    <td data-etiqueta="Nota" className="celda-secundaria">{t.note || "—"}</td>
+                    <td className="transfers-origen">
+                      <span>{t.origen}</span>
+                      <FaLongArrowAltRight aria-hidden="true" className="transfers-flecha" />
+                    </td>
+                    <td data-etiqueta="Destino" className="transfers-destino">{t.destino}</td>
+                    <td data-etiqueta="Productos" className="transfers-productos" title={t.productos}>
+                      {cuantosProductos(t.renglones.length)}
+                    </td>
+                    <td data-etiqueta="Fecha" className="transfers-fecha">{t.fecha}</td>
                     <td data-etiqueta="Estado"><EstadoDelTraslado estado={t.status} texto={t.estado} /></td>
                     <td className="celda-acciones">
                       <button
                         type="button"
-                        className="btn btn-secondary btn-sm transfers-ver"
+                        className="btn-icono"
+                        title="Ver detalle"
                         aria-label={`Ver detalle del traslado ${t.ruta}, ${t.fecha}`}
                         onClick={() => setDetalleAbierto(t.id)}
                       >
-                        <FaEye aria-hidden="true" />Ver detalle
+                        <FaEye aria-hidden="true" />
                       </button>
                     </td>
                   </tr>

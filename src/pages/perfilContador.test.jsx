@@ -235,6 +235,7 @@ describe("perfil contador: las pantallas no ofrecen escribir", () => {
 
     expect(screen.getByRole("heading", { name: /historial/i })).toBeInTheDocument()
     expect(screen.queryByRole("heading", { name: /nuevo traslado/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole("button", { name: /nuevo traslado/i })).not.toBeInTheDocument()
     expect(screen.queryByRole("button", { name: /trasladar/i })).not.toBeInTheDocument()
   })
 })
