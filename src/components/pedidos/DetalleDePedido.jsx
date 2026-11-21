@@ -3,6 +3,7 @@ import { ESTADOS_DE_PEDIDO } from "../../lib/api/pedidos"
 import { etiquetaDelMedio, textoDePorcentaje } from "../../utils/mediosDePago"
 import { textoDelMotivo } from "../../utils/preciosNegociados"
 import { cifrasDeCancelado, pendientesQuePuedeCompletar } from "../../utils/cancelacionDePedidos"
+import { claseDelPedido } from "../../utils/coloresDeEstado"
 import { fechaYHora, formatMoney } from "../../utils/format"
 
 /*
@@ -346,9 +347,9 @@ function DetalleDePedido({
 
             {cancelacion?.cancelacion && <SeccionDeCancelacion cancelacion={cancelacion} />}
 
-            <dl className="pedidos-datos">
+            <dl className="ficha-datos">
               {[
-                ["Estado", ESTADOS_DE_PEDIDO[pedido.estado] || pedido.estado],
+                ["Estado", <span className={claseDelPedido(pedido.estado)}>{ESTADOS_DE_PEDIDO[pedido.estado] || pedido.estado}</span>],
                 ["Cliente", `${pedido.cliente}${pedido.rtn ? ` · RTN ${pedido.rtn}` : ""}`],
                 ["Entregó", `${pedido.origen} · ${pedido.entregadoPor || "—"} · ${fechaYHora(pedido.entregadoEn)}`],
                 [
@@ -370,28 +371,42 @@ function DetalleDePedido({
                 ],
                 ["Nota", pedido.nota || "—"],
               ].map(([termino, valor]) => (
-                <div className="pedidos-dato" key={termino}>
+                <div className="ficha-dato" key={termino}>
                   <dt>{termino}</dt>
                   <dd>{valor}</dd>
                 </div>
               ))}
             </dl>
 
-            <h3 className="pedidos-subtitulo">Productos</h3>
-            <ul className="pedidos-productos">
-              {pedido.productos.map((producto) => (
-                <li key={producto.id}>
-                  <span className="pedidos-producto-nombre">
-                    {producto.nombre}
-                    <small>
-                      {producto.cantidad} × {formatMoney(producto.precio)} · entregado en {pedido.origen}: {producto.entregado}
-                    </small>
-                    <PrecioDelProducto producto={producto} />
-                  </span>
-                  <span className="pos-importe">{formatMoney(producto.subtotal)}</span>
-                </li>
-              ))}
-            </ul>
+            <section className="ficha-seccion" aria-label="Productos">
+              <h4>Productos ({pedido.productos.length})</h4>
+              <div className="table-wrap">
+                <table className="tabla-compacta">
+                  <thead>
+                    <tr>
+                      <th scope="col">Producto</th>
+                      <th scope="col" className="celda-cifra">Cant.</th>
+                      <th scope="col" className="celda-cifra">Precio</th>
+                      <th scope="col" className="celda-cifra">Subtotal</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {pedido.productos.map((producto) => (
+                      <tr key={producto.id}>
+                        <td className="pedidos-producto-nombre">
+                          {producto.nombre}
+                          <small>entregado en {pedido.origen}: {producto.entregado}</small>
+                          <PrecioDelProducto producto={producto} />
+                        </td>
+                        <td className="celda-cifra">{producto.cantidad}</td>
+                        <td className="celda-cifra">{formatMoney(producto.precio)}</td>
+                        <td className="celda-cifra pos-importe">{formatMoney(producto.subtotal)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </section>
 
             <div className="totals pedidos-totales">
               <div className="totals-row">

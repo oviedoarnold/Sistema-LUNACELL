@@ -34,6 +34,14 @@ const renglonVacio = () => ({ clave: ++siguienteRenglon, productId: "", qty: "" 
 
 const ESTADOS = { aplicado: "Aplicado" }
 
+/*
+  El estado con su color: aplicado es un estado terminado y bueno (verde).
+  Uno que el sistema no conozca se muestra tal cual, en gris.
+*/
+export function EstadoDelTraslado({ estado, texto }) {
+  return <span className={estado === "aplicado" ? "badge badge-paid" : "badge badge-neutral"}>{texto}</span>
+}
+
 function Transfers() {
   // El contador consulta el historial; no registra traslados (0036).
   const { user, hasPermission, soloLectura } = useAuth()
@@ -412,7 +420,7 @@ function Transfers() {
 
         {historial.length > 0 && (
           <div className="table-wrap">
-            <table aria-label="Historial de traslados">
+            <table aria-label="Historial de traslados" className="tabla-adaptable">
               <thead>
                 <tr>
                   <th scope="col">Fecha</th>
@@ -421,19 +429,19 @@ function Transfers() {
                   <th scope="col">Productos</th>
                   <th scope="col">Nota</th>
                   <th scope="col">Estado</th>
-                  <th scope="col">Detalle</th>
+                  <th scope="col"><span className="solo-lector">Detalle</span></th>
                 </tr>
               </thead>
               <tbody>
                 {historial.map((t) => (
                   <tr key={t.id}>
-                    <td>{t.fecha}</td>
-                    <td>{t.userName || "—"}</td>
-                    <td>{t.ruta}</td>
-                    <td>{t.productos}</td>
-                    <td>{t.note || "—"}</td>
-                    <td>{t.estado}</td>
-                    <td>
+                    <td className="transfers-fecha">{t.fecha}</td>
+                    <td data-etiqueta="Usuario">{t.userName || "—"}</td>
+                    <td data-etiqueta="Ruta"><span className="product-name">{t.ruta}</span></td>
+                    <td data-etiqueta="Productos" className="transfers-productos">{t.productos}</td>
+                    <td data-etiqueta="Nota" className="celda-secundaria">{t.note || "—"}</td>
+                    <td data-etiqueta="Estado"><EstadoDelTraslado estado={t.status} texto={t.estado} /></td>
+                    <td className="celda-acciones">
                       <button
                         type="button"
                         className="btn btn-secondary btn-sm transfers-ver"
@@ -482,6 +490,7 @@ function Transfers() {
             origen: detalle.origen,
             destino: detalle.destino,
             estado: detalle.estado,
+            status: detalle.status,
             usuario: detalle.userName,
             nota: detalle.note,
             renglones: detalle.renglones,
