@@ -7,6 +7,7 @@ import ProductProvider from "../context/ProductContext"
 import LocationsProvider from "../context/LocationsContext"
 import { renderizarPantalla } from "../test/pantallas"
 import { TAMANO_PAGINA } from "../lib/api/traslados"
+import { fechaYHora } from "../utils/format"
 import Transfers from "./Transfers"
 
 vi.mock("../lib/supabase", () => ({
@@ -61,6 +62,21 @@ function renderTransfers(extra = {}) {
   )
 }
 
+// El formulario vive en una ventana que se abre con «Nuevo traslado».
+async function renderConFormulario(extra = {}) {
+  const resultado = await renderTransfers(extra)
+
+  fireEvent.click(screen.getByRole("button", { name: /^nuevo traslado$/i }))
+
+  return resultado
+}
+
+const celdas = (fila) => within(fila).getAllByRole("cell").map((c) => c.textContent)
+
+// La fila del historial que corresponde a una ruta, por el nombre de su botón de detalle.
+const filaDeRuta = (ruta) =>
+  screen.getByRole("button", { name: new RegExp(`^ver detalle del traslado ${ruta}`, "i") }).closest("tr")
+
 const elegir = (etiqueta, valor) =>
   fireEvent.change(screen.getByLabelText(etiqueta), { target: { value: valor } })
 
@@ -86,7 +102,7 @@ const llenarTraslado = ({ origen = "bodega", destino = "store", producto = "p1",
 
 describe("Traslados: lo que se ofrece", () => {
   it("el origen ofrece las ubicaciones activas y el destino excluye al origen", async () => {
-    await renderTransfers()
+    await renderConFormulario()
 
     expect(opciones(/^origen$/i)).not.toContain("Camión retirado")
 
@@ -101,7 +117,7 @@ describe("Traslados: lo que se ofrece", () => {
   })
 
   it("muestra cuánto hay del producto en el origen elegido", async () => {
-    await renderTransfers()
+    await renderConFormulario()
 
     elegir(/^origen$/i, "bodega")
     elegir(/producto del renglón 1/i, "p2")
@@ -115,7 +131,7 @@ describe("Traslados: lo que se ofrece", () => {
     no se pueda consultar.
   */
   it("con inventory-own el origen es la ubicación propia y no se puede cambiar", async () => {
-    await renderTransfers({
+    await renderConFormulario({
       rolDelUsuario: "vendedor",
       permisosDelUsuario: ["inventory-own"],
       ubicacionOperativa: "camion1",
@@ -129,7 +145,7 @@ describe("Traslados: lo que se ofrece", () => {
   })
 
   it("con inventory-own y sin ubicación operativa avisa que no puede trasladar", async () => {
-    await renderTransfers({
+    await renderConFormulario({
       rolDelUsuario: "vendedor",
       permisosDelUsuario: ["inventory-own"],
     })
@@ -139,7 +155,7 @@ describe("Traslados: lo que se ofrece", () => {
   })
 
   it("con inventory-all el origen puede ser cualquier ubicación activa", async () => {
-    await renderTransfers({
+    await renderConFormulario({
       rolDelUsuario: "vendedor",
       permisosDelUsuario: ["inventory-all"],
       ubicacionOperativa: "store",
@@ -154,7 +170,7 @@ describe("Traslados: lo que se ofrece", () => {
 
 describe("Traslados: registrar", () => {
   it("envía exactamente origen, destino, renglones, nota y clave", async () => {
-    const { falso } = await renderTransfers()
+    const { falso } = await renderConFormulario()
 
     llenarTraslado()
     fireEvent.change(screen.getByLabelText(/observación/i), { target: { value: "Vitrina" } })
@@ -171,7 +187,7 @@ describe("Traslados: registrar", () => {
   })
 
   it("permite varios productos en un traslado", async () => {
-    const { falso } = await renderTransfers()
+    const { falso } = await renderConFormulario()
 
     llenarTraslado()
     fireEvent.click(screen.getByRole("button", { name: /agregar producto/i }))
@@ -186,7 +202,7 @@ describe("Traslados: registrar", () => {
   })
 
   it("dos clics seguidos registran el traslado una sola vez", async () => {
-    const { falso } = await renderTransfers()
+    const { falso } = await renderConFormulario()
 
     llenarTraslado()
 
@@ -201,7 +217,7 @@ describe("Traslados: registrar", () => {
   })
 
   it("sin destino no envía nada y lo dice", async () => {
-    const { falso } = await renderTransfers()
+    const { falso } = await renderConFormulario()
     Swal.fire.mockClear()
 
     elegir(/^origen$/i, "bodega")
@@ -214,7 +230,7 @@ describe("Traslados: registrar", () => {
   })
 
   it("después de trasladar recarga las existencias y lo muestra en el historial", async () => {
-    const { falso } = await renderTransfers()
+    const { falso } = await renderConFormulario()
 
     const consultasDeExistencias = () =>
       falso.from.mock.calls.filter(([t]) => t === "existencias_por_ubicacion").length
@@ -226,10 +242,23 @@ describe("Traslados: registrar", () => {
 
     await waitFor(() => expect(consultasDeExistencias()).toBeGreaterThan(antes))
 
-    const historial = screen.getByRole("table", { name: /historial de traslados/i })
+    // La ventana se cierra sola y el traslado aparece en el historial.
+    expect(screen.queryByRole("dialog", { name: "Nuevo traslado" })).not.toBeInTheDocument()
 
-    expect(within(historial).getByText("Lunacell Bodega → Lunacell Store")).toBeInTheDocument()
-    expect(within(historial).getByText(/cargador × 3/i)).toBeInTheDocument()
+    const fila = filaDeRuta("lunacell bodega → lunacell store")
+
+    expect(celdas(fila).slice(0, 3)).toEqual(["Lunacell Bodega", "Lunacell Store", "1 producto"])
+    expect(within(fila).getByText("1 producto")).toHaveAttribute("title", "Cargador × 3")
+  })
+
+  it("si el servidor rechaza, la ventana sigue abierta con lo escrito", async () => {
+    await renderConFormulario({ fallarEn: { registrar_traslado: { code: "LT005", message: "No hay suficiente" } } })
+
+    llenarTraslado({ cantidad: "4" })
+    await trasladar()
+
+    expect(screen.getByRole("dialog", { name: "Nuevo traslado" })).toBeInTheDocument()
+    expect(screen.getByLabelText(/cantidad del renglón 1/i)).toHaveValue(4)
   })
 
   /*
@@ -240,7 +269,7 @@ describe("Traslados: registrar", () => {
     simula aquí, y es el que el usuario tiene que ver.
   */
   it("un rechazo del servidor se muestra con su mensaje y no registra nada", async () => {
-    const { falso } = await renderTransfers({
+    const { falso } = await renderConFormulario({
       fallarEn: {
         registrar_traslado: {
           code: "LT005",
@@ -261,29 +290,100 @@ describe("Traslados: registrar", () => {
 })
 
 describe("Traslados: historial", () => {
-  it("muestra fecha, usuario, origen y destino, productos, nota y estado", async () => {
-    await renderTransfers({
+  const DEVOLUCION = {
+    id: "t1",
+    origen_id: "camion1",
+    destino_id: "bodega",
+    usuario_id: "u-prueba",
+    nota: "Devolución de fin de ruta",
+    creado_en: "2026-10-02T15:00:00Z",
+    renglones: [{ producto_id: "p1", cantidad: 2 }],
+  }
+
+  it("una fila compacta: origen, destino, cuántos productos, fecha, estado y el detalle", async () => {
+    await renderTransfers({ traslados: [DEVOLUCION] })
+
+    const tabla = screen.getByRole("table", { name: /historial de traslados/i })
+
+    expect(within(tabla).getAllByRole("columnheader").map((c) => c.textContent)).toEqual([
+      "Origen",
+      "Destino",
+      "Productos",
+      "Fecha",
+      "Estado",
+      "Acciones",
+    ])
+
+    const fila = filaDeRuta("camión 01 → lunacell bodega")
+
+    expect(celdas(fila)).toEqual([
+      "Camión 01",
+      "Lunacell Bodega",
+      "1 producto",
+      fechaYHora(DEVOLUCION.creado_en),
+      "Aplicado",
+      "",
+    ])
+    expect(within(fila).getByText("1 producto")).toHaveAttribute("title", "Cargador × 2")
+    expect(within(fila).getByText("Aplicado")).toHaveClass("badge-paid")
+  })
+
+  it("Nuevo traslado abre el formulario en una ventana; cerrarla conserva lo escrito", async () => {
+    await renderTransfers()
+
+    expect(screen.queryByLabelText(/^origen$/i)).not.toBeInTheDocument()
+
+    const boton = screen.getByRole("button", { name: /^nuevo traslado$/i })
+    boton.focus()
+    fireEvent.click(boton)
+
+    const ventana = screen.getByRole("dialog", { name: "Nuevo traslado" })
+    elegir(/^origen$/i, "bodega")
+
+    fireEvent.click(within(ventana).getByRole("button", { name: /^cancelar$/i }))
+
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument()
+    expect(boton).toHaveFocus()
+
+    fireEvent.click(boton)
+    expect(screen.getByLabelText(/^origen$/i)).toHaveValue("bodega")
+
+    fireEvent.keyDown(document, { key: "Escape" })
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument()
+  })
+
+  it("la búsqueda encuentra entre lo cargado por producto, nota o usuario, sin consultar", async () => {
+    const { falso } = await renderTransfers({
       traslados: [
-        {
-          id: "t1",
-          origen_id: "camion1",
-          destino_id: "bodega",
-          usuario_id: "u-prueba",
-          nota: "Devolución de fin de ruta",
-          creado_en: "2026-10-02T15:00:00Z",
-          renglones: [{ producto_id: "p1", cantidad: 2 }],
-        },
+        DEVOLUCION,
+        { ...DEVOLUCION, id: "t2", origen_id: "bodega", destino_id: "store", nota: "Vitrina", creado_en: "2026-10-03T15:00:00Z", renglones: [{ producto_id: "p2", cantidad: 1 }] },
       ],
     })
 
-    const fila = within(screen.getByRole("table", { name: /historial de traslados/i }))
-      .getByText("Camión 01 → Lunacell Bodega")
-      .closest("tr")
+    const consultas = () => falso.from.mock.calls.filter(([t]) => t === "traslados").length
+    const antes = consultas()
+    const buscar = (texto) => fireEvent.change(screen.getByRole("searchbox", { name: "Buscar traslado" }), { target: { value: texto } })
+    const rutas = () =>
+      within(screen.getByRole("table", { name: /historial de traslados/i }))
+        .getAllByRole("row")
+        .slice(1)
+        .map((f) => celdas(f).slice(0, 2).join(" → "))
 
-    expect(within(fila).getByText(/cargador × 2/i)).toBeInTheDocument()
-    expect(within(fila).getByText("Devolución de fin de ruta")).toBeInTheDocument()
-    expect(within(fila).getByText(/aplicado/i)).toBeInTheDocument()
-    expect(within(fila).getByText("Administradora")).toBeInTheDocument()
+    buscar("cubo")
+    expect(rutas()).toEqual(["Lunacell Bodega → Lunacell Store"])
+
+    buscar("devolucion")
+    expect(rutas()).toEqual(["Camión 01 → Lunacell Bodega"])
+
+    buscar("administradora")
+    expect(rutas()).toHaveLength(2)
+
+    buscar("nada parecido")
+    expect(screen.getByText("Ningún traslado coincide con la búsqueda")).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole("button", { name: /limpiar filtros/i }))
+    expect(rutas()).toHaveLength(2)
+    expect(consultas()).toBe(antes)
   })
 
   it("sin traslados muestra un estado vacío", async () => {
@@ -345,7 +445,8 @@ describe("Traslados: detalle", () => {
     const botones = screen.getAllByRole("button", { name: /ver detalle del traslado/i })
 
     expect(botones).toHaveLength(2)
-    expect(botones.map((b) => b.textContent)).toEqual(["Ver detalle", "Ver detalle"])
+    // Solo el icono del ojo: el nombre lo da aria-label y el rótulo flotante, title.
+    expect(botones.map((b) => b.getAttribute("title"))).toEqual(["Ver detalle", "Ver detalle"])
     expect(
       screen.getByRole("button", { name: `Ver detalle del traslado Lunacell Bodega → Lunacell Store, ${aFecha("2026-10-03T15:00:00Z")}` })
     ).toBeInTheDocument()
@@ -381,14 +482,12 @@ describe("Traslados: detalle", () => {
     ])
   })
 
-  it("el historial también nombra al producto inactivo", async () => {
+  it("el historial cuenta los productos y también nombra al inactivo", async () => {
     await renderConHistorial()
 
-    const fila = within(screen.getByRole("table", { name: /historial de traslados/i }))
-      .getByText("Camión 01 → Lunacell Bodega")
-      .closest("tr")
+    const productos = within(filaDeRuta("camión 01 → lunacell bodega")).getByText("2 productos")
 
-    expect(within(fila).getByText("Cargador × 2, Cable descontinuado × 3")).toBeInTheDocument()
+    expect(productos).toHaveAttribute("title", "Cargador × 2, Cable descontinuado × 3")
   })
 
   it("sin nombre de usuario ni nota muestra un guion", async () => {
@@ -439,7 +538,7 @@ describe("Traslados: validación previa por ubicación", () => {
     opciones(new RegExp(`producto del renglón ${renglon}`, "i")).filter((t) => !t.startsWith("—"))
 
   it("solo ofrece productos con existencia en el origen, con la cantidad disponible", async () => {
-    await renderTransfers()
+    await renderConFormulario()
 
     elegir(/^origen$/i, "bodega")
 
@@ -450,7 +549,7 @@ describe("Traslados: validación previa por ubicación", () => {
   })
 
   it("un producto con existencia 0 en el origen no aparece, aunque tenga stock global", async () => {
-    await renderTransfers()
+    await renderConFormulario()
 
     elegir(/^origen$/i, "camion1")
 
@@ -458,7 +557,7 @@ describe("Traslados: validación previa por ubicación", () => {
   })
 
   it("un producto elegido en un renglón desaparece de los demás", async () => {
-    await renderTransfers()
+    await renderConFormulario()
 
     elegir(/^origen$/i, "bodega")
     elegir(/producto del renglón 1/i, "p1")
@@ -470,7 +569,7 @@ describe("Traslados: validación previa por ubicación", () => {
   })
 
   it("la cantidad no admite más que lo disponible en el origen", async () => {
-    await renderTransfers()
+    await renderConFormulario()
 
     elegir(/^origen$/i, "bodega")
     elegir(/producto del renglón 1/i, "p2")
@@ -479,7 +578,7 @@ describe("Traslados: validación previa por ubicación", () => {
   })
 
   it("si la cantidad supera lo disponible, avisa y no llama a registrar_traslado", async () => {
-    const { falso } = await renderTransfers()
+    const { falso } = await renderConFormulario()
     Swal.fire.mockClear()
 
     llenarTraslado({ cantidad: "11" })
@@ -495,7 +594,7 @@ describe("Traslados: validación previa por ubicación", () => {
   })
 
   it("cambiar el origen vacía los renglones y recalcula lo disponible", async () => {
-    await renderTransfers()
+    await renderConFormulario()
 
     llenarTraslado()
     fireEvent.click(screen.getByRole("button", { name: /agregar producto/i }))
@@ -509,7 +608,7 @@ describe("Traslados: validación previa por ubicación", () => {
   })
 
   it("un origen sin existencias lo dice y no deja trasladar", async () => {
-    const { falso } = await renderTransfers()
+    const { falso } = await renderConFormulario()
 
     elegir(/^origen$/i, "store")
 
@@ -525,7 +624,7 @@ describe("Traslados: validación previa por ubicación", () => {
   })
 
   it("con inventory-own ofrece solo lo que hay en su ubicación", async () => {
-    await renderTransfers({
+    await renderConFormulario({
       rolDelUsuario: "vendedor",
       permisosDelUsuario: ["inventory-own"],
       ubicacionOperativa: "camion1",
@@ -535,7 +634,7 @@ describe("Traslados: validación previa por ubicación", () => {
   })
 
   it("los controles nuevos tienen nombre accesible y la disponibilidad se dice con texto", async () => {
-    await renderTransfers()
+    await renderConFormulario()
 
     elegir(/^origen$/i, "bodega")
     elegir(/producto del renglón 1/i, "p1")
@@ -573,11 +672,24 @@ describe("Traslados: filtros y Cargar más", () => {
 
   const tablaHistorial = () => screen.getByRole("table", { name: /historial de traslados/i })
 
-  const notas = () =>
-    within(tablaHistorial())
-      .getAllByRole("row")
-      .slice(1)
-      .map((fila) => within(fila).getAllByRole("cell")[4].textContent)
+  /*
+    La nota ya no va en la fila: cada traslado de la serie se reconoce por
+    su fecha, que es única (uno por hora), y de ella se vuelve a su nota.
+  */
+  let notaPorFecha = new Map()
+
+  const renderSerie = (extra = {}) => {
+    notaPorFecha = new Map((extra.traslados || []).map((t) => [fechaYHora(t.creado_en), t.nota]))
+    return renderTransfers(extra)
+  }
+
+  const filas = () => within(tablaHistorial()).getAllByRole("row").slice(1)
+
+  const notaDe = (fila) => notaPorFecha.get(within(fila).getAllByRole("cell")[3].textContent)
+
+  const notas = () => filas().map(notaDe)
+
+  const filaDeNota = (nota) => filas().find((fila) => notaDe(fila) === nota)
 
   const consultasDeTraslados = (falso) =>
     falso.from.mock.calls.filter(([tabla]) => tabla === "traslados").length
@@ -600,7 +712,7 @@ describe("Traslados: filtros y Cargar más", () => {
   const local = (anio, mes, dia, h = 0, m = 0) => new Date(anio, mes - 1, dia, h, m).toISOString()
 
   it("muestra los controles de filtro con nombre accesible", async () => {
-    await renderTransfers()
+    await renderSerie()
 
     const ubicacion = screen.getByLabelText("Ubicación")
 
@@ -612,20 +724,20 @@ describe("Traslados: filtros y Cargar más", () => {
       "Lunacell Bodega",
       "Lunacell Store",
     ])
-    expect(screen.getByLabelText("Fecha desde")).toHaveAttribute("type", "date")
-    expect(screen.getByLabelText("Fecha hasta")).toHaveAttribute("type", "date")
+    expect(screen.getByLabelText("Desde")).toHaveAttribute("type", "date")
+    expect(screen.getByLabelText("Hasta")).toHaveAttribute("type", "date")
     expect(screen.getByRole("button", { name: /limpiar filtros/i })).toBeInTheDocument()
   })
 
   it("con más de una página muestra solo la primera y ofrece Cargar más", async () => {
-    await renderTransfers({ traslados: serie(TAMANO_PAGINA + 3) })
+    await renderSerie({ traslados: serie(TAMANO_PAGINA + 3) })
 
     expect(notas()).toEqual(notasEsperadas(TAMANO_PAGINA + 3).slice(0, TAMANO_PAGINA))
     expect(cargarMas()).toBeEnabled()
   })
 
   it("Cargar más agrega la página siguiente debajo, sin reemplazar ni repetir, y desaparece al llegar al final", async () => {
-    await renderTransfers({ traslados: serie(TAMANO_PAGINA * 2 + 2) })
+    await renderSerie({ traslados: serie(TAMANO_PAGINA * 2 + 2) })
 
     await pulsarCargarMas()
 
@@ -640,14 +752,14 @@ describe("Traslados: filtros y Cargar más", () => {
   })
 
   it("sin más páginas no ofrece Cargar más", async () => {
-    await renderTransfers({ traslados: serie(3) })
+    await renderSerie({ traslados: serie(3) })
 
     expect(notas()).toHaveLength(3)
     expect(screen.queryByRole("button", { name: /cargar más/i })).not.toBeInTheDocument()
   })
 
   it("mientras carga la página siguiente lo dice y no deja pedirla otra vez", async () => {
-    const { falso } = await renderTransfers({ traslados: serie(TAMANO_PAGINA + 3) })
+    const { falso } = await renderSerie({ traslados: serie(TAMANO_PAGINA + 3) })
     const antes = consultasDeTraslados(falso)
 
     fireEvent.click(cargarMas())
@@ -663,7 +775,7 @@ describe("Traslados: filtros y Cargar más", () => {
   })
 
   it("dos pulsaciones seguidas de Cargar más piden una sola página", async () => {
-    const { falso } = await renderTransfers({ traslados: serie(TAMANO_PAGINA * 3) })
+    const { falso } = await renderSerie({ traslados: serie(TAMANO_PAGINA * 3) })
     const antes = consultasDeTraslados(falso)
 
     await act(async () => {
@@ -678,7 +790,7 @@ describe("Traslados: filtros y Cargar más", () => {
 
   it("si falla Cargar más conserva lo que ya se ve, lo dice y deja reintentar", async () => {
     const fallarEn = {}
-    await renderTransfers({ traslados: serie(TAMANO_PAGINA + 3), fallarEn })
+    await renderSerie({ traslados: serie(TAMANO_PAGINA + 3), fallarEn })
 
     fallarEn.traslados = { message: "sin conexión" }
     await pulsarCargarMas()
@@ -694,7 +806,7 @@ describe("Traslados: filtros y Cargar más", () => {
   })
 
   it("filtrar por ubicación vuelve a la primera página e incluye origen y destino", async () => {
-    await renderTransfers({
+    await renderSerie({
       traslados: [
         ...serie(TAMANO_PAGINA + 3),
         ...serie(2, { prefijo: "Sale", inicio: Date.UTC(2026, 10, 1), origen_id: "camion1", destino_id: "store" }),
@@ -710,46 +822,46 @@ describe("Traslados: filtros y Cargar más", () => {
   })
 
   it("la fecha desde filtra desde el inicio de ese día y vuelve a la primera página", async () => {
-    await renderTransfers({
+    await renderSerie({
       traslados: [
         ...serie(1, { prefijo: "Antes", inicio: Date.parse(local(2026, 10, 1, 23, 59)) }),
         ...serie(2, { prefijo: "Dentro", inicio: Date.parse(local(2026, 10, 2)) }),
       ],
     })
 
-    await filtrar("Fecha desde", "2026-10-02")
+    await filtrar("Desde", "2026-10-02")
 
     await waitFor(() => expect(notas()).toEqual(["Dentro 1", "Dentro 0"]))
   })
 
   it("la fecha hasta incluye todo ese día y vuelve a la primera página", async () => {
-    await renderTransfers({
+    await renderSerie({
       traslados: [
         ...serie(1, { prefijo: "Ultimo", inicio: Date.parse(local(2026, 10, 5, 23, 30)) }),
         ...serie(1, { prefijo: "Despues", inicio: Date.parse(local(2026, 10, 6)) }),
       ],
     })
 
-    await filtrar("Fecha hasta", "2026-10-05")
+    await filtrar("Hasta", "2026-10-05")
 
     await waitFor(() => expect(notas()).toEqual(["Ultimo 0"]))
   })
 
   it("si la fecha desde es posterior a la fecha hasta lo dice y no consulta", async () => {
-    const { falso } = await renderTransfers({ traslados: serie(3) })
+    const { falso } = await renderSerie({ traslados: serie(3) })
 
-    await filtrar("Fecha desde", "2026-10-06")
+    await filtrar("Desde", "2026-10-06")
     const antes = consultasDeTraslados(falso)
-    await filtrar("Fecha hasta", "2026-10-05")
+    await filtrar("Hasta", "2026-10-05")
 
     expect(screen.getByText("La fecha desde no puede ser posterior a la fecha hasta.")).toBeInTheDocument()
-    expect(screen.getByLabelText("Fecha hasta")).toHaveAttribute("aria-invalid", "true")
+    expect(screen.getByLabelText("Hasta")).toHaveAttribute("aria-invalid", "true")
     expect(screen.queryByRole("table", { name: /historial de traslados/i })).not.toBeInTheDocument()
     expect(consultasDeTraslados(falso)).toBe(antes)
   })
 
   it("sin resultados por los filtros lo dice distinto que un historial vacío", async () => {
-    await renderTransfers({ traslados: serie(3) })
+    await renderSerie({ traslados: serie(3) })
 
     await filtrar("Ubicación", "camion1")
 
@@ -758,11 +870,11 @@ describe("Traslados: filtros y Cargar más", () => {
   })
 
   it("Limpiar filtros deja todas las ubicaciones, fechas vacías y la primera página sin filtros", async () => {
-    const { falso } = await renderTransfers({ traslados: serie(TAMANO_PAGINA + 3) })
+    const { falso } = await renderSerie({ traslados: serie(TAMANO_PAGINA + 3) })
 
     await filtrar("Ubicación", "camion1")
-    await filtrar("Fecha desde", "2026-10-01")
-    await filtrar("Fecha hasta", "2026-10-31")
+    await filtrar("Desde", "2026-10-01")
+    await filtrar("Hasta", "2026-10-31")
     const antes = consultasDeTraslados(falso)
 
     await act(async () => {
@@ -770,8 +882,8 @@ describe("Traslados: filtros y Cargar más", () => {
     })
 
     expect(screen.getByLabelText("Ubicación")).toHaveValue("")
-    expect(screen.getByLabelText("Fecha desde")).toHaveValue("")
-    expect(screen.getByLabelText("Fecha hasta")).toHaveValue("")
+    expect(screen.getByLabelText("Desde")).toHaveValue("")
+    expect(screen.getByLabelText("Hasta")).toHaveValue("")
     await waitFor(() =>
       expect(notas()).toEqual(notasEsperadas(TAMANO_PAGINA + 3).slice(0, TAMANO_PAGINA))
     )
@@ -780,11 +892,11 @@ describe("Traslados: filtros y Cargar más", () => {
   })
 
   it("Ver detalle funciona sobre un traslado traído con Cargar más", async () => {
-    await renderTransfers({ traslados: serie(TAMANO_PAGINA + 2) })
+    await renderSerie({ traslados: serie(TAMANO_PAGINA + 2) })
 
     await pulsarCargarMas()
     fireEvent.click(
-      within(within(tablaHistorial()).getByText("Serie 0").closest("tr")).getByRole("button", {
+      within(filaDeNota("Serie 0")).getByRole("button", {
         name: /ver detalle/i,
       })
     )
@@ -796,7 +908,7 @@ describe("Traslados: filtros y Cargar más", () => {
   it("después de filtrar, el detalle nombra al producto inactivo, muestra guion sin usuario y se cierra con Escape devolviendo el foco", async () => {
     const INACTIVO = { id: "p9", code: "C-9", name: "Cable descontinuado", category: "Accesorios", price: 50, stock: 0, minStock: 0, active: false }
 
-    await renderTransfers({
+    await renderSerie({
       productos: [...PRODUCTOS, INACTIVO],
       traslados: [
         ...serie(3),
@@ -813,8 +925,8 @@ describe("Traslados: filtros y Cargar más", () => {
     await filtrar("Ubicación", "camion1")
     await waitFor(() => expect(notas()).toEqual(["Ruta 0"]))
 
-    const fila = within(tablaHistorial()).getByText("Ruta 0").closest("tr")
-    expect(within(fila).getByText("Cable descontinuado × 4")).toBeInTheDocument()
+    const fila = filaDeNota("Ruta 0")
+    expect(within(fila).getByText("1 producto")).toHaveAttribute("title", "Cable descontinuado × 4")
 
     const boton = within(fila).getByRole("button", { name: /ver detalle/i })
     boton.focus()
@@ -857,15 +969,16 @@ describe("Traslados: autor visible para quien no es administrador", () => {
       ...extra,
     })
 
-  const filaDelTraslado = () =>
-    within(screen.getByRole("table", { name: /historial de traslados/i }))
-      .getByText("Lunacell Bodega → Lunacell Store")
-      .closest("tr")
+  const filaDelTraslado = () => filaDeRuta("lunacell bodega → lunacell store")
 
-  it("el historial y el detalle muestran a la compañera que lo hizo", async () => {
+  const buscar = (texto) =>
+    fireEvent.change(screen.getByRole("searchbox", { name: "Buscar traslado" }), { target: { value: texto } })
+
+  it("el detalle muestra a la compañera que lo hizo y la búsqueda la encuentra", async () => {
     await comoVendedor()
 
-    expect(within(filaDelTraslado()).getByText("Carla Compañera")).toBeInTheDocument()
+    buscar("carla")
+    expect(filaDelTraslado()).toBeInTheDocument()
 
     fireEvent.click(within(filaDelTraslado()).getByRole("button", { name: /ver detalle/i }))
     const dialogo = screen.getByRole("dialog", { name: /detalle del traslado/i })
@@ -873,12 +986,16 @@ describe("Traslados: autor visible para quien no es administrador", () => {
     expect(usuario.nextElementSibling).toHaveTextContent("Carla Compañera")
   })
 
-  it("si no se pueden resolver los nombres, el historial se ve igual con un guion", async () => {
+  it("si no se pueden resolver los nombres, el historial se ve igual y el detalle con un guion", async () => {
     await comoVendedor({ fallarEn: { nombres_de_usuarios: { message: "sin red" } } })
 
     const fila = filaDelTraslado()
-    expect(within(fila).getByText("Reposición")).toBeInTheDocument()
-    expect(within(fila).queryByText("Carla Compañera")).not.toBeInTheDocument()
-    expect(within(fila).getAllByText("—").length).toBeGreaterThan(0)
+    expect(celdas(fila).slice(0, 3)).toEqual(["Lunacell Bodega", "Lunacell Store", "1 producto"])
+
+    fireEvent.click(within(fila).getByRole("button", { name: /ver detalle/i }))
+    const dialogo = screen.getByRole("dialog", { name: /detalle del traslado/i })
+    const usuario = within(dialogo).getAllByRole("term").find((dt) => dt.textContent === "Usuario")
+    expect(usuario.nextElementSibling).toHaveTextContent("—")
+    expect(within(dialogo).getByText("Reposición")).toBeInTheDocument()
   })
 })

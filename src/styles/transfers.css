@@ -9,19 +9,18 @@
   Los colores salen de los tokens. Aquí no se define ninguno.
 */
 
+/* ── FORMULARIO (en su ventana) ───────────────────────────── */
+
 .transfers .transfers-formulario {
   display: flex;
   flex-direction: column;
   gap: var(--space-4);
-  margin-bottom: var(--space-6);
 }
 
-.transfers .transfers-formulario h2,
-.transfers .transfers-historial h2 {
+.transfers .transfers-formulario .form-grid,
+.transfers .transfers-formulario .field {
   margin: 0;
 }
-
-/* ── RENGLONES ────────────────────────────────────────────── */
 
 .transfers .transfers-renglones {
   display: flex;
@@ -54,36 +53,88 @@
   min-height: 2.5rem;
 }
 
-/* ── ACCIONES ─────────────────────────────────────────────── */
-
 .transfers .transfers-acciones {
   display: flex;
   flex-wrap: wrap;
   gap: var(--space-3);
-  justify-content: space-between;
-  align-items: center;
 }
 
-/* ── FILTROS Y PÁGINAS DEL HISTORIAL ──────────────────────── */
+/* ── BÚSQUEDA Y FILTROS ───────────────────────────────────── */
 
 /*
-  Ubicación ancha, las dos fechas estrechas y Limpiar al final, en la
-  línea de los controles y no de las etiquetas.
+  Todo en una línea, como una barra: la búsqueda a la izquierda y cada
+  filtro en una caja con su rótulo dentro («Ubicación: Todas»).
 */
 .transfers .transfers-filtros {
-  display: grid;
-  grid-template-columns: minmax(0, 2fr) minmax(9rem, 1fr) minmax(9rem, 1fr) auto;
+  display: flex;
+  flex-wrap: wrap;
   gap: var(--space-3);
-  align-items: end;
-  margin: var(--space-3) 0 var(--space-4);
+  align-items: center;
+  margin-bottom: var(--space-4);
 }
 
-.transfers .transfers-filtros .field {
+.transfers .transfers-filtros .search-box {
+  flex: 1 1 220px;
+  max-width: 280px;
+}
+
+.transfers .filtro-en-linea {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 38px;
+  padding: 0 4px 0 12px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+}
+
+.transfers .filtro-en-linea:focus-within {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 1px;
+}
+
+.transfers .filtro-en-linea.is-error {
+  border-color: var(--danger);
+}
+
+.transfers .filtro-en-linea label {
   margin: 0;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.transfers .filtro-en-linea label::after {
+  content: ":";
+}
+
+/* El control va sin borde propio: la caja ya lo enmarca. */
+.transfers .filtro-en-linea select,
+.transfers .filtro-en-linea input {
+  width: auto;
+  min-width: 0;
+  padding: 7px 6px;
+  border: 0;
+  background: transparent;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+  box-shadow: none;
+}
+
+.transfers .filtro-en-linea select:focus,
+.transfers .filtro-en-linea input:focus {
+  outline: none;
 }
 
 .transfers .transfers-limpiar {
   white-space: nowrap;
+}
+
+.transfers .transfers-error-fechas {
+  margin: calc(-1 * var(--space-2)) 0 var(--space-3);
 }
 
 .transfers .transfers-mas {
@@ -94,26 +145,45 @@
 
 /* ── HISTORIAL ────────────────────────────────────────────── */
 
-.transfers .transfers-ver {
+/* Cada traslado en una sola línea: nada parte el renglón. */
+.transfers .transfers-tabla td {
   white-space: nowrap;
+}
+
+.transfers .transfers-origen {
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.transfers .transfers-origen span {
+  margin-right: var(--space-2);
+}
+
+.transfers .transfers-flecha {
+  vertical-align: middle;
+  color: var(--text-muted);
+}
+
+.transfers .transfers-destino {
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.transfers .transfers-productos {
+  color: var(--text-secondary);
 }
 
 .transfers .transfers-fecha {
-  white-space: nowrap;
   font-variant-numeric: tabular-nums;
-}
-
-/* El resumen de productos acompaña, no compite con la ruta. */
-.transfers .transfers-productos {
-  font-size: 13.5px;
   color: var(--text-secondary);
 }
 
 /* ── RESPONSIVE ───────────────────────────────────────────── */
 
 /*
-  En pantallas angostas cada renglón se apila: producto, cantidad y el
-  botón de quitar a todo lo ancho, para que siga siendo fácil de pulsar.
+  En pantallas angostas los filtros ocupan cada uno su línea y los
+  renglones del formulario se apilan, con el botón de quitar a todo lo
+  ancho para que siga siendo fácil de pulsar.
 */
 @media (max-width: 640px) {
   .transfers .transfers-renglon {
@@ -124,19 +194,31 @@
     width: 100%;
   }
 
-  .transfers .transfers-acciones {
+  .transfers .transfers-filtros {
     flex-direction: column;
     align-items: stretch;
   }
 
-  .transfers .transfers-filtros {
-    grid-template-columns: 1fr 1fr;
+  .transfers .transfers-filtros .search-box {
+    flex: none;
+    max-width: none;
   }
 
-  .transfers .transfers-filtros .field:first-child,
-  .transfers .transfers-limpiar,
+  .transfers .filtro-en-linea {
+    justify-content: space-between;
+  }
+
+  .transfers .filtro-en-linea select,
+  .transfers .filtro-en-linea input {
+    flex: 1;
+    text-align: right;
+  }
+
+  .transfers .transfers-tabla td {
+    white-space: normal;
+  }
+
   .transfers .transfers-mas .btn {
-    grid-column: 1 / -1;
     width: 100%;
   }
 }
