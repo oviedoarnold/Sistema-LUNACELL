@@ -39,12 +39,13 @@ const ESTADOS = { aplicado: "Aplicado" }
 const cuantosProductos = (n) => (n === 1 ? "1 producto" : `${n} productos`)
 
 /*
-  La búsqueda revisa los traslados ya cargados: ubicaciones, productos,
-  usuario, nota y fecha. Ignora tildes y mayúsculas. No consulta nada:
-  los filtros de ubicación y fechas siguen siendo los de la consulta.
+  La búsqueda revisa los traslados ya cargados: número, ubicaciones,
+  productos, usuario, nota y fecha. Ignora tildes y mayúsculas. No
+  consulta nada: los filtros de ubicación y fechas siguen siendo los de la
+  consulta.
 */
 const coincideTraslado = (t, texto) =>
-  [t.origen, t.destino, t.productos, t.userName, t.note, t.fecha].some((campo) => coincideBusqueda(campo, texto))
+  [t.numero, t.origen, t.destino, t.productos, t.userName, t.note, t.fecha].some((campo) => coincideBusqueda(campo, texto))
 
 /*
   El estado con su color: aplicado es un estado terminado y bueno (verde).
@@ -497,15 +498,16 @@ function Transfers() {
         )}
 
         {/*
-          Una fila por traslado, en una sola línea: origen, destino, cuántos
-          productos, fecha y estado. Qué productos y cuántos de cada uno,
-          quién lo hizo y la nota están en el detalle (el ojo).
+          Una fila por traslado, en una sola línea: número, origen, destino,
+          cuántos productos, fecha y estado. Qué productos y cuántos de cada
+          uno, quién lo hizo y la nota están en el detalle (el ojo).
         */}
         {visibles.length > 0 && (
           <div className="table-wrap">
             <table aria-label="Historial de traslados" className="tabla-adaptable transfers-tabla">
               <thead>
                 <tr>
+                  <th scope="col">N.º traslado</th>
                   <th scope="col">Origen</th>
                   <th scope="col">Destino</th>
                   <th scope="col">Productos</th>
@@ -517,7 +519,8 @@ function Transfers() {
               <tbody>
                 {visibles.map((t) => (
                   <tr key={t.id}>
-                    <td className="transfers-origen">
+                    <td className="transfers-numero">{t.numero || "—"}</td>
+                    <td data-etiqueta="Origen" className="transfers-origen">
                       <span>{t.origen}</span>
                       <FaLongArrowAltRight aria-hidden="true" className="transfers-flecha" />
                     </td>
@@ -532,7 +535,7 @@ function Transfers() {
                         type="button"
                         className="btn-icono"
                         title="Ver detalle"
-                        aria-label={`Ver detalle del traslado ${t.ruta}, ${t.fecha}`}
+                        aria-label={`Ver detalle del traslado ${[t.numero, t.ruta, t.fecha].filter(Boolean).join(", ")}`}
                         onClick={() => setDetalleAbierto(t.id)}
                       >
                         <FaEye aria-hidden="true" />
@@ -573,6 +576,7 @@ function Transfers() {
       {detalle && (
         <DetalleDeTraslado
           traslado={{
+            numero: detalle.numero,
             fecha: detalle.fecha,
             origen: detalle.origen,
             destino: detalle.destino,

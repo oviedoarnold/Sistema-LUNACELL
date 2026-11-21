@@ -1,4 +1,4 @@
-import { FaArrowRight, FaCalendarAlt, FaMapMarkerAlt, FaRegCheckCircle, FaRegStickyNote, FaUser } from "react-icons/fa"
+import { FaArrowRight, FaCalendarAlt, FaHashtag, FaMapMarkerAlt, FaRegCheckCircle, FaRegStickyNote, FaUser } from "react-icons/fa"
 
 import ModalShell from "../forms/ModalShell"
 
@@ -20,6 +20,7 @@ function DetalleDeTraslado({ traslado, onCerrar }) {
   )
 
   const datos = [
+    ["Número", traslado.numero || "—", FaHashtag],
     ["Origen", traslado.origen, FaMapMarkerAlt],
     ["Destino", traslado.destino, FaArrowRight],
     ["Fecha y hora", traslado.fecha, FaCalendarAlt],

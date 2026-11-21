@@ -150,8 +150,14 @@
   white-space: nowrap;
 }
 
-.transfers .transfers-origen {
+.transfers .transfers-numero {
   font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-primary);
+}
+
+.transfers .transfers-origen {
+  font-weight: 600;
   color: var(--text-primary);
 }
 
