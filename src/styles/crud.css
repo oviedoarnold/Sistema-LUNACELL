@@ -179,24 +179,9 @@
 
 /* ── DISTINTIVOS ─────────────────────────────────────────── */
 
-.crud .badge {
-  font-size: 11.5px;
-  padding: 3px 9px;
-}
-
 .crud .badge svg {
   width: 10px;
   height: 10px;
-}
-
-/*
-  Variante neutra, para clasificaciones que no son un estado bueno ni
-  malo —el tipo de una ubicación, por ejemplo—. Gris sobre gris claro:
-  7.20:1, muy por encima del mínimo.
-*/
-.badge-neutral {
-  background: var(--surface-secondary);
-  color: var(--text-secondary);
 }
 
 /*
@@ -415,4 +400,23 @@
 
 .precios-especiales-lista input {
   width: 110px;
+}
+
+/* ── INVENTARIO ───────────────────────────────────────────── */
+
+/* Un encabezado largo («Disponible en Lunacell Bodega») parte en dos líneas. */
+.crud th.th-envuelve {
+  white-space: normal;
+  min-width: 7rem;
+  line-height: 1.25;
+}
+
+.crud th.th-acciones {
+  text-align: right;
+}
+
+/* Lo disponible es el dato que se viene a buscar. */
+.crud td.celda-disponible {
+  font-weight: 700;
+  color: var(--text-primary);
 }

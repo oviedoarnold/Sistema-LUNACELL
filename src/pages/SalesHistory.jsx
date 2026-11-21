@@ -284,7 +284,7 @@ function SalesHistory() {
 
   const getStatusBadge = (sale) => {
     if (esVentaAnulada(sale)) {
-      return <StatusBadge variante="neutral">Anulada</StatusBadge>
+      return <StatusBadge variante="out">Anulada</StatusBadge>
     }
 
     /*
@@ -300,7 +300,7 @@ function SalesHistory() {
       return <StatusBadge variante="overdue">Vencida</StatusBadge>
     }
 
-    return <StatusBadge variante="credit">Pendiente</StatusBadge>
+    return <StatusBadge variante="low">Pendiente</StatusBadge>
   }
 
   return (
@@ -509,9 +509,9 @@ function SalesHistory() {
                       <div className="badges">
 
                         {paymentType === "credito" ? (
-                          <StatusBadge variante="credit">Crédito</StatusBadge>
+                          <StatusBadge variante="neutral">Crédito</StatusBadge>
                         ) : (
-                          <StatusBadge variante="paid">Contado</StatusBadge>
+                          <StatusBadge variante="neutral">Contado</StatusBadge>
                         )}
 
                         {getStatusBadge(sale)}
@@ -737,4 +737,4 @@ function SalesHistory() {
   )
 }
 
-export default SalesHistory
+export default SalesHistory

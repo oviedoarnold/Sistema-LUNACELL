@@ -150,6 +150,30 @@
   gap: var(--space-2);
 }
 
+/*
+  El resumen: cuatro tarjetas iguales, la cifra grande y el rótulo pequeño.
+  Lo pendiente por liquidar, que es lo que pide acción, va en dorado suave.
+*/
+.liquidaciones-resumen .liquidaciones-cifra b {
+  font-size: 20px;
+  font-weight: 700;
+}
+
+.liquidaciones-resumen .liquidaciones-cifra.is-destacada {
+  background: var(--primary-soft);
+  border-color: transparent;
+}
+
+/* El número de la liquidación o del pedido y su importe mandan en la tarjeta. */
+.liquidaciones-tarjeta > .liquidaciones-tarjeta-fila:first-child > b {
+  font-size: 16px;
+}
+
+.liquidaciones-tarjeta .liquidaciones-tarjeta-fila > .pos-importe {
+  font-size: 16px;
+  font-weight: 700;
+}
+
 /* ── VENTANA DE ENTREGA ──────────────────────────────────── */
 
 .liquidaciones-entrega {

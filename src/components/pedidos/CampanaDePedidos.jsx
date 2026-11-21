@@ -38,7 +38,7 @@ function AvisoDePedido({ pedido, onAbrir }) {
       <span className="topbar-campana-aviso-linea">
         <b>{pedido.numero}</b>
         {!pedido.leido && <span className="badge badge-credit">Nuevo</span>}
-        {rechazado && <span className="badge badge-out">Por resolver</span>}
+        {rechazado && <span className="badge badge-low">Por resolver</span>}
       </span>
       <span className="topbar-campana-aviso-linea">
         <span>

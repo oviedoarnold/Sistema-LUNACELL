@@ -21,7 +21,7 @@ import { motivoDeConciliacion } from "../../lib/sinConexion/textos"
 */
 const ESTADO_DE_VENTA = {
   pendiente: { texto: "Pendiente", variante: "low", Icono: FaClock },
-  sincronizando: { texto: "Sincronizando", variante: "neutral", Icono: FaSync },
+  sincronizando: { texto: "Sincronizando", variante: "credit", Icono: FaSync },
   registrada: { texto: "Registrada", variante: "ok", Icono: FaCheckCircle },
   en_conciliacion: { texto: "En conciliación", variante: "credit", Icono: FaBalanceScale },
   error: { texto: "Error", variante: "overdue", Icono: FaExclamationCircle },
@@ -30,7 +30,7 @@ const ESTADO_DE_VENTA = {
 // Una venta en conciliación sobre la que un administrador ya decidió.
 const DECIDIDA = {
   aplicada: { texto: "Aplicada en conciliación", variante: "ok", Icono: FaCheckCircle },
-  anulada: { texto: "Anulada en conciliación", variante: "neutral", Icono: FaBalanceScale },
+  anulada: { texto: "Anulada en conciliación", variante: "out", Icono: FaBalanceScale },
 }
 
 const estadoVisible = (venta) =>
