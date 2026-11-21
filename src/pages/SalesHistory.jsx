@@ -737,4 +737,4 @@ function SalesHistory() {
   )
 }
 
-export default SalesHistory
+export default SalesHistory
