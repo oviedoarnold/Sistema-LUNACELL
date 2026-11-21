@@ -1,7 +1,9 @@
-import { useMemo, useState } from "react"
+import { Fragment, useMemo, useState } from "react"
 import { Link } from "react-router-dom"
 import {
   FaBoxOpen,
+  FaChevronDown,
+  FaChevronUp,
   FaExchangeAlt,
   FaExclamationTriangle,
   FaMapMarkerAlt,
@@ -13,7 +15,7 @@ import {
 import EmptyState from "../components/crud/EmptyState"
 import PageHeader from "../components/crud/PageHeader"
 import SearchInput from "../components/crud/SearchInput"
-import StatusBadge from "../components/crud/StatusBadge"
+import Paginacion from "../components/crud/Paginacion"
 
 import { PERMISSIONS } from "../context/permissions"
 import { useAuth } from "../hooks/useAuth"
@@ -27,6 +29,7 @@ import {
   ubicacionInicial,
   ubicacionesPresentes,
 } from "../utils/inventario"
+import { rebanada } from "../utils/paginacion"
 
 /*
   Dónde está la mercadería.
@@ -36,7 +39,10 @@ import {
   Products administra el catálogo —precios, costos, altas y bajas— y
   muestra un número por producto. Aquí no se edita nada: se mira.
 
-  El recorrido es PRODUCTO → UBICACIONES y no al contrario. Obligar a
+  El recorrido es PRODUCTO → UBICACIONES y no al contrario: una fila por
+  producto, con una columna por ubicación (o su detalle desplegable cuando
+  son muchas), en páginas para que cien productos no sean una lista
+  interminable. Obligar a
   entrar primero a una bodega para después buscar dentro es el camino
   equivocado cuando la pregunta nace en el mostrador, con un cliente
   delante y un código en la mano. El filtro de ubicación está, pero es el
@@ -53,6 +59,12 @@ import {
   quedan en el selector. Sin ubicación asignada no se elige ninguna en su
   lugar: se dice, y se muestran las que puede consultar.
 */
+
+// Más ubicaciones que esto y cada producto lleva su detalle desplegable.
+const MAX_COLUMNAS = 5
+
+// Filas por página: con cien productos o más la lista no se hace interminable.
+const POR_PAGINA = 25
 
 const ICONO_POR_TIPO = {
   bodega: FaWarehouse,
@@ -87,7 +99,9 @@ const AVISOS = {
 */
 function Cantidad({ valor }) {
   return valor === 0 ? (
-    <span className="inventory-cero">0 · sin existencia</span>
+    <span className="inventory-cero">
+      0<span className="inventory-cero-texto"> · sin existencia</span>
+    </span>
   ) : (
     <strong className="inventory-cantidad">{valor}</strong>
   )
@@ -166,7 +180,7 @@ function Inventory() {
     [existencias, busqueda]
   )
 
-  // Una ubicación elegida se ve como tabla; todas, producto por producto.
+  // Una ubicación elegida es una columna; todas, una columna por ubicación.
   const filas = useMemo(
     () =>
       ubicacionActual
@@ -180,14 +194,53 @@ function Inventory() {
     [porTexto, ubicacionActual]
   )
 
+  // Las columnas de ubicación, por nombre, como el detalle de cada producto.
+  const columnas = useMemo(
+    () => [...ubicaciones].sort((a, b) => a.locationName.localeCompare(b.locationName, "es")),
+    [ubicaciones]
+  )
+
+  /*
+    Con muchas ubicaciones las columnas ya no caben: cada producto lleva su
+    detalle desplegable. En el teléfono pasa siempre (lo decide el CSS).
+  */
+  const muchasUbicaciones = columnas.length > MAX_COLUMNAS
+
+  const [abiertos, setAbiertos] = useState(() => new Set())
+  const alternar = (productId) =>
+    setAbiertos((antes) => {
+      const despues = new Set(antes)
+
+      if (despues.has(productId)) despues.delete(productId)
+      else despues.add(productId)
+
+      return despues
+    })
+
+  /*
+    La página vuelve a la primera al cambiar la búsqueda o la ubicación: se
+    guarda con la clave de lo que se estaba mirando.
+  */
+  const claveDePagina = `${busqueda}|${ubicacionElegida}`
+  const [pagina, setPagina] = useState({ clave: "", n: 1 })
+  const paginaActual = pagina.clave === claveDePagina ? pagina.n : 1
+  const irA = (n) => setPagina({ clave: claveDePagina, n })
+
+  const totalDeFilas = ubicacionActual ? filas.length : grupos.length
+  const filasDeLaPagina = rebanada(filas, paginaActual, POR_PAGINA)
+  const gruposDeLaPagina = rebanada(grupos, paginaActual, POR_PAGINA)
+
   const buscando = Boolean(busqueda.trim()) || eligio
-  const sinResultados = ubicacionActual ? filas.length === 0 : grupos.length === 0
+  const sinResultados = totalDeFilas === 0
 
   /*
     Sin ninguna fila y con el aviso de ubicación, el aviso ya lo explica,
     salvo para quien ve todas: a él sí le falta mercadería registrada.
   */
   const callarVacio = existencias.length === 0 && Boolean(aviso) && !puedeVerElTotal
+
+  // Total y detalle: las dos columnas que acompañan a las de ubicación.
+  const columnasDeLaTabla = 2 + (muchasUbicaciones ? 1 : columnas.length) + (puedeVerElTotal ? 1 : 0) + 1
 
   return (
     <div className="view active crud inventory">
@@ -241,20 +294,20 @@ function Inventory() {
                 ))}
               </select>
             )}
-          </div>
 
-          {ubicaciones.length > 0 && (
-            <p className="inventory-ubicacion-actual">
-              <FaMapMarkerAlt aria-hidden="true" />
-              <span>Ubicación actual:</span>
-              <strong>
-                {ubicacionActual
-                  ? ubicacionActual.locationName
-                  : "todas las que puedes consultar"}
-              </strong>
-              {esLaSuya && <span className="inventory-ubicacion-suya">tu ubicación</span>}
-            </p>
-          )}
+            {ubicaciones.length > 0 && (
+              <p className="chip-ubicacion inventory-ubicacion-actual">
+                <FaMapMarkerAlt aria-hidden="true" />
+                <span>Ubicación actual:</span>
+                <strong>
+                  {ubicacionActual
+                    ? ubicacionActual.locationName
+                    : "todas las que puedes consultar"}
+                </strong>
+                {esLaSuya && <span className="chip-suya inventory-ubicacion-suya">tu ubicación</span>}
+              </p>
+            )}
+          </div>
 
           {aviso && (
             <p className="inventory-aviso" role="note">
@@ -278,12 +331,13 @@ function Inventory() {
             />
           )}
 
-          {filas.length > 0 && (
+          {filasDeLaPagina.length > 0 && (
             <div className="table-wrap inventory-ubicacion">
-              <table>
+              <table className="tabla-adaptable">
                 <thead>
                   <tr>
                     <th scope="col">Producto</th>
+                    <th scope="col">Código</th>
                     <th scope="col" className="num">
                       Disponible en {ubicacionActual.locationName}
                     </th>
@@ -296,21 +350,22 @@ function Inventory() {
                 </thead>
 
                 <tbody>
-                  {filas.map((fila) => (
+                  {filasDeLaPagina.map((fila) => (
                     <tr key={fila.productId}>
                       <td>
                         <span className="product-name">{fila.productName}</span>
-                        {fila.code && (
-                          <span className="inventory-codigo">{fila.code}</span>
-                        )}
                       </td>
 
-                      <td className="num">
+                      <td data-etiqueta="Código">
+                        <span className="inventory-codigo">{fila.code || "—"}</span>
+                      </td>
+
+                      <td className="num" data-etiqueta="Disponible">
                         <Cantidad valor={fila.quantity} />
                       </td>
 
                       {puedeVerElTotal && (
-                        <td className="num inventory-stock-total">{fila.total}</td>
+                        <td className="num inventory-stock-total" data-etiqueta="Stock total">{fila.total}</td>
                       )}
                     </tr>
                   ))}
@@ -319,79 +374,122 @@ function Inventory() {
             </div>
           )}
 
-          <div className="inventory-lista">
-            {grupos.map((grupo) => (
-              <section className="inventory-producto" key={grupo.productId}>
-                <header className="inventory-cabecera">
-                  <div>
-                    <h3 className="inventory-nombre">{grupo.productName}</h3>
+          {gruposDeLaPagina.length > 0 && (
+            <div className="table-wrap inventory-matriz">
+              <table className={muchasUbicaciones ? "inventory-tabla is-compacta" : "inventory-tabla"}>
+                <thead>
+                  <tr>
+                    <th scope="col">Producto</th>
+                    <th scope="col" className="inventory-col-codigo">Código</th>
+                    {muchasUbicaciones ? (
+                      <th scope="col" className="num inventory-col-ubicacion">Ubicaciones con existencia</th>
+                    ) : (
+                      columnas.map((u) => {
+                        const Icono = ICONO_POR_TIPO[u.locationType] || FaMapMarkerAlt
 
-                    {grupo.code && (
-                      <span className="inventory-codigo">{grupo.code}</span>
-                    )}
-                  </div>
-
-                  {/*
-                    El total es el de lo visible, no el de lo que existe.
-                    Para quien solo ve su camión, «3» significa «3 donde
-                    puedo mirar», y decirlo evita que lo lea como el total
-                    de la empresa.
-                  */}
-                  <div className="inventory-total">
-                    <strong>{grupo.total}</strong>
-
-                    <span>
-                      {ubicaciones.length > 1
-                        ? "en las ubicaciones que ves"
-                        : "en tu ubicación"}
-                    </span>
-                  </div>
-                </header>
-
-                <div className="table-wrap">
-                  <table>
-                    <thead>
-                      <tr>
-                        <th scope="col">Ubicación</th>
-                        <th scope="col">Tipo</th>
-                        <th scope="col" className="num">
-                          Existencia
-                        </th>
-                      </tr>
-                    </thead>
-
-                    <tbody>
-                      {grupo.ubicaciones.map((u) => (
-                        <tr key={u.locationId}>
-                          <td>
-                            <span className="product-name">
-                              {u.locationName}
+                        return (
+                          <th scope="col" className="num inventory-col-ubicacion" key={u.locationId}>
+                            <span className="inventory-encabezado-ubicacion" title={etiquetaDeTipo(u.locationType)}>
+                              <Icono aria-hidden="true" />
+                              <span className="inventory-nombre-ubicacion">{u.locationName}</span>
+                              <span className="solo-lector">{etiquetaDeTipo(u.locationType)}</span>
                             </span>
-                          </td>
+                          </th>
+                        )
+                      })
+                    )}
+                    {puedeVerElTotal && (
+                      <th scope="col" className="num">
+                        Total
+                      </th>
+                    )}
+                    <th scope="col" className="inventory-col-detalle">
+                      <span className="solo-lector">Detalle</span>
+                    </th>
+                  </tr>
+                </thead>
 
+                <tbody>
+                  {gruposDeLaPagina.map((grupo) => {
+                    const porUbicacion = new Map(grupo.ubicaciones.map((u) => [u.locationId, u.quantity]))
+                    const abierto = abiertos.has(grupo.productId)
+                    const conExistencia = grupo.ubicaciones.filter((u) => u.quantity > 0).length
+
+                    return (
+                      <Fragment key={grupo.productId}>
+                        <tr className="inventory-fila">
                           <td>
-                            <StatusBadge
-                              variante="neutral"
-                              Icono={
-                                ICONO_POR_TIPO[u.locationType] ||
-                                FaMapMarkerAlt
-                              }
-                            >
-                              {etiquetaDeTipo(u.locationType)}
-                            </StatusBadge>
+                            <span className="product-name inventory-nombre">{grupo.productName}</span>
                           </td>
 
-                          <td className="num">
-                            <Cantidad valor={u.quantity} />
+                          <td className="inventory-col-codigo">
+                            <span className="inventory-codigo">{grupo.code || "—"}</span>
+                          </td>
+
+                          {muchasUbicaciones ? (
+                            <td className="num inventory-col-ubicacion">
+                              {conExistencia} de {grupo.ubicaciones.length}
+                            </td>
+                          ) : (
+                            columnas.map((u) => (
+                              <td className="num inventory-col-ubicacion" key={u.locationId}>
+                                {/*
+                                  Una ubicación sin fila para este producto no
+                                  se rellena con un cero: no llegó, no se dibuja.
+                                */}
+                                {porUbicacion.has(u.locationId) ? <Cantidad valor={porUbicacion.get(u.locationId)} /> : "—"}
+                              </td>
+                            ))
+                          )}
+
+                          {puedeVerElTotal && (
+                            <td className="num inventory-total">
+                              <strong>{grupo.total}</strong>
+                            </td>
+                          )}
+
+                          <td className="inventory-col-detalle">
+                            <button
+                              type="button"
+                              className="btn-icono"
+                              aria-expanded={abierto}
+                              aria-label={`${abierto ? "Ocultar" : "Ver"} ubicaciones de ${grupo.productName}`}
+                              onClick={() => alternar(grupo.productId)}
+                            >
+                              {abierto ? <FaChevronUp aria-hidden="true" /> : <FaChevronDown aria-hidden="true" />}
+                            </button>
                           </td>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </section>
-            ))}
-          </div>
+
+                        {abierto && (
+                          <tr className="inventory-detalle">
+                            <td colSpan={columnasDeLaTabla}>
+                              <ul className="inventory-detalle-lista" aria-label={`Ubicaciones de ${grupo.productName}`}>
+                                {grupo.ubicaciones.map((u) => (
+                                  <li key={u.locationId}>
+                                    <span>{u.locationName}</span>
+                                    <Cantidad valor={u.quantity} />
+                                  </li>
+                                ))}
+                              </ul>
+                            </td>
+                          </tr>
+                        )}
+                      </Fragment>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          <Paginacion
+            pagina={paginaActual}
+            total={totalDeFilas}
+            porPagina={POR_PAGINA}
+            onCambiar={irA}
+            etiqueta="Páginas de existencias"
+          />
         </>
       )}
     </div>

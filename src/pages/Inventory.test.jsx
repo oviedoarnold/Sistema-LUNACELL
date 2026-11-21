@@ -76,25 +76,39 @@ const buscar = (texto) =>
     target: { value: texto },
   })
 
-const bloqueDe = (producto) =>
-  screen.getByRole("heading", { name: producto }).closest(".inventory-producto")
+/*
+  La tabla de todas las ubicaciones: una fila por producto y una columna
+  por ubicación. Una ubicación que no llegó para ese producto lleva «—».
+*/
+const matriz = () => document.querySelector(".inventory-matriz table")
 
-const ubicacionesDe = (producto) =>
-  within(bloqueDe(producto))
-    .getAllByRole("row")
-    .slice(1)
-    .map((fila) => fila.querySelector(".product-name").textContent)
+const filaDe = (producto) => within(matriz()).getByText(producto).closest("tr")
+
+const productosVisibles = () =>
+  [...matriz().querySelectorAll(".inventory-nombre")].map((n) => n.textContent)
+
+const columnasDeUbicacion = () =>
+  [...matriz().querySelectorAll(".inventory-nombre-ubicacion")].map((c) => c.textContent)
+
+const celdasPorUbicacion = (producto) =>
+  [...filaDe(producto).querySelectorAll("td.inventory-col-ubicacion")].map((c) => c.textContent)
+
+const ubicacionesDe = (producto) => {
+  const celdas = celdasPorUbicacion(producto)
+
+  return columnasDeUbicacion().filter((_, i) => celdas[i] !== "—")
+}
 
 /*
   El total y una cantidad pueden coincidir —un producto en una sola
-  ubicación tiene el mismo número arriba y en su fila—, así que se
+  ubicación tiene el mismo número en su columna y en el total—, así que se
   consultan por su sitio y no por su texto.
 */
 const totalDe = (producto) =>
-  bloqueDe(producto).querySelector(".inventory-total strong").textContent
+  filaDe(producto).querySelector(".inventory-total strong").textContent
 
 const cantidadesDe = (producto) =>
-  [...bloqueDe(producto).querySelectorAll(".inventory-cantidad")].map(
+  [...filaDe(producto).querySelectorAll(".inventory-cantidad")].map(
     (celda) => celda.textContent
   )
 
@@ -126,11 +140,11 @@ describe("Inventory · consulta", () => {
   it("muestra el tipo de cada ubicación", async () => {
     await renderInventory()
 
-    const cargador = within(bloqueDe("Cargador"))
+    const encabezado = within(matriz().querySelector("thead"))
 
-    expect(cargador.getByText("Bodega")).toBeInTheDocument()
-    expect(cargador.getByText("Tienda")).toBeInTheDocument()
-    expect(cargador.getAllByText("Camión")).toHaveLength(2)
+    expect(encabezado.getByText("Bodega")).toBeInTheDocument()
+    expect(encabezado.getByText("Tienda")).toBeInTheDocument()
+    expect(encabezado.getAllByText("Camión")).toHaveLength(2)
   })
 
   it("muestra el código del producto", async () => {
@@ -161,17 +175,15 @@ describe("Inventory · el cero", () => {
     await renderInventory()
 
     expect(
-      within(bloqueDe("Cargador")).getByText(/0 · sin existencia/)
-    ).toBeInTheDocument()
+      celdasPorUbicacion("Cargador")
+    ).toContain("0 · sin existencia")
   })
 
   it("un producto sin existencia en ninguna parte sale con total cero", async () => {
     await renderInventory()
 
-    const cubo = within(bloqueDe("Cubo Iphone"))
-
-    expect(cubo.getAllByText(/0 · sin existencia/)).toHaveLength(4)
-    expect(cubo.getByText("0")).toBeInTheDocument()
+    expect(celdasPorUbicacion("Cubo Iphone")).toEqual(Array(4).fill("0 · sin existencia"))
+    expect(totalDe("Cubo Iphone")).toBe("0")
   })
 })
 
@@ -255,8 +267,7 @@ describe("Inventory · búsqueda", () => {
 
     buscar("cubo")
 
-    expect(screen.getByRole("heading", { name: "Cubo Iphone" })).toBeInTheDocument()
-    expect(screen.queryByRole("heading", { name: "Cargador" })).not.toBeInTheDocument()
+    expect(productosVisibles()).toEqual(["Cubo Iphone"])
   })
 
   it("busca por código", async () => {
@@ -264,8 +275,7 @@ describe("Inventory · búsqueda", () => {
 
     buscar("LCCOBER")
 
-    expect(screen.getByRole("heading", { name: "Cargador" })).toBeInTheDocument()
-    expect(screen.queryByRole("heading", { name: "Cubo Iphone" })).not.toBeInTheDocument()
+    expect(productosVisibles()).toEqual(["Cargador"])
   })
 
   it("ignora tildes y mayúsculas", async () => {
@@ -273,7 +283,7 @@ describe("Inventory · búsqueda", () => {
 
     buscar("IPHONE")
 
-    expect(screen.getByRole("heading", { name: "Cubo Iphone" })).toBeInTheDocument()
+    expect(productosVisibles()).toContain("Cubo Iphone")
   })
 
   it("avisa cuando nada coincide", async () => {
@@ -296,9 +306,9 @@ const encabezados = () =>
     .getAllByRole("columnheader")
     .map((th) => th.textContent)
 
+// Las cifras de la fila: lo disponible y, si se puede ver, el stock total.
 const celdasDe = (producto) =>
-  [...within(tablaDeUbicacion()).getByText(producto).closest("tr").querySelectorAll("td")]
-    .slice(1)
+  [...within(tablaDeUbicacion()).getByText(producto).closest("tr").querySelectorAll("td.num")]
     .map((td) => td.textContent)
 
 const ubicacionActual = () =>
@@ -313,7 +323,7 @@ describe("Inventory · cambio de ubicación", () => {
     fireEvent.change(selector(), { target: { value: "u-c2" } })
 
     expect(ubicacionActual()).toBe("Camión 02")
-    expect(encabezados()).toEqual(["Producto", "Disponible en Camión 02", "Stock total"])
+    expect(encabezados()).toEqual(["Producto", "Código", "Disponible en Camión 02", "Stock total"])
     expect(celdasDe("Cargador")).toEqual(["12", "30"])
     expect(celdasDe("Cubo Iphone")).toEqual(["0 · sin existencia", "0"])
   })
@@ -356,7 +366,7 @@ describe("Inventory · se abre en la ubicación del usuario", () => {
     expect(ubicacionActual()).toBe("Lunacell Bodega")
     expect(screen.getByText("tu ubicación")).toBeInTheDocument()
     expect(selector()).toHaveValue("u-bodega")
-    expect(encabezados()).toEqual(["Producto", "Disponible en Lunacell Bodega", "Stock total"])
+    expect(encabezados()).toEqual(["Producto", "Código", "Disponible en Lunacell Bodega", "Stock total"])
     expect(celdasDe("Cargador")).toEqual(["15", "30"])
   })
 
@@ -375,7 +385,7 @@ describe("Inventory · se abre en la ubicación del usuario", () => {
 
     expect(ubicacionActual()).toBe("Camión 01")
     expect(screen.queryByLabelText(/cambiar de ubicación/i)).not.toBeInTheDocument()
-    expect(encabezados()).toEqual(["Producto", "Disponible en Camión 01"])
+    expect(encabezados()).toEqual(["Producto", "Código", "Disponible en Camión 01"])
     expect(celdasDe("Cargador")).toEqual(["3"])
     expect(screen.queryByText(/stock total/i)).not.toBeInTheDocument()
   })
@@ -550,5 +560,66 @@ describe("Inventory · cantidades al día", () => {
     await renderInventory({ ubicacionOperativa: "u-bodega" })
 
     expect(ubicacionActual()).toBe("Lunacell Bodega")
+  })
+})
+
+describe("Inventory · listas largas", () => {
+  const MUCHOS = Array.from({ length: 30 }, (_, i) => ({
+    id: `p-${String(i).padStart(2, "0")}`,
+    code: `COD-${String(i).padStart(2, "0")}`,
+    name: `Producto ${String(i).padStart(2, "0")}`,
+    category: "Varios",
+    price: 10,
+    costPrice: 5,
+    stock: 0,
+    minStock: 1,
+    supplierId: "",
+  }))
+
+  it("reparte en páginas de 25 y vuelve a la primera al buscar", async () => {
+    await renderInventory({ productos: MUCHOS, existencias: [] })
+
+    expect(productosVisibles()).toHaveLength(25)
+    expect(screen.getByText("1–25 de 30")).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole("button", { name: /siguiente/i }))
+
+    expect(productosVisibles()).toEqual(["Producto 25", "Producto 26", "Producto 27", "Producto 28", "Producto 29"])
+
+    buscar("Producto 0")
+
+    expect(productosVisibles()).toHaveLength(10)
+    expect(screen.queryByRole("navigation", { name: /páginas de existencias/i })).not.toBeInTheDocument()
+  })
+
+  /*
+    Con más de cinco ubicaciones las columnas no caben: cada producto
+    resume en cuántas hay existencia y despliega el detalle.
+  */
+  it("con muchas ubicaciones, cada producto despliega su detalle", async () => {
+    const SEIS = [
+      ...UBICACIONES,
+      { id: "u-c3", name: "Camión 03", type: "camion" },
+      { id: "u-c4", name: "Camión 04", type: "camion" },
+    ]
+
+    await renderInventory({ ubicaciones: SEIS })
+
+    expect(columnasDeUbicacion()).toEqual([])
+    expect(within(filaDe("Cargador")).getByText("3 de 6")).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole("button", { name: "Ver ubicaciones de Cargador" }))
+
+    const detalle = screen.getByRole("list", { name: "Ubicaciones de Cargador" })
+
+    expect(within(detalle).getAllByRole("listitem").map((li) => li.textContent)).toEqual([
+      "Camión 013",
+      "Camión 0212",
+      "Camión 030 · sin existencia",
+      "Camión 040 · sin existencia",
+      "Lunacell Bodega15",
+      "Lunacell Store0 · sin existencia",
+    ])
+    expect(screen.getByRole("button", { name: "Ocultar ubicaciones de Cargador" })).toHaveAttribute("aria-expanded", "true")
   })
 })

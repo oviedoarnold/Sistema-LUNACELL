@@ -494,7 +494,8 @@ describe("Products: inventario de la ubicación del usuario", () => {
   it("abre automáticamente en la ubicación asignada", async () => {
     await renderProducts(CATALOGO, comoAdmin())
 
-    expect(screen.getByText(/Ubicación actual:/)).toHaveTextContent("Ubicación actual: Lunacell Bodega (tu ubicación)")
+    expect(document.querySelector(".chip-ubicacion strong")).toHaveTextContent("Lunacell Bodega")
+    expect(within(document.querySelector(".chip-ubicacion")).getByText("Tu ubicación")).toBeInTheDocument()
     expect(selector()).toHaveValue("bodega")
   })
 
@@ -516,7 +517,8 @@ describe("Products: inventario de la ubicación del usuario", () => {
     cambiarA("ruta")
 
     expect(screen.getByRole("columnheader", { name: "Disponible en Ruta local" })).toBeInTheDocument()
-    expect(screen.getByText(/Ubicación actual:/)).toHaveTextContent("Ubicación actual: Ruta local.")
+    expect(document.querySelector(".chip-ubicacion strong")).toHaveTextContent("Ruta local")
+    expect(document.querySelector(".chip-suya")).toBeNull()
     expect(within(fila("Auriculares Iphone")).getByText("10 u.")).toBeInTheDocument()
     expect(within(fila("Cubo Iphone")).getByText("15 u.")).toBeInTheDocument()
     expect(within(fila("Parlante inalámbrico")).getByText("2 u.")).toBeInTheDocument()
