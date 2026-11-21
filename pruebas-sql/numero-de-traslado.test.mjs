@@ -81,6 +81,21 @@ const foto = async () => ({
   detalle: (await db.query("select * from traslado_detalle order by traslado_id, producto_id")).rows,
   inventario: (await db.query("select * from inventario_ubicacion order by ubicacion_id, producto_id")).rows,
   movimientos: (await db.query("select * from movimientos_inventario order by id")).rows,
+  // Quién lee y quién escribe: políticas, privilegios de tabla y de registrar_traslado.
+  politicas: (await db.query(
+    `select tablename, policyname, cmd, roles::text, qual, with_check from pg_policies
+      where tablename in ('traslados', 'traslado_detalle') order by tablename, policyname`
+  )).rows,
+  rls: (await db.query(
+    "select relname, relrowsecurity, relforcerowsecurity from pg_class where relname in ('traslados', 'traslado_detalle') order by relname"
+  )).rows,
+  privilegios: (await db.query(
+    `select table_name, grantee, privilege_type from information_schema.role_table_grants
+      where table_name in ('traslados', 'traslado_detalle') order by 1, 2, 3`
+  )).rows,
+  ejecutarTraslado: (await db.query(
+    "select proacl::text, prosecdef from pg_proc where proname = 'registrar_traslado' and pronamespace = 'public'::regnamespace"
+  )).rows,
 })
 
 let a
@@ -99,9 +114,14 @@ beforeAll(async () => {
   await trasladar(a, { origen: a.bodega, destino: a.tienda, items: [[a.cubo, 2]], nota: "A segundo" })
   await trasladar(a, { origen: a.tienda, destino: a.bodega, items: [[a.cargador, 1]], nota: "A el más antiguo" })
   await trasladar(b, { origen: b.bodega, destino: b.tienda, items: [[b.cargador, 5]], nota: "B único" })
+  await trasladar(b, { origen: b.bodega, destino: b.tienda, items: [[b.cubo, 1]], nota: "B empate" })
+  await trasladar(b, { origen: b.bodega, destino: b.tienda, items: [[b.cubo, 2]], nota: "B empate" })
 
   // El último registrado lleva la fecha más antigua: se numera por fecha, no por orden de inserción.
   await db.query("update traslados set creado_en = creado_en - interval '1 day' where nota = 'A el más antiguo'")
+
+  // Dos con el mismo instante exacto, posteriores a «B único»: los ordena el id.
+  await db.query("update traslados set creado_en = '2030-01-01T00:00:00Z' where nota = 'B empate'")
 
   antes = await foto()
   cuerpoAntes = await cuerpoDe(db, await firmaDe(db, "registrar_traslado"))
@@ -120,10 +140,42 @@ describe("la 0053 sobre traslados que ya existen", () => {
       { numero: "TR-000002", nota: "A primero" },
       { numero: "TR-000003", nota: "A segundo" },
     ])
-    expect(await numerosDe(b.empresa)).toEqual([{ numero: "TR-000001", nota: "B único" }])
+    expect((await numerosDe(b.empresa)).map((t) => [t.numero, t.nota])).toEqual([
+      ["TR-000001", "B único"],
+      ["TR-000002", "B empate"],
+      ["TR-000003", "B empate"],
+    ])
   })
 
-  it("no cambia nada más: traslados, detalle, existencias, libro ni registrar_traslado", async () => {
+  it("con la misma fecha y hora el orden lo decide el id: determinista", async () => {
+    const empatados = await db.query(
+      "select id::text as id, numero from traslados where nota = 'B empate' order by numero"
+    )
+    const ids = empatados.rows.map((t) => t.id)
+
+    expect(ids).toEqual([...ids].sort((x, y) => (x < y ? -1 : 1)))
+  })
+
+  it("ningún número se repite dentro de una empresa y siempre corresponde a su correlativo", async () => {
+    const restricciones = await db.query(
+      `select conname, pg_get_constraintdef(oid) as def from pg_constraint
+        where conrelid = 'traslados'::regclass and (conname like 'traslados_correlativo%' or conname like 'traslados_numero%') order by conname`
+    )
+
+    expect(restricciones.rows).toEqual([
+      { conname: "traslados_correlativo_positivo", def: "CHECK ((correlativo > 0))" },
+      { conname: "traslados_correlativo_unico", def: "UNIQUE (empresa_id, correlativo)" },
+      {
+        conname: "traslados_numero_del_correlativo",
+        def: expect.stringContaining("'TR-'::text || lpad((correlativo)::text, GREATEST(6, length((correlativo)::text)), '0'::text)"),
+      },
+    ])
+
+    const repetidos = await db.query("select empresa_id, numero from traslados group by 1, 2 having count(*) > 1")
+    expect(repetidos.rows).toEqual([])
+  })
+
+  it("no cambia nada más: traslados, detalle, existencias, libro, RLS, permisos ni registrar_traslado", async () => {
     expect(await foto()).toEqual(antes)
     expect(await cuerpoDe(db, await firmaDe(db, "registrar_traslado"))).toBe(cuerpoAntes)
   })
@@ -150,7 +202,7 @@ describe("los traslados nuevos", () => {
     // registrar_traslado responde lo mismo que antes.
     expect(Object.keys(nuevo).sort()).toEqual(["destino_id", "estado", "items", "origen_id", "repetida", "traslado_id"])
     expect((await numerosDe(a.empresa)).at(-1)).toEqual({ numero: "TR-000004", nota: "A cuarto" })
-    expect((await numerosDe(b.empresa)).at(-1)).toEqual({ numero: "TR-000002", nota: "B segundo" })
+    expect((await numerosDe(b.empresa)).at(-1)).toEqual({ numero: "TR-000004", nota: "B segundo" })
   })
 
   it("un reintento con la misma clave y un traslado rechazado no gastan número", async () => {
