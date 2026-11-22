@@ -87,10 +87,10 @@ export function useNuevoTraslado({
 
     const partes = []
     if (retirados.length > 0) {
-      partes.push(`se retiró ${retirados.map(nombreProducto).join(", ")}, sin existencia en ${nombreUbicacion(nuevoOrigen)}`)
+      partes.push(`se retiró ${retirados.map((id) => nombreProducto(id)).join(", ")}, sin existencia en ${nombreUbicacion(nuevoOrigen)}`)
     }
     if (ajustados.length > 0) {
-      partes.push(`se ajustó a lo disponible ${ajustados.map(nombreProducto).join(", ")}`)
+      partes.push(`se ajustó a lo disponible ${ajustados.map((id) => nombreProducto(id)).join(", ")}`)
     }
 
     setAviso(partes.length > 0 ? `Cambió el origen: ${partes.join("; ")}.` : "")
