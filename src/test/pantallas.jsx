@@ -150,6 +150,20 @@ const aFilaDeUbicacion = (ubicacion) => ({
 })
 
 /*
+  Los traslados de una prueba llevan su número como en la base (0053): del
+  más antiguo al más reciente, salvo que la prueba traiga el suyo.
+*/
+function numerarTraslados(traslados) {
+  const orden = [...traslados].sort((x, y) => String(x.creado_en).localeCompare(String(y.creado_en)))
+
+  return traslados.map((t) => {
+    const correlativo = t.correlativo || orden.indexOf(t) + 1
+
+    return { numero: `TR-${String(correlativo).padStart(6, "0")}`, ...t, correlativo }
+  })
+}
+
+/*
   Una celda de existencia: un producto en una ubicación con su cantidad.
 
   Se siembran las celdas que existen y nada más. El cero NO se siembra,
@@ -313,7 +327,7 @@ export function montarDatos({
       proveedores: proveedores.map(aFilaDeProveedor),
       ubicaciones: ubicaciones.map(aFilaDeUbicacion),
       inventario_ubicacion: existencias.map(aFilaDeExistencia),
-      traslados: traslados.map((t) => ({ empresa_id: EMPRESA, estado: "aplicado", nota: "", ...t })),
+      traslados: numerarTraslados(traslados).map((t) => ({ empresa_id: EMPRESA, estado: "aplicado", nota: "", ...t })),
       traslado_detalle: traslados.flatMap((t) =>
         (t.renglones || []).map((r) => ({ traslado_id: t.id, empresa_id: EMPRESA, ...r }))
       ),

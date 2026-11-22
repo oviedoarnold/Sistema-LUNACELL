@@ -80,7 +80,7 @@ export async function registrarTraslado(
 }
 
 const COLUMNAS = `
-  id, origen_id, destino_id, usuario_id, estado, nota, creado_en,
+  id, numero, origen_id, destino_id, usuario_id, estado, nota, creado_en,
   traslado_detalle (*)
 `
 
@@ -127,6 +127,8 @@ async function nombresDeProductos(filas) {
 
 export const aTrasladoDeApp = (fila, nombres = new Map(), productos = new Map()) => ({
   id: fila.id,
+  // TR-000001: lo da la base al registrar el traslado (0053).
+  numero: fila.numero || "",
   originId: fila.origen_id,
   destinationId: fila.destino_id,
   userId: fila.usuario_id,

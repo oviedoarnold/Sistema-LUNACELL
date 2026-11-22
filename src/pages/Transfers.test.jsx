@@ -75,7 +75,7 @@ const celdas = (fila) => within(fila).getAllByRole("cell").map((c) => c.textCont
 
 // La fila del historial que corresponde a una ruta, por el nombre de su botón de detalle.
 const filaDeRuta = (ruta) =>
-  screen.getByRole("button", { name: new RegExp(`^ver detalle del traslado ${ruta}`, "i") }).closest("tr")
+  screen.getByRole("button", { name: new RegExp(String.raw`^ver detalle del traslado TR-\d{6}, ${ruta}`, "i") }).closest("tr")
 
 const elegir = (etiqueta, valor) =>
   fireEvent.change(screen.getByLabelText(etiqueta), { target: { value: valor } })
@@ -247,7 +247,7 @@ describe("Traslados: registrar", () => {
 
     const fila = filaDeRuta("lunacell bodega → lunacell store")
 
-    expect(celdas(fila).slice(0, 3)).toEqual(["Lunacell Bodega", "Lunacell Store", "1 producto"])
+    expect(celdas(fila).slice(0, 4)).toEqual(["TR-000001", "Lunacell Bodega", "Lunacell Store", "1 producto"])
     expect(within(fila).getByText("1 producto")).toHaveAttribute("title", "Cargador × 3")
   })
 
@@ -300,12 +300,13 @@ describe("Traslados: historial", () => {
     renglones: [{ producto_id: "p1", cantidad: 2 }],
   }
 
-  it("una fila compacta: origen, destino, cuántos productos, fecha, estado y el detalle", async () => {
+  it("una fila compacta: número, origen, destino, cuántos productos, fecha, estado y el detalle", async () => {
     await renderTransfers({ traslados: [DEVOLUCION] })
 
     const tabla = screen.getByRole("table", { name: /historial de traslados/i })
 
     expect(within(tabla).getAllByRole("columnheader").map((c) => c.textContent)).toEqual([
+      "N.º traslado",
       "Origen",
       "Destino",
       "Productos",
@@ -317,6 +318,7 @@ describe("Traslados: historial", () => {
     const fila = filaDeRuta("camión 01 → lunacell bodega")
 
     expect(celdas(fila)).toEqual([
+      "TR-000001",
       "Camión 01",
       "Lunacell Bodega",
       "1 producto",
@@ -352,7 +354,7 @@ describe("Traslados: historial", () => {
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument()
   })
 
-  it("la búsqueda encuentra entre lo cargado por producto, nota o usuario, sin consultar", async () => {
+  it("la búsqueda encuentra entre lo cargado por producto, nota, número o usuario, sin consultar", async () => {
     const { falso } = await renderTransfers({
       traslados: [
         DEVOLUCION,
@@ -367,13 +369,16 @@ describe("Traslados: historial", () => {
       within(screen.getByRole("table", { name: /historial de traslados/i }))
         .getAllByRole("row")
         .slice(1)
-        .map((f) => celdas(f).slice(0, 2).join(" → "))
+        .map((f) => celdas(f).slice(1, 3).join(" → "))
 
     buscar("cubo")
     expect(rutas()).toEqual(["Lunacell Bodega → Lunacell Store"])
 
     buscar("devolucion")
     expect(rutas()).toEqual(["Camión 01 → Lunacell Bodega"])
+
+    buscar("tr-000002")
+    expect(rutas()).toEqual(["Lunacell Bodega → Lunacell Store"])
 
     buscar("administradora")
     expect(rutas()).toHaveLength(2)
@@ -426,7 +431,7 @@ describe("Traslados: detalle", () => {
   const renderConHistorial = (traslados = [DEVOLUCION]) =>
     renderTransfers({ productos: [...PRODUCTOS, INACTIVO], traslados })
 
-  const abrirDetalle = (nombre = /ver detalle del traslado camión 01 → lunacell bodega/i) => {
+  const abrirDetalle = (nombre = /ver detalle del traslado TR-\d{6}, camión 01 → lunacell bodega/i) => {
     fireEvent.click(screen.getByRole("button", { name: nombre }))
     return screen.getByRole("dialog", { name: /detalle del traslado/i })
   }
@@ -448,15 +453,16 @@ describe("Traslados: detalle", () => {
     // Solo el icono del ojo: el nombre lo da aria-label y el rótulo flotante, title.
     expect(botones.map((b) => b.getAttribute("title"))).toEqual(["Ver detalle", "Ver detalle"])
     expect(
-      screen.getByRole("button", { name: `Ver detalle del traslado Lunacell Bodega → Lunacell Store, ${aFecha("2026-10-03T15:00:00Z")}` })
+      screen.getByRole("button", { name: `Ver detalle del traslado TR-000002, Lunacell Bodega → Lunacell Store, ${aFecha("2026-10-03T15:00:00Z")}` })
     ).toBeInTheDocument()
   })
 
-  it("el detalle muestra fecha y hora, origen, destino, estado, usuario y nota", async () => {
+  it("el detalle muestra número, fecha y hora, origen, destino, estado, usuario y nota", async () => {
     await renderConHistorial()
 
     const dialogo = abrirDetalle()
 
+    expect(dato(dialogo, "Número")).toBe("TR-000001")
     expect(dato(dialogo, "Fecha y hora")).toBe(aFecha(DEVOLUCION.creado_en))
     expect(dato(dialogo, "Origen")).toBe("Camión 01")
     expect(dato(dialogo, "Destino")).toBe("Lunacell Bodega")
@@ -685,7 +691,7 @@ describe("Traslados: filtros y Cargar más", () => {
 
   const filas = () => within(tablaHistorial()).getAllByRole("row").slice(1)
 
-  const notaDe = (fila) => notaPorFecha.get(within(fila).getAllByRole("cell")[3].textContent)
+  const notaDe = (fila) => notaPorFecha.get(within(fila).getAllByRole("cell")[4].textContent)
 
   const notas = () => filas().map(notaDe)
 
@@ -990,7 +996,7 @@ describe("Traslados: autor visible para quien no es administrador", () => {
     await comoVendedor({ fallarEn: { nombres_de_usuarios: { message: "sin red" } } })
 
     const fila = filaDelTraslado()
-    expect(celdas(fila).slice(0, 3)).toEqual(["Lunacell Bodega", "Lunacell Store", "1 producto"])
+    expect(celdas(fila).slice(0, 4)).toEqual(["TR-000001", "Lunacell Bodega", "Lunacell Store", "1 producto"])
 
     fireEvent.click(within(fila).getByRole("button", { name: /ver detalle/i }))
     const dialogo = screen.getByRole("dialog", { name: /detalle del traslado/i })

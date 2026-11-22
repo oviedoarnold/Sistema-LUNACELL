@@ -900,9 +900,15 @@ export function crearSupabaseFalso({
       }
     }
 
+    // El número lo da la base al insertar la cabecera (disparador de la 0053).
+    const correlativo =
+      Math.max(0, ...(datos.traslados || []).filter((t) => t.empresa_id === usuario.empresa_id).map((t) => t.correlativo || 0)) + 1
+
     const traslado = {
       id: siguienteId(),
       empresa_id: usuario.empresa_id,
+      correlativo,
+      numero: `TR-${String(correlativo).padStart(6, "0")}`,
       origen_id: p_origen,
       destino_id: p_destino,
       usuario_id: usuario.id,
