@@ -6,6 +6,7 @@ import {
 import { formatDocumentNumber } from "../utils/fiscal"
 
 import { formatMoney } from "../utils/format"
+import RegaliasDelDocumento from "./documents/RegaliasDelDocumento"
 import { etiquetaDelCargo, tasaValida, textoDePorcentaje, textoDeTasas } from "../utils/mediosDePago"
 
 /*
@@ -327,6 +328,8 @@ function InvoiceTemplate({
   })}
 </tbody>
         </table>
+
+        <RegaliasDelDocumento regalias={sale.regalias} anulado={status === "anulada"} />
       </div>
 
       <div className="inv-totals">

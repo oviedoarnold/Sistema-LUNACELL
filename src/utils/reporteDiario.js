@@ -30,6 +30,8 @@ export const CLASE_DE_MOVIMIENTO = {
   entrada: "Entrada",
   salida: "Salida manual",
   devolucion: "Devolución",
+  // Lo entregado sin cargo con una venta (0054): sale del inventario, no es una venta.
+  regalia: "Regalía",
 }
 
 /* El día de hoy en Honduras, como AAAA-MM-DD. */

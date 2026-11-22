@@ -10,6 +10,10 @@
       "destination": "/index.html"
     },
     {
+      "source": "/reports/regalias",
+      "destination": "/index.html"
+    },
+    {
       "source": "/(demo|dashboard|pos|pedidos|products|inventory|clients|suppliers|sales-history|receivables|liquidaciones|quotes|locations|settings|reconciliation|reports)",
       "destination": "/index.html"
     },

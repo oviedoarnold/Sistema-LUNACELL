@@ -690,3 +690,121 @@
     font-size: 21px;
   }
 }
+
+/*
+  Regalías (0054): debajo de los artículos facturados. Se distinguen por la
+  etiqueta y por «Sin cargo» en lugar de un importe; no suman al total.
+*/
+.pos .pos-regalias {
+  margin-top: var(--space-3);
+  padding-top: var(--space-2);
+  border-top: 1px dashed var(--line-strong);
+}
+
+.pos .pos-regalias .pos-titulo svg {
+  color: var(--lc-gold-700);
+}
+
+.pos .pos-regalias-aviso {
+  margin: var(--space-1) 0;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.pos .pos-regalias-lista,
+.pos .pos-regalias-catalogo {
+  margin: var(--space-2) 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.pos .pos-regalias-lista li,
+.pos .pos-regalias-catalogo li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 6px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.pos .pos-regalias-producto {
+  display: flex;
+  flex: 1 1 160px;
+  flex-direction: column;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.pos .pos-regalias-producto small {
+  color: var(--text-muted);
+}
+
+.pos .pos-regalias-etiqueta {
+  align-self: flex-start;
+  margin-top: 2px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--cream);
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+}
+
+.pos .pos-regalias-cantidad {
+  display: inline-flex;
+  align-items: center;
+  border: 1.5px solid var(--line-strong);
+  border-radius: 7px;
+  overflow: hidden;
+}
+
+.pos .pos-regalias-cantidad button {
+  width: 28px;
+  height: 28px;
+  border: none;
+  background: var(--cream);
+}
+
+.pos .pos-regalias-cantidad input {
+  width: 48px;
+  height: 28px;
+  border: none;
+  text-align: center;
+  font-family: var(--font-mono);
+}
+
+.pos .pos-regalias-importe {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.pos .pos-regalias-motivo {
+  display: grid;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+}
+
+.pos .pos-regalias-buscador {
+  width: 100%;
+  max-width: none;
+  flex: 0 0 auto;
+}
+
+.pos .pos-regalias-catalogo {
+  max-height: min(55vh, 420px);
+  overflow-y: auto;
+}
+
+.pos .pos-regalias-quedan {
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.pos .pos-regalias-vacio {
+  margin: var(--space-2) 0 0;
+  color: var(--text-muted);
+}

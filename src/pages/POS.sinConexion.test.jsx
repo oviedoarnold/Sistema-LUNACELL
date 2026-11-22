@@ -71,7 +71,7 @@ function servidorDeSincronizacion() {
   return estado
 }
 
-async function renderPOS({ ubicacion = CAMION, rpcsExtra = {}, fallarEn = {}, tablasExtra = {} } = {}) {
+async function renderPOS({ ubicacion = CAMION, rpcsExtra = {}, fallarEn = {}, tablasExtra = {}, permisosExtra = [] } = {}) {
   const resultado = await renderizarPantalla(
     <AuthProvider>
       <SinConexionProvider
@@ -96,7 +96,7 @@ async function renderPOS({ ubicacion = CAMION, rpcsExtra = {}, fallarEn = {}, ta
       existencias: EXISTENCIAS,
       ubicacionOperativa: ubicacion.id,
       rolDelUsuario: "vendedor",
-      permisosDelUsuario: ["pos", "clients", "inventory-own", "sales-history"],
+      permisosDelUsuario: ["pos", "clients", "inventory-own", "sales-history", ...permisosExtra],
       fallarEn,
       tablasExtra,
       rpcsExtra: {
@@ -180,6 +180,52 @@ describe("POS con conexión", () => {
 })
 
 describe("POS sin conexión en una ubicación habilitada", () => {
+  /*
+    Regalías (0054): solo con conexión. Una venta sin regalías se guarda sin
+    conexión como siempre aunque el vendedor tenga el permiso; una que ya las
+    lleva no se guarda dejándolas fuera sin decirlo.
+  */
+  it("24. con el permiso de regalías, la venta sin regalías se guarda sin conexión como siempre", async () => {
+    await renderPOS({ permisosExtra: ["regalias"] })
+    await esperarCopia()
+    await quitarConexion()
+
+    const seccion = screen.getByRole("region", { name: /regalías/i })
+    expect(within(seccion).getByRole("button", { name: /agregar regalía/i })).toBeDisabled()
+    expect(within(seccion).getByText(/necesitan conexión/i)).toBeInTheDocument()
+
+    agregar("Martillo de uña")
+    elegirEfectivo()
+    fireEvent.click(botonGuardarSinConexion())
+
+    await waitFor(() => expect(screen.getByText("COMPROBANTE PROVISIONAL")).toBeInTheDocument())
+  })
+
+  it("25. si la conexión se cae con regalías ya agregadas, no guarda la venta sin ellas", async () => {
+    const { falso } = await renderPOS({ permisosExtra: ["regalias"] })
+    await esperarCopia()
+
+    fireEvent.focus(screen.getByPlaceholderText(/nombre/i))
+    fireEvent.click(screen.getByText("Ferremax"))
+    agregar("Martillo de uña")
+    fireEvent.click(screen.getByRole("button", { name: /agregar regalía/i }))
+    const ventana = screen.getByRole("dialog", { name: /agregar regalía/i })
+    fireEvent.click(within(ventana).getByRole("button", { name: "Agregar Cemento gris como regalía" }))
+    fireEvent.click(within(ventana).getByRole("button", { name: "Listo" }))
+    fireEvent.change(screen.getByLabelText("Motivo de la regalía"), { target: { value: "cortesia_comercial" } })
+
+    await quitarConexion()
+    elegirEfectivo()
+    fireEvent.click(botonGuardarSinConexion())
+
+    expect(Swal.fire).toHaveBeenCalledWith(
+      expect.objectContaining({ title: "Revisa las regalías", text: expect.stringMatching(/necesitan conexión/i) })
+    )
+    expect(screen.queryByText("COMPROBANTE PROVISIONAL")).not.toBeInTheDocument()
+    expect(falso.datos.ventas).toHaveLength(0)
+    expect(screen.queryByText(/1 venta pendiente de sincronizar/i)).not.toBeInTheDocument()
+  })
+
   it("guarda la venta en el teléfono con comprobante provisional, sin llamar al servidor y sin presentarla como factura", async () => {
     const { falso } = await renderPOS()
     await esperarCopia()

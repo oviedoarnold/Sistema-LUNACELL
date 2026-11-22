@@ -14,7 +14,8 @@ const COLUMNAS_VENTA = `
   detalle_venta (*),
   abonos (*),
   anulaciones_venta (*),
-  devoluciones_de_venta (*)
+  devoluciones_de_venta (*),
+  regalias_venta (id, producto_id, nombre, codigo, cantidad, motivo, detalle_motivo, usuario_nombre, creado_en)
 `
 
 function fallo(error, queHacia) {
@@ -73,6 +74,21 @@ const aDevolucionDeApp = (fila) => ({
   ajusteCredito: Number(fila.ajuste_credito),
   aFavor: Number(fila.a_favor),
   usuarioNombre: fila.usuario_nombre,
+})
+
+/*
+  Lo entregado sin cargo con la venta (0054). Sin costo: esa columna no se
+  concede a nadie por la API, y pedirla haría fallar toda la consulta.
+*/
+const aRegaliaDeApp = (fila) => ({
+  id: fila.id,
+  productId: fila.producto_id,
+  name: fila.nombre,
+  code: fila.codigo || "",
+  qty: Number(fila.cantidad),
+  motivo: fila.motivo,
+  detalleMotivo: fila.detalle_motivo || "",
+  usuarioNombre: fila.usuario_nombre || "",
 })
 
 /*
@@ -140,6 +156,7 @@ export function aVentaDeApp(fila, empresa) {
     pedidoId: fila.pedido_id || null,
     anulacion: aAnulacionDeApp(fila.anulaciones_venta),
     devoluciones: (fila.devoluciones_de_venta || []).map(aDevolucionDeApp).sort((a, b) => a.isoDate.localeCompare(b.isoDate)),
+    regalias: (fila.regalias_venta || []).map(aRegaliaDeApp).sort((a, b) => a.name.localeCompare(b.name)),
 
     /*
       Si la venta no es fiscal, NO lleva bloque fiscal.
@@ -247,6 +264,14 @@ const MOTIVOS_DE_VENTA = {
   DV005: "excede-lo-vendido",
   DV006: "clave-reusada",
   DV007: "reembolso-invalido",
+  // Regalías (0054). El mensaje de la base dice qué corregir.
+  RG001: "regalias-invalidas",
+  RG002: "motivo-de-regalia",
+  RG003: "regalias-sin-cliente",
+  RG004: "regalias-fiscal",
+  RG005: "clave-reusada",
+  RG006: "producto-invalido",
+  RG007: "existencia-insuficiente",
 }
 
 export class ErrorDeVenta extends Error {
@@ -257,6 +282,29 @@ export class ErrorDeVenta extends Error {
     this.motivo = motivo
     this.codigo = codigo
   }
+}
+
+/*
+  Qué función registra la venta. Con regalías, registrar_venta_con_regalias()
+  (0054): la misma venta más lo entregado sin cargo, en una transacción. Con
+  medios de pago, sin ISV o con un precio negociado, registrar_venta_con_medios().
+  Una venta a crédito con ISV sigue por el camino de siempre.
+*/
+function llamarRegistro(venta, argumentos, { sinIsv, conNegociacion }) {
+  const conMedios = { ...argumentos, p_cobros: venta.cobros || [], ...(sinIsv ? { p_con_isv: false } : {}) }
+
+  if (venta.regalias?.length) {
+    return supabase.rpc("registrar_venta_con_regalias", {
+      ...conMedios,
+      p_regalias: venta.regalias.map((r) => ({ producto_id: r.productId, cantidad: Number(r.qty) })),
+      p_motivo_regalia: venta.motivoRegalia || null,
+      p_detalle_motivo: venta.detalleMotivoRegalia || "",
+    })
+  }
+
+  return venta.cobros?.length || sinIsv || conNegociacion
+    ? supabase.rpc("registrar_venta_con_medios", conMedios)
+    : supabase.rpc("registrar_venta_ubicacion", argumentos)
 }
 
 /*
@@ -297,20 +345,9 @@ export async function crearVenta(venta, { clave = null } = {}) {
     p_clave_idempotencia: clave,
   }
 
-  /*
-    Con medios de pago, sin ISV o con un precio negociado va por
-    registrar_venta_con_medios(), que hace lo mismo y los guarda en la misma
-    transacción. Una venta a crédito con ISV sigue por el camino de siempre.
-  */
   const sinIsv = venta.conIsv === false
   const conNegociacion = argumentos.p_items.some((item) => item.precio_negociado !== undefined)
-  const { data, error, status } = venta.cobros?.length || sinIsv || conNegociacion
-    ? await supabase.rpc("registrar_venta_con_medios", {
-        ...argumentos,
-        p_cobros: venta.cobros || [],
-        ...(sinIsv ? { p_con_isv: false } : {}),
-      })
-    : await supabase.rpc("registrar_venta_ubicacion", argumentos)
+  const { data, error, status } = await llamarRegistro(venta, argumentos, { sinIsv, conNegociacion })
 
   if (error) {
     const motivo = MOTIVOS_DE_VENTA[error.code]

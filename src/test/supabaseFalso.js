@@ -112,11 +112,49 @@ function errorDeRelacionAmbigua(tablaPadre, tablaHija) {
   }
 }
 
+// Separa por comas de primer nivel: las de dentro de un embebido `tabla (a, b)` no cortan.
+function partesDeLaSeleccion(columnas) {
+  const partes = []
+  let profundidad = 0
+  let actual = ""
+
+  for (const caracter of columnas) {
+    if (caracter === "(") profundidad += 1
+    if (caracter === ")") profundidad -= 1
+
+    if (caracter === "," && profundidad === 0) {
+      partes.push(actual)
+      actual = ""
+    } else {
+      actual += caracter
+    }
+  }
+
+  return [...partes, actual].map((c) => c.trim()).filter(Boolean)
+}
+
+/*
+  Columnas que la base no concede a `authenticated` (privilegios de columna).
+  Pedirlas, también con `*`, hace fallar toda la consulta, como en PostgREST.
+*/
+const COLUMNAS_NO_CONCEDIDAS = {
+  regalias_venta: ["costo_unitario"],
+}
+
+function exigirColumnasConcedidas(tabla, lista) {
+  const cerradas = COLUMNAS_NO_CONCEDIDAS[tabla] || []
+
+  if (cerradas.length && lista.some((c) => c === "*" || cerradas.includes(c))) {
+    throw Object.assign(new Error("columna no concedida"), {
+      respuesta: { code: "42501", message: `permission denied for table ${tabla}` },
+    })
+  }
+}
+
 function proyectar(fila, columnas, tablas, tablaPadre) {
-  const listaDeColumnas = (columnas || "*")
-    .split(",")
-    .map((c) => c.trim())
-    .filter(Boolean)
+  const listaDeColumnas = partesDeLaSeleccion(columnas || "*")
+
+  exigirColumnasConcedidas(tablaPadre, listaDeColumnas)
 
   const salida = listaDeColumnas.includes("*") ? { ...fila } : {}
 
@@ -134,6 +172,8 @@ function proyectar(fila, columnas, tablas, tablaPadre) {
           respuesta: errorDeRelacionAmbigua(tablaPadre, tablaHija),
         })
       }
+
+      exigirColumnasConcedidas(tablaHija, partesDeLaSeleccion(columnasHijas))
 
       const llave = llaveHacia(tablaPadre)
 
@@ -1109,6 +1149,120 @@ export function crearSupabaseFalso({
   const usuarioDeLaSesion = () =>
     (datos.usuarios || []).find((u) => sesion?.user && u.auth_id === sesion.user.id)
 
+  /*
+    Regalías (0054): lo que la pantalla necesita ver de la base. Un cliente
+    registrado, el permiso, y que en la ubicación alcance lo vendido más lo
+    regalado. Lo demás (motivo, factura fiscal, candados) lo prueba
+    pruebas-sql/regalias.test.mjs contra PostgreSQL.
+  */
+  const problemaDeRegalias = ({ p_items = [], p_regalias = [], p_cliente_id = null, p_clave_idempotencia = null }) => {
+    const usuario = usuarioDeLaSesion()
+    const permitido =
+      usuario?.rol === "admin" ||
+      (usuario?.rol !== "contador" && (datos.permisos_usuario || []).some((p) => p.usuario_id === usuario?.id && p.seccion === "regalias"))
+
+    if (!permitido) return rechazo("42501", "No tienes permiso para autorizar regalías")
+    if (!p_cliente_id) return rechazo("RG003", "Una venta con regalías necesita un cliente registrado")
+
+    // Un reintento de una venta ya registrada no vuelve a mirar la existencia.
+    if ((datos.ventas || []).some((v) => p_clave_idempotencia && v.clave_idempotencia === p_clave_idempotencia)) return null
+
+    for (const regalia of p_regalias) {
+      const celda = (datos.inventario_ubicacion || []).find(
+        (c) => c.ubicacion_id === usuario.ubicacion_id && c.producto_id === regalia.producto_id
+      )
+      const vendido = p_items.filter((i) => i.producto_id === regalia.producto_id).reduce((suma, i) => suma + Number(i.cantidad), 0)
+      const hay = Number(celda?.cantidad || 0)
+
+      if (hay < vendido + Number(regalia.cantidad)) {
+        return rechazo("RG007", `No hay suficiente para regalar: hay ${hay}, y entre lo vendido (${vendido}) y lo regalado (${regalia.cantidad}) se piden ${vendido + Number(regalia.cantidad)}`)
+      }
+    }
+
+    return null
+  }
+
+  const registrarRegalias = (venta, { p_regalias, p_motivo_regalia, p_detalle_motivo = "", p_cliente_id }) => {
+    const usuario = usuarioDeLaSesion()
+
+    for (const { producto_id, cantidad } of p_regalias) {
+      const producto = (datos.productos || []).find((p) => p.id === producto_id)
+
+      datos.regalias_venta = [
+        ...(datos.regalias_venta || []),
+        {
+          id: siguienteId(),
+          empresa_id: venta.empresa_id,
+          venta_id: venta.id,
+          cliente_id: p_cliente_id,
+          producto_id,
+          nombre: producto?.nombre || "",
+          codigo: producto?.codigo || "",
+          cantidad: Number(cantidad),
+          ubicacion_id: venta.ubicacion_id,
+          usuario_id: usuario.id,
+          usuario_nombre: usuario.nombre || "",
+          motivo: p_motivo_regalia,
+          detalle_motivo: p_detalle_motivo || "",
+          costo_unitario: Number(producto?.costo || 0),
+          creado_en: venta.fecha,
+        },
+      ]
+      datos.inventario_ubicacion = (datos.inventario_ubicacion || []).map((c) =>
+        c.ubicacion_id === venta.ubicacion_id && c.producto_id === producto_id ? { ...c, cantidad: Number(c.cantidad) - Number(cantidad) } : c
+      )
+      datos.movimientos_inventario = [
+        ...(datos.movimientos_inventario || []),
+        {
+          id: siguienteId(),
+          ...valoresPorOmision("movimientos_inventario"),
+          empresa_id: venta.empresa_id,
+          producto_id,
+          usuario_id: usuario.id,
+          venta_id: venta.id,
+          ubicacion_id: venta.ubicacion_id,
+          tipo: "regalia",
+          cantidad: -Number(cantidad),
+          motivo: `Regalía en ${venta.numero_factura}`,
+        },
+      ]
+    }
+  }
+
+  // El reporte de la base: el costo solo para el administrador.
+  const reporteDeRegalias = () => {
+    const usuario = usuarioDeLaSesion()
+    const admin = usuario?.rol === "admin"
+
+    return (datos.regalias_venta || [])
+      .filter((r) => admin || usuario?.rol === "contador" || r.ubicacion_id === usuario?.ubicacion_id)
+      .map((r) => {
+        const venta = (datos.ventas || []).find((v) => v.id === r.venta_id) || {}
+        const ubicacion = (datos.ubicaciones || []).find((u) => u.id === r.ubicacion_id)
+
+        return {
+          regalia_id: r.id,
+          fecha: r.creado_en,
+          venta_id: r.venta_id,
+          numero_factura: venta.numero_factura,
+          estado_factura: venta.estado,
+          cliente_id: r.cliente_id,
+          cliente: venta.nombre_cliente,
+          producto_id: r.producto_id,
+          producto: r.nombre,
+          codigo: r.codigo,
+          cantidad: r.cantidad,
+          ubicacion_id: r.ubicacion_id,
+          ubicacion: ubicacion?.nombre || "",
+          usuario: r.usuario_nombre,
+          motivo: r.motivo,
+          detalle_motivo: r.detalle_motivo,
+          costo_unitario: admin ? r.costo_unitario : null,
+          costo_total: admin ? redondear(r.costo_unitario * r.cantidad) : null,
+        }
+      })
+  }
+
   const accesoPorOmision = ({ accion, ...cuerpo }) => {
     if (accion === "iniciar") {
       const ident = String(cuerpo.identificador || "").trim().toLowerCase()
@@ -1253,11 +1407,24 @@ export function crearSupabaseFalso({
         return Promise.resolve(siguienteCorrelativo(argumentos.p_tipo))
       }
 
+      if (nombre === "reporte_de_regalias") {
+        const falla = fallaDe(nombre, "rpc")
+
+        return Promise.resolve(falla ? { data: null, error: falla } : { data: reporteDeRegalias(argumentos), error: null })
+      }
+
       // Los medios los valida la base (0039); aquí vende igual que sin ellos.
-      if (nombre === "registrar_venta_ubicacion" || nombre === "registrar_venta_con_medios") {
+      const conRegalias = nombre === "registrar_venta_con_regalias"
+
+      if (nombre === "registrar_venta_ubicacion" || nombre === "registrar_venta_con_medios" || conRegalias) {
         const falla = fallaDe(nombre, "rpc")
 
         if (falla) return Promise.resolve({ data: null, error: falla })
+
+        // Regalías (0054): se revisan antes de vender, porque aquí no hay transacción que deshacer.
+        const problema = conRegalias ? problemaDeRegalias(argumentos) : null
+
+        if (problema) return Promise.resolve(problema)
 
         // Un cargo calculado con otro porcentaje que el vigente se rechaza, como desde la 0044.
         const distinto = cargoDistinto(argumentos.p_cobros)
@@ -1267,7 +1434,7 @@ export function crearSupabaseFalso({
         const respuesta = venderEnUbicacion(argumentos)
         const venta = respuesta.data && datos.ventas.find((v) => v.id === respuesta.data.venta_id)
 
-        if (venta && !respuesta.data.repetida && nombre === "registrar_venta_con_medios") {
+        if (venta && !respuesta.data.repetida && nombre !== "registrar_venta_ubicacion") {
           // El precio negociado, como aplicar_precios_negociados() desde la 0043.
           for (const item of argumentos.p_items.filter((i) => i.precio_negociado !== undefined)) {
             const precio = Number(item.precio_negociado)
@@ -1301,6 +1468,12 @@ export function crearSupabaseFalso({
             venta.tasa_isv = 0
             venta.total = venta.subtotal
           }
+        }
+
+        if (venta && conRegalias) {
+          if (!respuesta.data.repetida) registrarRegalias(venta, argumentos)
+
+          respuesta.data.regalias = argumentos.p_regalias
         }
 
         return Promise.resolve(respuesta)

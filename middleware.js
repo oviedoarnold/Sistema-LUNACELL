@@ -32,6 +32,7 @@ export const config = {
     "/settings",
     "/reconciliation",
     "/reports",
+    "/reports/regalias",
   ],
 }
 

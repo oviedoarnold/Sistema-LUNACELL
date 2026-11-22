@@ -27,6 +27,13 @@ export const PERMISSIONS = {
     contador; la base lo exige en registrar_devolucion_de_venta().
   */
   SALES_RETURN: "sales-return",
+
+  /*
+    Autorizar regalías (0054): entregar productos sin cargo junto con una
+    venta, con cliente registrado y motivo. Nadie lo recibe solo y no se le
+    ofrece al contador; la base lo exige en registrar_venta_con_regalias().
+  */
+  REGALIAS: "regalias",
   LOCATIONS: "locations",
   SETTINGS: "settings",
 
