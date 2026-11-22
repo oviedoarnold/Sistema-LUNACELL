@@ -292,6 +292,44 @@ describe("Traslados: buscar y agregar productos", () => {
     expect(buscador).toHaveFocus()
     expect(llamadas(globalThis.__supabaseFalso)).toHaveLength(0)
   })
+
+  /*
+    Regresión: un scrollIntoView() del resultado resaltado corría al abrir
+    la ventana y movía también su cuerpo, dejando «Ubicaciones» escondida
+    arriba. Ahora nada se desplaza al abrir y las flechas mueven solo la
+    lista de resultados.
+  */
+  it("al abrir no desplaza la ventana y las flechas no la mueven; Enter sigue agregando", async () => {
+    const original = Element.prototype.scrollIntoView
+    const desplazar = vi.fn()
+    Element.prototype.scrollIntoView = desplazar
+
+    try {
+      await renderConFormulario()
+
+      const cuerpo = screen.getByRole("dialog", { name: "Nuevo traslado" }).querySelector(".modal-body")
+
+      elegir(/^origen$/i, "bodega")
+      expect(desplazar).not.toHaveBeenCalled()
+      expect(cuerpo.scrollTop).toBe(0)
+      expect(screen.getByRole("heading", { name: "Ubicaciones" })).toBeInTheDocument()
+
+      const buscador = screen.getByRole("searchbox", { name: "Buscar producto por nombre o código" })
+      buscador.focus()
+
+      fireEvent.keyDown(buscador, { key: "ArrowDown" })
+      fireEvent.keyDown(buscador, { key: "ArrowUp" })
+      fireEvent.keyDown(buscador, { key: "ArrowDown" })
+
+      expect(desplazar).not.toHaveBeenCalled()
+      expect(cuerpo.scrollTop).toBe(0)
+
+      fireEvent.keyDown(buscador, { key: "Enter" })
+      expect(carrito()).toEqual([["Cubo Iphone", "1"]])
+    } finally {
+      Element.prototype.scrollIntoView = original
+    }
+  })
 })
 
 describe("Traslados: cantidades y total", () => {

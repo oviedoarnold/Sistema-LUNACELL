@@ -97,7 +97,15 @@
   cursor: not-allowed;
 }
 
-.transfers .traslado-buscador {
+/*
+  El buscador ocupa su línea y su altura natural. .search-box es global
+  (flex: 1 1 260px, y .crud lo deja en 240px) y, dentro de una tarjeta en
+  columna, esa base se volvía ALTURA: un hueco enorme bajo el campo con la
+  lupa flotando en medio. Aquí no crece ni se encoge.
+*/
+.transfers .traslado-tarjeta .traslado-buscador {
+  flex: 0 0 auto;
+  width: 100%;
   max-width: none;
 }
 
@@ -124,8 +132,13 @@
 
 /* ── catálogo (izquierda) y carrito (derecha) ── */
 
+/*
+  position: relative para que cada fila mida su offsetTop desde la lista:
+  así las flechas desplazan solo la lista, no la ventana.
+*/
 .transfers .traslado-catalogo,
 .transfers .traslado-carrito {
+  position: relative;
   display: flex;
   flex-direction: column;
   margin: 0;
