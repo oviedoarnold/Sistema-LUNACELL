@@ -85,22 +85,53 @@ const opciones = (etiqueta) =>
     .getAllByRole("option")
     .map((o) => o.textContent)
 
-const trasladar = () =>
+const realizar = () =>
   act(async () => {
-    fireEvent.click(screen.getByRole("button", { name: /^trasladar$/i }))
+    fireEvent.click(screen.getByRole("button", { name: /^realizar traslado$/i }))
   })
+
+const botonRealizar = () => screen.getByRole("button", { name: /^realizar traslado$/i })
 
 const llamadas = (falso) =>
   falso.rpc.mock.calls.filter(([nombre]) => nombre === "registrar_traslado")
 
-const llenarTraslado = ({ origen = "bodega", destino = "store", producto = "p1", cantidad = "3" } = {}) => {
-  elegir(/^origen$/i, origen)
-  elegir(/^destino$/i, destino)
-  elegir(/producto del renglón 1/i, producto)
-  elegir(/cantidad del renglón 1/i, cantidad)
+const buscarProducto = (texto) =>
+  fireEvent.change(screen.getByRole("searchbox", { name: "Buscar producto por nombre o código" }), { target: { value: texto } })
+
+const agregar = (nombre) => fireEvent.click(screen.getByRole("button", { name: `Agregar ${nombre}` }))
+
+const cantidadDe = (nombre) => screen.getByLabelText(`Cantidad de ${nombre}`)
+
+const escribirCantidad = (nombre, valor) => fireEvent.change(cantidadDe(nombre), { target: { value: valor } })
+
+// Lo que se ofrece en «Agregar productos»: nombre y disponible de cada resultado.
+const catalogo = () => {
+  const lista = screen.queryByRole("list", { name: /^productos disponibles en/i })
+
+  return lista
+    ? within(lista).getAllByRole("listitem").map((li) => [li.querySelector("strong").textContent, li.querySelector(".traslado-disponible strong").textContent])
+    : []
 }
 
-describe("Traslados: lo que se ofrece", () => {
+// Lo elegido en «Productos del traslado»: nombre y cantidad.
+const carrito = () => {
+  const lista = screen.queryByRole("list", { name: "Productos del traslado" })
+
+  return lista
+    ? within(lista).getAllByRole("listitem").map((li) => [li.querySelector("strong").textContent, li.querySelector("input").value])
+    : []
+}
+
+const total = () => screen.getByText(/— Total:/).closest("p").textContent
+
+const llenarTraslado = ({ origen = "bodega", destino = "store", producto = "Cargador", cantidad = "3" } = {}) => {
+  elegir(/^origen$/i, origen)
+  elegir(/^destino$/i, destino)
+  agregar(producto)
+  escribirCantidad(producto, cantidad)
+}
+
+describe("Traslados: ubicaciones del formulario", () => {
   it("el origen ofrece las ubicaciones activas y el destino excluye al origen", async () => {
     await renderConFormulario()
 
@@ -116,21 +147,24 @@ describe("Traslados: lo que se ofrece", () => {
     expect(destinos).not.toContain("Camión retirado")
   })
 
-  it("muestra cuánto hay del producto en el origen elegido", async () => {
-    await renderConFormulario()
+  it("con inventory-all propone su ubicación operativa como origen y deja cambiarla", async () => {
+    await renderConFormulario({
+      rolDelUsuario: "vendedor",
+      permisosDelUsuario: ["inventory-all"],
+      ubicacionOperativa: "camion1",
+    })
+
+    const origen = screen.getByLabelText(/^origen$/i)
+
+    expect(origen).toHaveValue("camion1")
+    expect(origen).not.toBeDisabled()
+    expect(opciones(/^origen$/i)).toEqual(expect.arrayContaining(["Lunacell Bodega", "Lunacell Store", "Camión 01"]))
 
     elegir(/^origen$/i, "bodega")
-    elegir(/producto del renglón 1/i, "p2")
-
-    expect(screen.getByText(/disponible en origen: 6/i)).toBeInTheDocument()
+    expect(origen).toHaveValue("bodega")
   })
 
-  /*
-    D1 y D3: con inventory-own solo se traslada desde la ubicación propia,
-    pero el destino puede ser cualquiera activa, también la bodega aunque
-    no se pueda consultar.
-  */
-  it("con inventory-own el origen es la ubicación propia y no se puede cambiar", async () => {
+  it("con inventory-own el origen es la ubicación propia, no se cambia ni se intercambia", async () => {
     await renderConFormulario({
       rolDelUsuario: "vendedor",
       permisosDelUsuario: ["inventory-own"],
@@ -142,39 +176,199 @@ describe("Traslados: lo que se ofrece", () => {
     expect(origen).toBeDisabled()
     expect(origen).toHaveValue("camion1")
     expect(opciones(/^destino$/i)).toContain("Lunacell Bodega")
+
+    elegir(/^destino$/i, "bodega")
+    expect(screen.getByRole("button", { name: "Intercambiar origen y destino" })).toBeDisabled()
   })
 
-  it("con inventory-own y sin ubicación operativa avisa que no puede trasladar", async () => {
+  it("con inventory-own y sin ubicación operativa lo avisa y no deja buscar ni trasladar", async () => {
     await renderConFormulario({
       rolDelUsuario: "vendedor",
       permisosDelUsuario: ["inventory-own"],
     })
 
     expect(screen.getByText(/no tienes una ubicación operativa/i)).toBeInTheDocument()
-    expect(screen.getByRole("button", { name: /^trasladar$/i })).toBeDisabled()
+    expect(screen.getByRole("searchbox", { name: "Buscar producto por nombre o código" })).toBeDisabled()
+    expect(botonRealizar()).toBeDisabled()
   })
 
-  it("con inventory-all el origen puede ser cualquier ubicación activa", async () => {
-    await renderConFormulario({
-      rolDelUsuario: "vendedor",
-      permisosDelUsuario: ["inventory-all"],
-      ubicacionOperativa: "store",
-    })
+  it("intercambiar origen y destino vuelve a medir lo elegido contra el origen nuevo", async () => {
+    await renderConFormulario()
 
-    expect(screen.getByLabelText(/^origen$/i)).not.toBeDisabled()
-    expect(opciones(/^origen$/i)).toEqual(
-      expect.arrayContaining(["Lunacell Bodega", "Lunacell Store", "Camión 01"])
-    )
+    llenarTraslado({ origen: "bodega", destino: "camion1", cantidad: "5" })
+    agregar("Cubo Iphone")
+
+    fireEvent.click(screen.getByRole("button", { name: "Intercambiar origen y destino" }))
+
+    expect(screen.getByLabelText(/^origen$/i)).toHaveValue("camion1")
+    expect(screen.getByLabelText(/^destino$/i)).toHaveValue("bodega")
+    // En el Camión 01 hay 2 cargadores y ningún cubo.
+    expect(carrito()).toEqual([["Cargador", "2"]])
+    expect(screen.getByText(/cambió el origen/i)).toBeInTheDocument()
+  })
+})
+
+describe("Traslados: buscar y agregar productos", () => {
+  it("ofrece solo lo que tiene existencia en el origen, con lo disponible allí y no el stock global", async () => {
+    await renderConFormulario()
+
+    elegir(/^origen$/i, "bodega")
+    expect(catalogo()).toEqual([["Cargador", "10"], ["Cubo Iphone", "6"]])
+
+    // El cubo tiene stock en la empresa, pero 0 en el Camión 01: no se ofrece.
+    elegir(/^origen$/i, "camion1")
+    expect(catalogo()).toEqual([["Cargador", "2"]])
+  })
+
+  it("busca por nombre y por código, sin tildes ni mayúsculas", async () => {
+    await renderConFormulario()
+
+    elegir(/^origen$/i, "bodega")
+
+    buscarProducto("cubo")
+    expect(catalogo()).toEqual([["Cubo Iphone", "6"]])
+
+    buscarProducto("c-1")
+    expect(catalogo()).toEqual([["Cargador", "10"]])
+
+    buscarProducto("nada parecido")
+    expect(catalogo()).toEqual([])
+    expect(screen.getByText(/ningún producto con existencia en lunacell bodega coincide/i)).toBeInTheDocument()
+  })
+
+  it("un origen sin existencias lo dice y no ofrece nada", async () => {
+    await renderConFormulario()
+
+    elegir(/^origen$/i, "store")
+
+    expect(screen.getByText(/no hay productos con existencia en lunacell store/i)).toBeInTheDocument()
+    expect(catalogo()).toEqual([])
+  })
+
+  it("Agregar lo pasa al traslado con 1; agregarlo otra vez suma, sin repetir la fila", async () => {
+    await renderConFormulario()
+
+    elegir(/^origen$/i, "bodega")
+    agregar("Cargador")
+
+    expect(carrito()).toEqual([["Cargador", "1"]])
+
+    agregar("Cargador")
+    agregar("Cargador")
+
+    expect(carrito()).toEqual([["Cargador", "3"]])
+    expect(total()).toBe("1 producto — Total: 3 unidades")
+  })
+
+  it("no deja pasar de lo disponible: Agregar y + se desactivan en el tope", async () => {
+    await renderConFormulario()
+
+    elegir(/^origen$/i, "camion1")
+    agregar("Cargador")
+    agregar("Cargador")
+
+    expect(carrito()).toEqual([["Cargador", "2"]])
+    expect(screen.getByRole("button", { name: "Agregar Cargador" })).toBeDisabled()
+    expect(screen.getByRole("button", { name: "Agregar una unidad de Cargador" })).toBeDisabled()
+  })
+
+  it("Enter agrega el resultado resaltado, las flechas cambian cuál y el buscador queda listo", async () => {
+    await renderConFormulario()
+
+    elegir(/^origen$/i, "bodega")
+
+    const buscador = screen.getByRole("searchbox", { name: "Buscar producto por nombre o código" })
+    buscador.focus()
+
+    fireEvent.keyDown(buscador, { key: "ArrowDown" })
+    fireEvent.keyDown(buscador, { key: "Enter" })
+    expect(carrito()).toEqual([["Cubo Iphone", "1"]])
+
+    buscarProducto("carg")
+    fireEvent.keyDown(buscador, { key: "Enter" })
+
+    expect(carrito()).toEqual([["Cubo Iphone", "1"], ["Cargador", "1"]])
+    expect(buscador).toHaveValue("")
+    expect(buscador).toHaveFocus()
+    expect(llamadas(globalThis.__supabaseFalso)).toHaveLength(0)
+  })
+})
+
+describe("Traslados: cantidades y total", () => {
+  it("+ y − cambian de a una sin bajar de 1", async () => {
+    await renderConFormulario()
+
+    elegir(/^origen$/i, "bodega")
+    agregar("Cubo Iphone")
+
+    const menos = screen.getByRole("button", { name: "Quitar una unidad de Cubo Iphone" })
+    const mas = screen.getByRole("button", { name: "Agregar una unidad de Cubo Iphone" })
+
+    expect(menos).toBeDisabled()
+
+    fireEvent.click(mas)
+    fireEvent.click(mas)
+    expect(cantidadDe("Cubo Iphone")).toHaveValue(3)
+
+    fireEvent.click(menos)
+    expect(cantidadDe("Cubo Iphone")).toHaveValue(2)
+  })
+
+  it("la cantidad se escribe; si pasa de lo disponible lo dice y no deja trasladar", async () => {
+    await renderConFormulario()
+
+    llenarTraslado({ cantidad: "25" })
+
+    expect(cantidadDe("Cargador")).toHaveAttribute("aria-invalid", "true")
+    expect(screen.getByText("Escribe una cantidad entera de 1 a 10.")).toBeInTheDocument()
+    expect(cantidadDe("Cargador")).toHaveAttribute("max", "10")
+    expect(botonRealizar()).toBeDisabled()
+
+    escribirCantidad("Cargador", "0")
+    expect(botonRealizar()).toBeDisabled()
+
+    escribirCantidad("Cargador", "8")
+    expect(cantidadDe("Cargador")).not.toHaveAttribute("aria-invalid")
+    expect(botonRealizar()).toBeEnabled()
+  })
+
+  it("Eliminar lo saca del traslado y el total se recalcula al momento", async () => {
+    await renderConFormulario()
+
+    llenarTraslado({ cantidad: "4" })
+    agregar("Cubo Iphone")
+    escribirCantidad("Cubo Iphone", "6")
+
+    expect(total()).toBe("2 productos — Total: 10 unidades")
+    expect(screen.getByText("2 productos", { selector: ".traslado-insignia" })).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole("button", { name: "Eliminar Cargador del traslado" }))
+
+    expect(carrito()).toEqual([["Cubo Iphone", "6"]])
+    expect(total()).toBe("1 producto — Total: 6 unidades")
+  })
+
+  it("cambiar el origen retira lo que allí no hay y ajusta lo que pasa de lo disponible", async () => {
+    await renderConFormulario()
+
+    llenarTraslado({ origen: "bodega", destino: "store", cantidad: "5" })
+    agregar("Cubo Iphone")
+
+    elegir(/^origen$/i, "camion1")
+
+    expect(carrito()).toEqual([["Cargador", "2"]])
+    expect(screen.getByText(/cambió el origen: se retiró cubo iphone, sin existencia en camión 01; se ajustó a lo disponible cargador/i)).toBeInTheDocument()
+    expect(total()).toBe("1 producto — Total: 2 unidades")
   })
 })
 
 describe("Traslados: registrar", () => {
-  it("envía exactamente origen, destino, renglones, nota y clave", async () => {
+  it("envía exactamente origen, destino, productos, cantidades, observación y clave", async () => {
     const { falso } = await renderConFormulario()
 
     llenarTraslado()
     fireEvent.change(screen.getByLabelText(/observación/i), { target: { value: "Vitrina" } })
-    await trasladar()
+    await realizar()
 
     expect(llamadas(falso)).toHaveLength(1)
     expect(llamadas(falso)[0][1]).toEqual({
@@ -186,19 +380,23 @@ describe("Traslados: registrar", () => {
     })
   })
 
-  it("permite varios productos en un traslado", async () => {
+  it("varios productos en un traslado, y la existencia baja en el origen y sube en el destino", async () => {
     const { falso } = await renderConFormulario()
 
     llenarTraslado()
-    fireEvent.click(screen.getByRole("button", { name: /agregar producto/i }))
-    elegir(/producto del renglón 2/i, "p2")
-    elegir(/cantidad del renglón 2/i, "2")
-    await trasladar()
+    agregar("Cubo Iphone")
+    escribirCantidad("Cubo Iphone", "2")
+    await realizar()
 
     expect(llamadas(falso)[0][1].p_items).toEqual([
       { producto_id: "p1", cantidad: 3 },
       { producto_id: "p2", cantidad: 2 },
     ])
+
+    const celda = (ubicacion, producto) =>
+      falso.datos.inventario_ubicacion.find((c) => c.ubicacion_id === ubicacion && c.producto_id === producto)?.cantidad
+
+    expect([celda("bodega", "p1"), celda("store", "p1"), celda("bodega", "p2"), celda("store", "p2")]).toEqual([7, 3, 4, 2])
   })
 
   it("dos clics seguidos registran el traslado una sola vez", async () => {
@@ -207,7 +405,7 @@ describe("Traslados: registrar", () => {
     llenarTraslado()
 
     await act(async () => {
-      const boton = screen.getByRole("button", { name: /^trasladar$/i })
+      const boton = botonRealizar()
       fireEvent.click(boton)
       fireEvent.click(boton)
     })
@@ -216,20 +414,24 @@ describe("Traslados: registrar", () => {
     expect(falso.datos.traslados).toHaveLength(1)
   })
 
-  it("sin destino no envía nada y lo dice", async () => {
+  it("Realizar traslado espera a tener destino y al menos un producto", async () => {
     const { falso } = await renderConFormulario()
-    Swal.fire.mockClear()
 
     elegir(/^origen$/i, "bodega")
-    elegir(/producto del renglón 1/i, "p1")
-    elegir(/cantidad del renglón 1/i, "1")
-    await trasladar()
+    expect(botonRealizar()).toBeDisabled()
 
+    agregar("Cargador")
+    expect(botonRealizar()).toBeDisabled()
+
+    elegir(/^destino$/i, "store")
+    expect(botonRealizar()).toBeEnabled()
+
+    fireEvent.click(screen.getByRole("button", { name: "Eliminar Cargador del traslado" }))
+    expect(botonRealizar()).toBeDisabled()
     expect(llamadas(falso)).toHaveLength(0)
-    expect(Swal.fire).toHaveBeenCalledWith(expect.objectContaining({ icon: "warning" }))
   })
 
-  it("después de trasladar recarga las existencias y lo muestra en el historial", async () => {
+  it("después de trasladar recarga las existencias, cierra la ventana y lo muestra en el historial", async () => {
     const { falso } = await renderConFormulario()
 
     const consultasDeExistencias = () =>
@@ -238,7 +440,7 @@ describe("Traslados: registrar", () => {
     const antes = consultasDeExistencias()
 
     llenarTraslado()
-    await trasladar()
+    await realizar()
 
     await waitFor(() => expect(consultasDeExistencias()).toBeGreaterThan(antes))
 
@@ -249,26 +451,21 @@ describe("Traslados: registrar", () => {
 
     expect(celdas(fila).slice(0, 4)).toEqual(["TR-000001", "Lunacell Bodega", "Lunacell Store", "1 producto"])
     expect(within(fila).getByText("1 producto")).toHaveAttribute("title", "Cargador × 3")
-  })
 
-  it("si el servidor rechaza, la ventana sigue abierta con lo escrito", async () => {
-    await renderConFormulario({ fallarEn: { registrar_traslado: { code: "LT005", message: "No hay suficiente" } } })
-
-    llenarTraslado({ cantidad: "4" })
-    await trasladar()
-
-    expect(screen.getByRole("dialog", { name: "Nuevo traslado" })).toBeInTheDocument()
-    expect(screen.getByLabelText(/cantidad del renglón 1/i)).toHaveValue(4)
+    // Una ventana nueva empieza vacía.
+    fireEvent.click(screen.getByRole("button", { name: /^nuevo traslado$/i }))
+    expect(carrito()).toEqual([])
+    expect(screen.getByLabelText(/observación/i)).toHaveValue("")
   })
 
   /*
-    Desde INV-4.1 pedir más de lo que se ve disponible ya no llega al
-    servidor. Lo que sí puede pasar es que la existencia cambie entre lo
-    que vio la pantalla y el traslado —otra venta, otro traslado—, y
-    entonces el servidor rechaza con LT005. Ese mensaje es el que se
-    simula aquí, y es el que el usuario tiene que ver.
+    Pedir más de lo que se ve disponible ya no llega al servidor. Lo que sí
+    puede pasar es que la existencia cambie entre lo que vio la pantalla y
+    el traslado —otra venta, otro traslado, otro teléfono—, y entonces el
+    servidor rechaza con LT005. Ese mensaje es el que el usuario tiene que
+    ver, con la ventana y lo preparado intactos.
   */
-  it("un rechazo del servidor se muestra con su mensaje y no registra nada", async () => {
+  it("un rechazo del servidor se muestra con su mensaje y la ventana sigue con lo preparado", async () => {
     const { falso } = await renderConFormulario({
       fallarEn: {
         registrar_traslado: {
@@ -279,13 +476,50 @@ describe("Traslados: registrar", () => {
     })
     Swal.fire.mockClear()
 
-    llenarTraslado({ cantidad: "3" })
-    await trasladar()
+    llenarTraslado({ cantidad: "4" })
+    await realizar()
 
     const aviso = Swal.fire.mock.calls.find(([o]) => o?.icon === "error")
 
     expect(aviso[0].text).toMatch(/no hay suficiente «cargador» en lunacell bodega: hay 10, se trasladan 11/i)
     expect(falso.datos.traslados).toHaveLength(0)
+    expect(screen.getByRole("dialog", { name: "Nuevo traslado" })).toBeInTheDocument()
+    expect(carrito()).toEqual([["Cargador", "4"]])
+  })
+
+  it("cerrar la ventana conserva productos, cantidades y observación", async () => {
+    await renderConFormulario()
+
+    llenarTraslado({ cantidad: "4" })
+    fireEvent.change(screen.getByLabelText(/observación/i), { target: { value: "Para la ruta" } })
+
+    fireEvent.click(screen.getByRole("button", { name: /^cancelar$/i }))
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole("button", { name: /^nuevo traslado$/i }))
+
+    expect(carrito()).toEqual([["Cargador", "4"]])
+    expect(screen.getByLabelText(/observación/i)).toHaveValue("Para la ruta")
+    expect(screen.getByLabelText(/^destino$/i)).toHaveValue("store")
+  })
+
+  it("los controles tienen nombre accesible y la ventana se presenta como en la referencia", async () => {
+    await renderConFormulario()
+
+    const ventana = screen.getByRole("dialog", { name: "Nuevo traslado" })
+
+    expect(within(ventana).getByText("Transfiere productos entre ubicaciones")).toBeInTheDocument()
+    expect(within(ventana).getByRole("heading", { name: "Ubicaciones" })).toBeInTheDocument()
+    expect(within(ventana).getByRole("heading", { name: "Agregar productos" })).toBeInTheDocument()
+    expect(within(ventana).getByRole("heading", { name: "Productos del traslado" })).toBeInTheDocument()
+    expect(within(ventana).getByLabelText("Observación (opcional)")).toBeInTheDocument()
+    expect(total()).toBe("0 productos — Total: 0 unidades")
+
+    llenarTraslado()
+
+    expect(screen.getByRole("button", { name: "Quitar una unidad de Cargador" })).toBeInTheDocument()
+    expect(screen.getByRole("button", { name: "Eliminar Cargador del traslado" })).toBeInTheDocument()
+    expect(cantidadDe("Cargador")).toHaveAccessibleDescription("Disponible: 10")
   })
 })
 
@@ -531,123 +765,6 @@ describe("Traslados: detalle", () => {
     expect(dialogo).toHaveAttribute("aria-modal", "true")
     expect(within(dialogo).getByRole("heading", { name: "Detalle del traslado" })).toBeInTheDocument()
     expect(llamadas(falso)).toHaveLength(0)
-  })
-})
-
-/*
-  INV-4.1: lo que la pantalla ofrece y deja enviar sale de la existencia
-  de la UBICACIÓN de origen, no del stock global. Es una ayuda para no
-  pedir lo que no hay; quien decide sigue siendo registrar_traslado.
-*/
-describe("Traslados: validación previa por ubicación", () => {
-  const opcionesDeProducto = (renglon) =>
-    opciones(new RegExp(`producto del renglón ${renglon}`, "i")).filter((t) => !t.startsWith("—"))
-
-  it("solo ofrece productos con existencia en el origen, con la cantidad disponible", async () => {
-    await renderConFormulario()
-
-    elegir(/^origen$/i, "bodega")
-
-    expect(opcionesDeProducto(1)).toEqual([
-      "Cargador — 10 disponibles",
-      "Cubo Iphone — 6 disponibles",
-    ])
-  })
-
-  it("un producto con existencia 0 en el origen no aparece, aunque tenga stock global", async () => {
-    await renderConFormulario()
-
-    elegir(/^origen$/i, "camion1")
-
-    expect(opcionesDeProducto(1)).toEqual(["Cargador — 2 disponibles"])
-  })
-
-  it("un producto elegido en un renglón desaparece de los demás", async () => {
-    await renderConFormulario()
-
-    elegir(/^origen$/i, "bodega")
-    elegir(/producto del renglón 1/i, "p1")
-    fireEvent.click(screen.getByRole("button", { name: /agregar producto/i }))
-
-    expect(opcionesDeProducto(2)).toEqual(["Cubo Iphone — 6 disponibles"])
-    // El propio renglón conserva el suyo.
-    expect(opcionesDeProducto(1)).toContain("Cargador — 10 disponibles")
-  })
-
-  it("la cantidad no admite más que lo disponible en el origen", async () => {
-    await renderConFormulario()
-
-    elegir(/^origen$/i, "bodega")
-    elegir(/producto del renglón 1/i, "p2")
-
-    expect(screen.getByLabelText(/cantidad del renglón 1/i)).toHaveAttribute("max", "6")
-  })
-
-  it("si la cantidad supera lo disponible, avisa y no llama a registrar_traslado", async () => {
-    const { falso } = await renderConFormulario()
-    Swal.fire.mockClear()
-
-    llenarTraslado({ cantidad: "11" })
-    await trasladar()
-
-    expect(llamadas(falso)).toHaveLength(0)
-    expect(Swal.fire).toHaveBeenCalledWith(
-      expect.objectContaining({
-        icon: "warning",
-        text: expect.stringMatching(/cargador: hay 10 en lunacell bodega, pides 11/i),
-      })
-    )
-  })
-
-  it("cambiar el origen vacía los renglones y recalcula lo disponible", async () => {
-    await renderConFormulario()
-
-    llenarTraslado()
-    fireEvent.click(screen.getByRole("button", { name: /agregar producto/i }))
-
-    elegir(/^origen$/i, "camion1")
-
-    expect(screen.queryByLabelText(/producto del renglón 2/i)).not.toBeInTheDocument()
-    expect(screen.getByLabelText(/producto del renglón 1/i)).toHaveValue("")
-    expect(screen.getByLabelText(/cantidad del renglón 1/i)).toHaveValue(null)
-    expect(opcionesDeProducto(1)).toEqual(["Cargador — 2 disponibles"])
-  })
-
-  it("un origen sin existencias lo dice y no deja trasladar", async () => {
-    const { falso } = await renderConFormulario()
-
-    elegir(/^origen$/i, "store")
-
-    expect(screen.getByText(/no hay productos con existencia en lunacell store/i)).toBeInTheDocument()
-
-    const boton = screen.getByRole("button", { name: /^trasladar$/i })
-
-    expect(boton).toBeDisabled()
-
-    await trasladar()
-
-    expect(llamadas(falso)).toHaveLength(0)
-  })
-
-  it("con inventory-own ofrece solo lo que hay en su ubicación", async () => {
-    await renderConFormulario({
-      rolDelUsuario: "vendedor",
-      permisosDelUsuario: ["inventory-own"],
-      ubicacionOperativa: "camion1",
-    })
-
-    expect(opcionesDeProducto(1)).toEqual(["Cargador — 2 disponibles"])
-  })
-
-  it("los controles nuevos tienen nombre accesible y la disponibilidad se dice con texto", async () => {
-    await renderConFormulario()
-
-    elegir(/^origen$/i, "bodega")
-    elegir(/producto del renglón 1/i, "p1")
-    fireEvent.click(screen.getByRole("button", { name: /agregar producto/i }))
-
-    expect(screen.getByRole("button", { name: "Quitar renglón 2" })).toBeInTheDocument()
-    expect(screen.getByText("Disponible en origen: 10")).toBeInTheDocument()
   })
 })
 

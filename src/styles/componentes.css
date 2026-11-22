@@ -207,6 +207,37 @@ table.tabla-compacta,
   border-bottom-right-radius: var(--radius-lg);
 }
 
+/* Cabecera con icono y subtítulo, para las ventanas que los piden. */
+.modal-head-titulo {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+.modal-head-icono {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 44px;
+  height: 44px;
+  border-radius: var(--radius-md);
+  background: var(--primary);
+  color: var(--on-primary);
+}
+
+.modal-head-icono svg {
+  width: 20px;
+  height: 20px;
+}
+
+.modal-head-subtitulo {
+  margin: 2px 0 0;
+  font-size: 13.5px;
+  color: var(--text-muted);
+}
+
 /* ── BOTONES DE ICONO ─────────────────────────────────────── */
 
 /*

@@ -1,38 +1,27 @@
-import { useContext, useRef, useState } from "react"
-import { FaExchangeAlt, FaEye, FaLongArrowAltRight, FaPlus, FaSearch, FaTimes, FaTrash } from "react-icons/fa"
-import Swal from "sweetalert2"
+import { useContext, useState } from "react"
+import { FaExchangeAlt, FaEye, FaLongArrowAltRight, FaPlus, FaSearch, FaTimes } from "react-icons/fa"
 
 import { LocationsContext, ProductContext } from "../context/contexts"
 import { PERMISSIONS } from "../context/permissions"
 import { useAuth } from "../hooks/useAuth"
 import { useExistencias } from "../hooks/useExistencias"
+import { useNuevoTraslado } from "../hooks/useNuevoTraslado"
 import { useTraslados } from "../hooks/useTraslados"
-import { registrarTraslado } from "../lib/api/traslados"
 import { fechaYHora } from "../utils/format"
-import { claveDeIdempotencia } from "../utils/ids"
 import { coincideBusqueda } from "../utils/texto"
 import EmptyState from "../components/crud/EmptyState"
 import PageHeader from "../components/crud/PageHeader"
-import FormField from "../components/forms/FormField"
-import ModalShell from "../components/forms/ModalShell"
 import DetalleDeTraslado from "../components/transfers/DetalleDeTraslado"
+import NuevoTraslado from "../components/transfers/NuevoTraslado"
 import "../styles/transfers.css"
-import { CAMPO_DE_CANTIDAD } from "../utils/camposNumericos"
 
 /*
   Traslados de existencia entre ubicaciones.
 
-  La pantalla arma el pedido —de dónde, hacia dónde, qué y cuánto— y lo
-  manda en una sola llamada. Si alcanza, quién puede y desde dónde lo
-  decide la base; aquí solo se evita ofrecer lo que no se puede pedir:
-
-  - quien ve todas las ubicaciones elige cualquier origen activo;
-  - quien solo ve la suya traslada DESDE ella, hacia cualquier otra.
+  El historial con sus filtros, y el botón «Nuevo traslado», que abre la
+  ventana del carrito (NuevoTraslado, con su estado en useNuevoTraslado).
+  Si alcanza, quién puede y desde dónde lo decide la base.
 */
-
-let siguienteRenglon = 0
-
-const renglonVacio = () => ({ clave: ++siguienteRenglon, productId: "", qty: "" })
 
 const ESTADOS = { aplicado: "Aplicado" }
 
@@ -101,139 +90,33 @@ function Transfers() {
   const veTodas = hasPermission(PERMISSIONS.INVENTORY_ALL)
   const propia = user?.locationId || ""
 
-  const origenes = veTodas
-    ? ubicacionesActivas
-    : ubicacionesActivas.filter((u) => u.id === propia)
-
-  const [origenElegido, setOrigenElegido] = useState("")
-  const [destino, setDestino] = useState("")
-  const [renglones, setRenglones] = useState(() => [renglonVacio()])
-  const [nota, setNota] = useState("")
-  const [guardando, setGuardando] = useState(false)
   const [detalleAbierto, setDetalleAbierto] = useState(null)
-
-  /*
-    El formulario vive en una ventana. Cerrarla no borra lo escrito: el
-    estado es de la pantalla, no de la ventana. Mientras se registra no se
-    cierra, para que nadie crea que lo canceló.
-  */
-  const [formularioAbierto, setFormularioAbierto] = useState(false)
-  const cerrarFormulario = () => {
-    if (!enviando.current) setFormularioAbierto(false)
-  }
-
-  // Un intento de traslado, no un clic: se renueva solo cuando se registra.
-  const [clave, setClave] = useState(claveDeIdempotencia)
-
-  // El estado se pinta en el render siguiente; dos clics seguidos no lo verían.
-  const enviando = useRef(false)
-
-  // Quien solo ve su ubicación no elige: el origen es la suya.
-  const origen = veTodas ? origenElegido : origenes[0]?.id || ""
-  const sinOrigen = !veTodas && !origen
-
-  const destinos = ubicacionesActivas.filter((u) => u.id !== origen)
 
   const nombreUbicacion = (id) => locations.find((u) => u.id === id)?.name || "—"
   const nombreProducto = (id) => products.find((p) => String(p.id) === String(id))?.name || "Producto"
 
   /*
-    Lo que se puede trasladar sale de la existencia de la UBICACIÓN de
-    origen, no del stock global: un producto con 20 en total y 0 en este
-    camión no se ofrece. Es una ayuda para no pedir lo que no hay; si la
-    existencia cambia entre esta lectura y el traslado, registrar_traslado
-    lo rechaza igual (LT005) y la pantalla muestra su mensaje.
+    El formulario vive en una ventana. Cerrarla no borra lo preparado: el
+    estado es de la pantalla (useNuevoTraslado), no de la ventana. Mientras
+    se registra no se cierra, para que nadie crea que lo canceló.
   */
-  const disponibles = origen
-    ? existencias.filter((e) => e.locationId === origen && e.quantity > 0)
-    : []
+  const [formularioAbierto, setFormularioAbierto] = useState(false)
 
-  const sinExistencias = Boolean(origen) && disponibles.length === 0
-
-  const disponible = (productId) =>
-    disponibles.find((e) => e.productId === productId)?.quantity ?? 0
-
-  // Cada producto en un solo renglón: lo elegido en los demás no se ofrece.
-  const opcionesPara = (claveRenglon) => {
-    const elegidosEnOtros = new Set(
-      renglones.filter((r) => r.clave !== claveRenglon && r.productId).map((r) => r.productId)
-    )
-
-    return disponibles.filter((e) => !elegidosEnOtros.has(e.productId))
-  }
-
-  /*
-    Otro origen es otra referencia: lo elegido y las cantidades del
-    anterior no valen para este.
-  */
-  const cambiarOrigen = (valor) => {
-    setOrigenElegido(valor)
-    setRenglones([renglonVacio()])
-    if (valor === destino) setDestino("")
-  }
-
-  const cambiarRenglon = (claveRenglon, cambios) =>
-    setRenglones((actuales) =>
-      actuales.map((r) => (r.clave === claveRenglon ? { ...r, ...cambios } : r))
-    )
-
-  const enviar = async () => {
-    if (enviando.current) return
-
-    const items = renglones
-      .filter((r) => r.productId)
-      .map((r) => ({ productId: r.productId, qty: Number(r.qty) }))
-
-    if (!origen || !destino) {
-      Swal.fire({ icon: "warning", title: "Faltan datos", text: "Elige el origen y el destino del traslado." })
-      return
-    }
-
-    if (items.length === 0 || items.some((i) => !Number.isInteger(i.qty) || i.qty <= 0)) {
-      Swal.fire({
-        icon: "warning",
-        title: "Revisa los productos",
-        text: "Cada producto necesita una cantidad entera mayor que cero.",
-      })
-      return
-    }
-
-    const excedidos = items.filter((i) => i.qty > disponible(i.productId))
-
-    if (excedidos.length > 0) {
-      Swal.fire({
-        icon: "warning",
-        title: "Cantidad mayor que la disponible",
-        text: excedidos
-          .map((i) => `${nombreProducto(i.productId)}: hay ${disponible(i.productId)} en ${nombreUbicacion(origen)}, pides ${i.qty}.`)
-          .join(" "),
-      })
-      return
-    }
-
-    enviando.current = true
-    setGuardando(true)
-
-    try {
-      await registrarTraslado(
-        { origenId: origen, destinoId: destino, items, nota: nota.trim() },
-        { clave }
-      )
-
-      setClave(claveDeIdempotencia())
-      setRenglones([renglonVacio()])
-      setNota("")
+  const nuevoTraslado = useNuevoTraslado({
+    veTodas,
+    propia,
+    ubicacionesActivas,
+    existencias,
+    nombreUbicacion,
+    nombreProducto,
+    alRegistrar: async () => {
       setFormularioAbierto(false)
-
       await Promise.all([recargarExistencias(), recargarHistorial()])
+    },
+  })
 
-      Swal.fire({ icon: "success", title: "Traslado registrado" })
-    } catch (problema) {
-      Swal.fire({ icon: "error", title: "No se pudo trasladar", text: problema.message })
-    } finally {
-      enviando.current = false
-      setGuardando(false)
-    }
+  const cerrarFormulario = () => {
+    if (!nuevoTraslado.estaEnviando()) setFormularioAbierto(false)
   }
 
   /*
@@ -273,127 +156,14 @@ function Transfers() {
         )}
       </PageHeader>
 
-      {!soloLectura && formularioAbierto && <ModalShell
-        titulo="Nuevo traslado"
-        onCerrar={cerrarFormulario}
-        ancho="modal-wide"
-        acciones={
-          <>
-            <button type="button" className="btn btn-secondary" onClick={cerrarFormulario} disabled={guardando}>
-              Cancelar
-            </button>
-            <button
-              type="button"
-              className="btn btn-primary"
-              onClick={enviar}
-              disabled={guardando || sinOrigen || sinExistencias}
-            >
-              <FaExchangeAlt aria-hidden="true" />{guardando ? "Trasladando…" : "Trasladar"}
-            </button>
-          </>
-        }
-      >
-       <div className="transfers-formulario">
-
-        {sinOrigen && (
-          <p className="alert-banner" role="status">
-            No tienes una ubicación operativa asignada: pide que te asignen una para poder trasladar desde ella.
-          </p>
-        )}
-
-        <div className="form-grid">
-          <FormField etiqueta="Origen">
-            <select
-              id="transfers-origen"
-              value={origen}
-              onChange={(e) => cambiarOrigen(e.target.value)}
-              disabled={!veTodas}
-            >
-              {veTodas && <option value="">— Elige el origen —</option>}
-              {origenes.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
-            </select>
-          </FormField>
-
-          <FormField etiqueta="Destino">
-            <select id="transfers-destino" value={destino} onChange={(e) => setDestino(e.target.value)}>
-              <option value="">— Elige el destino —</option>
-              {destinos.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
-            </select>
-          </FormField>
-        </div>
-
-        {sinExistencias && (
-          <p className="alert-banner" role="status">
-            No hay productos con existencia en {nombreUbicacion(origen)}. Elige otro origen para trasladar.
-          </p>
-        )}
-
-        <div className="transfers-renglones">
-          {renglones.map((r, indice) => {
-            const numero = indice + 1
-
-            return (
-              <div className="transfers-renglon" key={r.clave}>
-                <FormField etiqueta={`Producto del renglón ${numero}`}>
-                  <select
-                    id={`transfers-producto-${r.clave}`}
-                    value={r.productId}
-                    onChange={(e) => cambiarRenglon(r.clave, { productId: e.target.value })}
-                  >
-                    <option value="">{origen ? "— Elige un producto —" : "— Elige primero el origen —"}</option>
-                    {opcionesPara(r.clave).map((e) => (
-                      <option key={e.productId} value={e.productId}>
-                        {`${e.productName} — ${e.quantity} disponibles`}
-                      </option>
-                    ))}
-                  </select>
-                </FormField>
-
-                <FormField
-                  etiqueta={`Cantidad del renglón ${numero}`}
-                  ayuda={r.productId && origen ? `Disponible en origen: ${disponible(r.productId)}` : undefined}
-                >
-                  <input
-                    id={`transfers-cantidad-${r.clave}`}
-                    type="number" {...CAMPO_DE_CANTIDAD}
-                    min="1"
-                    max={r.productId ? disponible(r.productId) : undefined}
-                    step="1"
-                    value={r.qty}
-                    onChange={(e) => cambiarRenglon(r.clave, { qty: e.target.value })}
-                  />
-                </FormField>
-
-                {renglones.length > 1 && (
-                  <button
-                    type="button"
-                    className="btn btn-danger btn-sm transfers-quitar"
-                    aria-label={`Quitar renglón ${numero}`}
-                    onClick={() => setRenglones((actuales) => actuales.filter((x) => x.clave !== r.clave))}
-                  >
-                    <FaTrash aria-hidden="true" />
-                  </button>
-                )}
-              </div>
-            )
-          })}
-        </div>
-
-        <FormField etiqueta="Observación" ancho="full">
-          <textarea id="transfers-nota" value={nota} onChange={(e) => setNota(e.target.value)} rows={2} />
-        </FormField>
-
-        <div className="transfers-acciones">
-          <button
-            type="button"
-            className="btn btn-secondary"
-            onClick={() => setRenglones((actuales) => [...actuales, renglonVacio()])}
-          >
-            <FaPlus aria-hidden="true" />Agregar producto
-          </button>
-        </div>
-       </div>
-      </ModalShell>}
+      {!soloLectura && formularioAbierto && (
+        <NuevoTraslado
+          traslado={nuevoTraslado}
+          productos={products}
+          nombreUbicacion={nombreUbicacion}
+          onCerrar={cerrarFormulario}
+        />
+      )}
 
       <section className="transfers-historial" aria-labelledby="transfers-historial">
         <h2 id="transfers-historial" className="solo-lector">Historial</h2>

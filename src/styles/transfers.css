@@ -9,54 +9,299 @@
   Los colores salen de los tokens. Aquí no se define ninguno.
 */
 
-/* ── FORMULARIO (en su ventana) ───────────────────────────── */
+/* ── NUEVO TRASLADO (la ventana tipo carrito) ─────────────── */
 
-.transfers .transfers-formulario {
+/*
+  Dos columnas en escritorio: a la izquierda ubicaciones y catálogo, a la
+  derecha lo elegido, el total y la observación. La ventana es ancha pero
+  nunca más que la pantalla, y el pie con las acciones queda fijo.
+*/
+.transfers .modal.modal-traslado {
+  max-width: min(1120px, 100%);
+}
+
+.transfers .modal-traslado .modal-body {
+  max-height: 72vh;
+  background: var(--surface-secondary);
+}
+
+.transfers .traslado-formulario {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: var(--space-4);
+  align-items: start;
+}
+
+.transfers .traslado-columna {
   display: flex;
   flex-direction: column;
   gap: var(--space-4);
+  min-width: 0;
 }
 
-.transfers .transfers-formulario .form-grid,
-.transfers .transfers-formulario .field {
-  margin: 0;
-}
-
-.transfers .transfers-renglones {
+.transfers .traslado-tarjeta {
   display: flex;
   flex-direction: column;
   gap: var(--space-3);
-}
-
-/*
-  Producto ancho, cantidad estrecha y el botón de quitar al final, en la
-  misma línea que los controles y no que las etiquetas.
-*/
-.transfers .transfers-renglon {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(7rem, 10rem) auto;
-  gap: var(--space-3);
-  align-items: end;
-  padding: var(--space-3);
+  padding: var(--space-4);
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
-  background: var(--surface, var(--paper));
+  background: var(--surface);
 }
 
-.transfers .transfers-renglon .field {
+.transfers .traslado-titulo {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0;
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.transfers .traslado-titulo svg {
+  color: var(--primary-text);
+}
+
+.transfers .traslado-encabezado {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.transfers .traslado-insignia {
+  background: var(--primary-soft);
+  color: var(--primary-text);
+}
+
+/* Origen ⇄ Destino en una línea, con el botón de intercambiar al medio. */
+.transfers .traslado-ubicaciones {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  gap: var(--space-3);
+  align-items: end;
+}
+
+.transfers .traslado-ubicaciones .field {
   margin: 0;
 }
 
-.transfers .transfers-quitar {
-  align-self: end;
-  min-width: 2.5rem;
-  min-height: 2.5rem;
+.transfers .traslado-intercambiar {
+  width: 42px;
+  height: 42px;
 }
 
-.transfers .transfers-acciones {
+.transfers .traslado-intercambiar:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.transfers .traslado-buscador {
+  max-width: none;
+}
+
+.transfers .traslado-ayuda,
+.transfers .traslado-vacio {
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--text-muted);
+}
+
+.transfers .traslado-vacio {
+  padding: var(--space-3) 0;
+  font-size: 13.5px;
+}
+
+.transfers .traslado-aviso {
+  margin: 0;
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-sm);
+  background: var(--primary-soft);
+  color: var(--primary-text);
+  font-size: 13px;
+}
+
+/* ── catálogo (izquierda) y carrito (derecha) ── */
+
+.transfers .traslado-catalogo,
+.transfers .traslado-carrito {
   display: flex;
-  flex-wrap: wrap;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  max-height: 340px;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+
+.transfers .traslado-catalogo li,
+.transfers .traslado-carrito li {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  align-items: center;
   gap: var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  border-bottom: 1px solid var(--border);
+}
+
+.transfers .traslado-catalogo li:last-child,
+.transfers .traslado-carrito li:last-child {
+  border-bottom: 0;
+}
+
+/* El resultado que agrega Enter. */
+.transfers .traslado-catalogo li.is-resaltado {
+  background: var(--primary-soft);
+}
+
+.transfers .traslado-producto {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.transfers .traslado-producto strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 14px;
+  color: var(--text-primary);
+}
+
+.transfers .traslado-producto span {
+  font-size: 12.5px;
+  color: var(--text-muted);
+}
+
+.transfers .traslado-producto .traslado-tope.is-error {
+  color: var(--danger);
+  font-weight: 600;
+}
+
+.transfers .traslado-disponible {
+  font-size: 13px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.transfers .traslado-disponible strong {
+  color: var(--success);
+}
+
+.transfers .traslado-agregar {
+  border-color: var(--primary);
+  color: var(--primary-text);
+  white-space: nowrap;
+}
+
+.transfers .traslado-agregar:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.transfers .traslado-carrito-encabezado {
+  display: flex;
+  justify-content: space-between;
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-sm);
+  background: var(--table-header, var(--surface-secondary));
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.transfers .traslado-carrito-encabezado span:last-child {
+  padding-right: 64px;
+}
+
+/* − cantidad +: botones grandes para el dedo y la cifra se puede escribir. */
+.transfers .traslado-cantidad {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  background: var(--surface);
+}
+
+.transfers .traslado-cantidad button {
+  width: 36px;
+  height: 38px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  background: transparent;
+  color: var(--text-primary);
+  cursor: pointer;
+}
+
+.transfers .traslado-cantidad button:disabled {
+  color: var(--text-muted);
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.transfers .traslado-cantidad button:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: -2px;
+}
+
+.transfers .traslado-cantidad input {
+  width: 64px;
+  height: 38px;
+  padding: 0 4px;
+  border: 0;
+  border-left: 1px solid var(--border);
+  border-right: 1px solid var(--border);
+  border-radius: 0;
+  text-align: center;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  appearance: textfield;
+}
+
+.transfers .traslado-cantidad input::-webkit-outer-spin-button,
+.transfers .traslado-cantidad input::-webkit-inner-spin-button {
+  appearance: none;
+  margin: 0;
+}
+
+.transfers .traslado-cantidad input[aria-invalid="true"] {
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+.transfers .traslado-total {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0;
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-sm);
+  background: var(--primary-soft);
+  font-size: 15px;
+  color: var(--text-primary);
+}
+
+.transfers .traslado-total svg {
+  color: var(--primary-text);
+}
+
+.transfers .traslado-total strong {
+  color: var(--primary-text);
+  font-size: 17px;
+}
+
+.transfers .traslado-tarjeta textarea {
+  width: 100%;
+  min-height: 72px;
+  resize: vertical;
 }
 
 /* ── BÚSQUEDA Y FILTROS ───────────────────────────────────── */
@@ -187,19 +432,16 @@
 /* ── RESPONSIVE ───────────────────────────────────────────── */
 
 /*
-  En pantallas angostas los filtros ocupan cada uno su línea y los
-  renglones del formulario se apilan, con el botón de quitar a todo lo
-  ancho para que siga siendo fácil de pulsar.
+  En pantallas angostas los filtros ocupan cada uno su línea. La ventana
+  del traslado apila sus columnas antes, en cuanto dejan de caber dos.
 */
-@media (max-width: 640px) {
-  .transfers .transfers-renglon {
+@media (max-width: 900px) {
+  .transfers .traslado-formulario {
     grid-template-columns: 1fr;
   }
+}
 
-  .transfers .transfers-quitar {
-    width: 100%;
-  }
-
+@media (max-width: 640px) {
   .transfers .transfers-filtros {
     flex-direction: column;
     align-items: stretch;
@@ -222,6 +464,41 @@
 
   .transfers .transfers-tabla td {
     white-space: normal;
+  }
+
+  .transfers .traslado-ubicaciones {
+    grid-template-columns: 1fr;
+  }
+
+  .transfers .traslado-intercambiar {
+    justify-self: center;
+    transform: rotate(90deg);
+  }
+
+  .transfers .traslado-catalogo li,
+  .transfers .traslado-carrito li {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+  }
+
+  .transfers .traslado-catalogo .traslado-disponible,
+  .transfers .traslado-carrito .traslado-cantidad {
+    grid-column: 2;
+    grid-row: 2;
+  }
+
+  .transfers .traslado-catalogo .traslado-agregar,
+  .transfers .traslado-carrito .btn-icono {
+    grid-column: 3;
+    grid-row: 1 / span 2;
+  }
+
+  .transfers .traslado-carrito-encabezado {
+    display: none;
+  }
+
+  .transfers .traslado-catalogo,
+  .transfers .traslado-carrito {
+    max-height: none;
   }
 
   .transfers .transfers-mas .btn {
