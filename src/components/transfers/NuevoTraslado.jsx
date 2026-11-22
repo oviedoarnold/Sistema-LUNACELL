@@ -17,6 +17,7 @@ import ModalShell from "../forms/ModalShell"
 import { MiniaturaDeProducto } from "../ImagenDeProducto"
 import { CAMPO_DE_CANTIDAD } from "../../utils/camposNumericos"
 import { cantidadValida, cuantos } from "../../utils/carritoDeTraslado"
+import { mostrarDentroDeLista } from "../../utils/desplazamiento"
 import { coincideBusqueda } from "../../utils/texto"
 
 /*
@@ -60,14 +61,23 @@ function NuevoTraslado({ traslado: t, productos = [], nombreUbicacion, onCerrar 
     return renglon ? Number(renglon.cantidad) || 0 : 0
   }
 
-  // El resultado resaltado siempre a la vista cuando se recorre con las flechas.
+  /*
+    Con las flechas, el resultado resaltado queda a la vista moviendo SOLO
+    la lista de resultados. Nada se desplaza al abrir la ventana ni al
+    escribir: la ventana empieza arriba, con las ubicaciones a la vista.
+  */
+  const conFlechas = useRef(false)
+
   useEffect(() => {
-    lista.current?.querySelector(".is-resaltado")?.scrollIntoView?.({ block: "nearest" })
+    if (!conFlechas.current) return
+    conFlechas.current = false
+    mostrarDentroDeLista(lista.current, lista.current?.querySelector(".is-resaltado"))
   }, [indice])
 
   const alTeclear = (evento) => {
     if (evento.key === "ArrowDown" || evento.key === "ArrowUp") {
       evento.preventDefault()
+      conFlechas.current = true
       const paso = evento.key === "ArrowDown" ? 1 : -1
       setResaltado(Math.min(Math.max(indice + paso, 0), Math.max(resultados.length - 1, 0)))
       return
