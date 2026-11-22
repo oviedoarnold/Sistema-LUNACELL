@@ -26,6 +26,9 @@ function ModalShell({
   ancho = "",
   children,
   acciones,
+  // Opcionales: un icono junto al título y una línea que explica la ventana.
+  icono = null,
+  subtitulo = "",
 }) {
   const tituloId = useId()
   const caja = useRef(null)
@@ -102,7 +105,17 @@ function ModalShell({
         tabIndex={-1}
       >
         <div className="modal-head">
-          <h3 id={tituloId}>{titulo}</h3>
+          {icono || subtitulo ? (
+            <div className="modal-head-titulo">
+              {icono && <span className="modal-head-icono" aria-hidden="true">{icono}</span>}
+              <div>
+                <h3 id={tituloId}>{titulo}</h3>
+                {subtitulo && <p className="modal-head-subtitulo">{subtitulo}</p>}
+              </div>
+            </div>
+          ) : (
+            <h3 id={tituloId}>{titulo}</h3>
+          )}
 
           <button
             type="button"
