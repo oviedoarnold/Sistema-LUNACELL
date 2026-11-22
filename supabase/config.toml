@@ -140,6 +140,7 @@ sql_paths = [
   "./migrations/0051_anulacion_facturas_pedidos.sql",
   "./migrations/0052_devoluciones_ventas_y_ajustes_credito.sql",
   "./migrations/0053_numero_de_traslado.sql",
+  "./migrations/0054_regalias.sql",
   "./seed.sql",
 ]
 

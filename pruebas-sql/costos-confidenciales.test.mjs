@@ -185,7 +185,11 @@ describe("0035: nadie más recibe el costo, por ningún camino de la API", () =>
     )
     expect(vistas.rows).toEqual([])
 
-    // Las funciones que devuelven filas: ninguna columna de salida con esos nombres, salvo la del administrador.
+    /*
+      Las funciones que devuelven filas: ninguna columna de salida con esos nombres, salvo las del
+      administrador. reporte_de_regalias (0054) devuelve el costo histórico de lo regalado solo a él
+      y nulo a los demás; lo prueba regalias.test.mjs.
+    */
     const salidas = await db.query(
       `select p.proname, a.nombre
          from pg_proc p
@@ -193,9 +197,14 @@ describe("0035: nadie más recibe el costo, por ningún camino de la API", () =>
          cross join lateral unnest(coalesce(p.proargnames, '{}')) as a(nombre)
         where n.nspname = 'public'
           and a.nombre ~* '(costo|margen|utilidad|ganancia)'
-          and p.proname <> 'costos_de_productos'`
+          and p.proname not in ('costos_de_productos', 'reporte_de_regalias')`
     )
     expect(salidas.rows).toEqual([])
+    expect(
+      (await db.query(`select array_agg(a.nombre order by a.nombre) as columnas from pg_proc p
+                        cross join lateral unnest(p.proargnames) as a(nombre)
+                        where p.proname = 'reporte_de_regalias' and a.nombre ~* 'costo'`)).rows[0].columnas
+    ).toEqual(["costo_total", "costo_unitario"])
   })
 
   it("todas las columnas de productos menos el costo siguen concedidas", async () => {
