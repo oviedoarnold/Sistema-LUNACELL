@@ -1410,7 +1410,7 @@ export function crearSupabaseFalso({
       if (nombre === "reporte_de_regalias") {
         const falla = fallaDe(nombre, "rpc")
 
-        return Promise.resolve(falla ? { data: null, error: falla } : { data: reporteDeRegalias(argumentos), error: null })
+        return Promise.resolve(falla ? { data: null, error: falla } : { data: reporteDeRegalias(), error: null })
       }
 
       // Los medios los valida la base (0039); aquí vende igual que sin ellos.
