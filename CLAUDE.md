@@ -37,6 +37,7 @@ No inventar datos empresariales. Mocks/fixtures solo en pruebas.
 
 Sin autorización explícita no crear ni ejecutar migraciones, cambios de esquema, RLS/policies, funciones SQL/RPC ni operaciones destructivas.
 Antes de un cambio autorizado: explicar cambio, riesgo, rollback y validación.
+Aplicar migraciones siguiendo `docs/migraciones-en-produccion.md`: si `apply_migration` no confirma éxito, no reintentar ni escribir por otra vía; preparar el procedimiento manual completo (PASOS 1–5).
 Nunca usar producción como entorno experimental ni alterar datos reales para facilitar pruebas.
 Nunca exponer secrets, tokens, contraseñas o service-role keys. Respetar RLS y mínimo privilegio.
 
