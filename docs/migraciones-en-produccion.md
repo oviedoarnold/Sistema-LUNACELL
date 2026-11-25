@@ -57,6 +57,8 @@ Antes de entregarlo, el procedimiento se prueba en la base local de `pruebas-sql
 
 Las huellas se calculan con orden explícito. Un `string_agg(… order by 1)` ordena por la constante 1, no por la primera columna.
 
+Una huella no puede quedar en `null` sin que nadie lo note. Si una huella vale `null` antes y después, la comparación da «sin cambios» aunque no se haya comprobado nada. Las pruebas exigen que cada huella tenga valor. Un ejemplo de este fallo: `query_to_xml(…, false, …)` envuelve las filas en `<table>`, así que la ruta XPath `/row/…` no encuentra nada.
+
 ## 3. Seguridad
 
 - Solo el propietario ejecuta el script en el SQL Editor.
