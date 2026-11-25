@@ -528,6 +528,14 @@ function SalesHistory() {
                         </span>
                       )}
 
+                      {/* Lo entregado sin cargo (0054). Anular la venta no lo devuelve al inventario. */}
+                      {sale.regalias?.length > 0 && (
+                        <span className="sale-anulacion">
+                          Regalías sin cargo: {sale.regalias.map((r) => `${r.name} × ${r.qty}`).join(", ")}
+                          {sale.status === "anulada" && " · entregadas y no restituidas al anular"}
+                        </span>
+                      )}
+
                       {isAdmin && renglonesNegociados(sale).map((item) => (
                         <span className="sale-anulacion" key={item.productId}>
                           Precio negociado: {item.name} a {formatMoney(item.price, currency)}, referencia{" "}

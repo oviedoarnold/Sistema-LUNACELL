@@ -65,6 +65,10 @@ import {
   hasEnoughStock,
 } from "../utils/cart"
 import { CAMPO_DE_CANTIDAD } from "../utils/camposNumericos"
+import RegaliasDeLaVenta from "../components/pos/RegaliasDeLaVenta"
+import { useRegaliasDeLaVenta } from "../hooks/useRegaliasDeLaVenta"
+import { bloqueoDeRegalias } from "../utils/regalias"
+import { isFiscalConfigured } from "../utils/fiscal"
 
 const ISV_POR_OMISION = 15
 
@@ -415,6 +419,48 @@ function POS() {
   // Un precio no válido o un motivo que falta: la venta no se confirma.
   const precioPendiente = cart.some((linea) => linea.problemaDePrecio)
 
+  /*
+    Regalías (0054): productos sin cargo para el cliente de esta venta. Se
+    regala de la misma ubicación, así que lo disponible es la existencia menos
+    lo que ya se vende. Sin conexión, en un pedido, sin cliente registrado o en
+    una factura fiscal no se registran; la base vuelve a comprobarlo todo.
+  */
+  const puedeRegalar = hasPermission(permissions.REGALIAS)
+  const productoPorId = (id) => productosEnVenta.find((p) => String(p.id) === String(id))
+  const nombreDelProducto = (id) => productoPorId(id)?.name || "el producto"
+  const disponibleParaRegalar = (id) => {
+    const producto = productoPorId(id)
+    const vendido = cart.filter((linea) => String(linea.id) === String(id)).reduce((suma, linea) => suma + Number(linea.quantity || 0), 0)
+
+    return producto ? Math.max(existenciaDe(producto) - vendido, 0) : 0
+  }
+  const regalias = useRegaliasDeLaVenta(disponibleParaRegalar)
+  const llevaRegalias = regalias.renglones.length > 0
+  const bloqueoRegalias = bloqueoDeRegalias({
+    sinConexion: sinServidor,
+    esPedido,
+    clienteRegistrado: Boolean(selectedClient?.id),
+    ventaFiscal: Boolean(locations.find((u) => String(u.id) === String(ubicacionId))?.fiscal) && isFiscalConfigured(company?.fiscal),
+  })
+
+  const validarRegalias = () => {
+    const problema = bloqueoRegalias || regalias.problema(nombreDelProducto)
+
+    if (problema) Swal.fire({ icon: "warning", title: "Revisa las regalías", text: problema })
+
+    return !problema
+  }
+
+  // Lo que se entrega sin cargo, para la factura y su vista previa.
+  const regaliasParaElDocumento = () =>
+    regalias.paraEnviar().map((r) => ({
+      ...r,
+      name: nombreDelProducto(r.productId),
+      code: productoPorId(r.productId)?.code || "",
+      motivo: regalias.motivo,
+      detalleMotivo: regalias.detalle,
+    }))
+
   const restaurarPrecio = (id) => {
     setNegociaciones((actuales) => Object.fromEntries(Object.entries(actuales).filter(([clave]) => clave !== String(id))))
   }
@@ -624,6 +670,10 @@ function POS() {
       return false
     }
 
+    if (llevaRegalias && !validarRegalias()) {
+      return false
+    }
+
     if (
       paymentType === "credito" &&
       !dueDate
@@ -712,6 +762,7 @@ function POS() {
     total,
     cargo,
     cobros: cobrosDeLaVenta(),
+    regalias: regaliasParaElDocumento(),
 
     paymentType,
 
@@ -763,6 +814,9 @@ function POS() {
     note: "",
     cobros: cobrosDeLaVenta(),
     conIsv,
+    regalias: llevaRegalias ? regalias.paraEnviar() : [],
+    motivoRegalia: regalias.motivo,
+    detalleMotivoRegalia: regalias.detalle.trim(),
   })
 
   /*
@@ -812,6 +866,7 @@ function POS() {
     setPrimaTexto("")
     setAvisoDePrecios("")
     setNegociaciones({})
+    regalias.vaciar()
     handleClearClient()
     setDueDate(toISODateInDays(30))
   }
@@ -973,6 +1028,67 @@ function POS() {
     return resultado
   }
 
+  /*
+    Lo que se hace cuando la venta no se registró, o no se sabe. Sin respuesta,
+    una venta con regalías solo se reintenta: guardarla sin conexión las dejaría
+    fuera sin decirlo, y sin conexión no se registran.
+  */
+  const resolverFalloDeVenta = async (error) => {
+    if (error?.motivo === "sin-respuesta" && llevaRegalias) {
+      const otraVez = await Swal.fire({
+        icon: "warning",
+        title: "No hubo respuesta del servidor",
+        text: textoSinRespuesta(
+          "La venta y sus regalías pudieron haberse registrado o no. Reintentar es seguro: no se duplican. Una venta con regalías no se guarda sin conexión."
+        ),
+        showCancelButton: true,
+        confirmButtonText: "Reintentar",
+        cancelButtonText: CERRAR_SIN_REINTENTAR,
+      })
+
+      return otraVez.isConfirmed ? REINTENTAR : null
+    }
+
+    if (error?.motivo === "sin-respuesta" && sinConexion?.ubicacionAutorizada) {
+      const eleccion = await preguntarSinRespuesta()
+
+      if (eleccion === "reintentar") return REINTENTAR
+
+      if (eleccion === "guardar") {
+        void sinConexion.comprobarConexion()
+        return await guardarSinConexion({ claveEnLinea: claveDeVenta })
+      }
+
+      return null
+    }
+
+    // Se cobró con un porcentaje que ya no rige: se lee el vigente y el total se recalcula.
+    if (error?.motivo === "porcentaje-cambiado") {
+      await refrescarEmpresa?.().catch(() => {})
+
+      Swal.fire({
+        icon: "warning",
+        title: "El porcentaje adicional cambió",
+        text: `${error.message} El total ya muestra el porcentaje vigente.`,
+      })
+
+      return null
+    }
+
+    Swal.fire({
+      icon: "error",
+
+      title:
+        "No se pudo registrar la venta",
+
+      text:
+        error.message ||
+        "Ocurrió un error al generar la factura.",
+    })
+
+    return null
+  }
+
   const intentarVenta = async () => {
     if (!validateSale()) {
       return null
@@ -1067,44 +1183,7 @@ function POS() {
 
       return createdSale
     } catch (error) {
-      if (error?.motivo === "sin-respuesta" && sinConexion?.ubicacionAutorizada) {
-        const eleccion = await preguntarSinRespuesta()
-
-        if (eleccion === "reintentar") return REINTENTAR
-
-        if (eleccion === "guardar") {
-          void sinConexion.comprobarConexion()
-          return await guardarSinConexion({ claveEnLinea: claveDeVenta })
-        }
-
-        return null
-      }
-
-      // Se cobró con un porcentaje que ya no rige: se lee el vigente y el total se recalcula.
-      if (error?.motivo === "porcentaje-cambiado") {
-        await refrescarEmpresa?.().catch(() => {})
-
-        Swal.fire({
-          icon: "warning",
-          title: "El porcentaje adicional cambió",
-          text: `${error.message} El total ya muestra el porcentaje vigente.`,
-        })
-
-        return null
-      }
-
-      Swal.fire({
-        icon: "error",
-
-        title:
-          "No se pudo registrar la venta",
-
-        text:
-          error.message ||
-          "Ocurrió un error al generar la factura.",
-      })
-
-      return null
+      return await resolverFalloDeVenta(error)
     } finally {
       setFacturando(false)
     }
@@ -1573,6 +1652,15 @@ function POS() {
                   )}
                 </div>
               </section>
+
+              {puedeRegalar && (!esPedido || llevaRegalias) && (
+                <RegaliasDeLaVenta
+                  regalias={regalias}
+                  productos={productosEnVenta}
+                  disponibleDe={disponibleParaRegalar}
+                  bloqueo={bloqueoRegalias}
+                />
+              )}
             </div>
 
             <div className="pos-panel-pie">

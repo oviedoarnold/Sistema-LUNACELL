@@ -410,6 +410,12 @@ function Settings() {
         "Recibir en su ubicación productos de facturas que ella emitió, rebajar el crédito y reembolsar en efectivo lo que quede a favor del cliente. Se usa desde «Historial de facturas».",
     },
     {
+      id: permissions.REGALIAS,
+      label: "Autorizar regalías",
+      description:
+        "Entregar productos sin cargo junto con una venta del POS, a un cliente registrado y con motivo. Salen del inventario de su ubicación y no cambian el total de la factura.",
+    },
+    {
       id:
         permissions.LOCATIONS,
       label: "Ubicaciones",

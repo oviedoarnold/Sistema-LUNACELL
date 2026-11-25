@@ -211,6 +211,9 @@ function SalesProvider({ children }) {
           note: venta.note || "",
           cobros: venta.cobros || [],
           conIsv: venta.conIsv,
+          regalias: venta.regalias || [],
+          motivoRegalia: venta.motivoRegalia,
+          detalleMotivoRegalia: venta.detalleMotivoRegalia,
         },
         { clave }
       )

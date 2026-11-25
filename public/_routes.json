@@ -18,7 +18,8 @@
     "/locations",
     "/settings",
     "/reconciliation",
-    "/reports"
+    "/reports",
+    "/reports/regalias"
   ],
   "exclude": []
 }

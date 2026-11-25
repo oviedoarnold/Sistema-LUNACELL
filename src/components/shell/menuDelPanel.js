@@ -7,6 +7,7 @@ import {
   FaCog,
   FaExchangeAlt,
   FaFileAlt,
+  FaGift,
   FaHandHoldingUsd,
   FaHistory,
   FaHome,
@@ -167,6 +168,18 @@ export const GRUPOS_DEL_MENU = [
         to: "/sales-history",
         label: "Historial",
         Icono: FaHistory,
+        permiso: PERMISSIONS.SALES_HISTORY,
+      },
+      /*
+        Las regalías entregadas (0054). Con el permiso del historial: la base
+        decide si ve todas las ubicaciones o la suya, y el costo solo lo da al
+        administrador. Va antes de Reportes para que la barra superior la
+        nombre por su ruta propia.
+      */
+      {
+        to: "/reports/regalias",
+        label: "Regalías",
+        Icono: FaGift,
         permiso: PERMISSIONS.SALES_HISTORY,
       },
       {
