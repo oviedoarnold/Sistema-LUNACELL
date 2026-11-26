@@ -112,6 +112,8 @@ export const GRUPOS_DEL_MENU = [
         label: "Traslados",
         Icono: FaExchangeAlt,
         permiso: PERMISSIONS.INVENTORY_OWN,
+        // Contador de traslados por recibir (0056).
+        aviso: "traslados-por-recibir",
       },
       {
         to: "/locations",

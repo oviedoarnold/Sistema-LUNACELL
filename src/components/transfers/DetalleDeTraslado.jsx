@@ -1,45 +1,81 @@
-import { FaArrowRight, FaCalendarAlt, FaHashtag, FaMapMarkerAlt, FaRegCheckCircle, FaRegStickyNote, FaUser } from "react-icons/fa"
+import {
+  FaArrowRight,
+  FaCalendarAlt,
+  FaCheck,
+  FaExclamationTriangle,
+  FaHashtag,
+  FaMapMarkerAlt,
+  FaRegCheckCircle,
+  FaRegStickyNote,
+  FaUser,
+} from "react-icons/fa"
 
 import ModalShell from "../forms/ModalShell"
+
+const CLASE_DEL_ESTADO = {
+  aplicado: "badge badge-paid",
+  recibido: "badge badge-paid",
+  pendiente: "badge badge-low",
+  con_incidencia: "badge badge-out",
+}
 
 /*
   Qué se movió en un traslado, de dónde, hacia dónde, cuándo y quién.
 
-  Es una ventana de solo lectura: un traslado aplicado no se edita, uno
-  equivocado se corrige con otro en sentido contrario. Recibe los datos
-  ya nombrados —ubicaciones, productos, usuario— para no volver a
-  consultar nada al abrirse.
+  Recibe los datos ya nombrados —ubicaciones, productos, usuarios— para no
+  volver a consultar nada al abrirse. Desde la 0056 muestra también la
+  recepción (quién y cuándo, y si fue una confirmación administrativa, con
+  su observación) y la incidencia, y a quien puede recibir le ofrece
+  «Confirmar recepción» y, si todavía no hay incidencia, «Reportar
+  incidencia». Lo recibido no se edita: uno equivocado se corrige con otro
+  traslado en sentido contrario.
 
-  Producto a la izquierda y cantidad a la derecha, siempre a la vista: la
-  tabla es compacta y no obliga a desplazarse de lado.
+  Producto y código a la izquierda y cantidad a la derecha, siempre a la
+  vista: la tabla es compacta y no obliga a desplazarse de lado.
 */
-function DetalleDeTraslado({ traslado, onCerrar }) {
-  const total = traslado.renglones.reduce((suma, r) => suma + r.qty, 0)
-  const estado = (
-    <span className={traslado.status === "aplicado" ? "badge badge-paid" : "badge badge-neutral"}>{traslado.estado}</span>
-  )
+function DetalleDeTraslado({ traslado, puedeRecibir = false, procesando = false, onConfirmar, onReportar, onCerrar }) {
+  const total = traslado.unidades ?? traslado.renglones.reduce((suma, r) => suma + r.qty, 0)
+  const porRecibir = traslado.status === "pendiente" || traslado.status === "con_incidencia"
+  const estado = <span className={CLASE_DEL_ESTADO[traslado.status] || "badge badge-neutral"}>{traslado.estado}</span>
 
   const datos = [
     ["Número", traslado.numero || "—", FaHashtag],
     ["Origen", traslado.origen, FaMapMarkerAlt],
     ["Destino", traslado.destino, FaArrowRight],
-    ["Fecha y hora", traslado.fecha, FaCalendarAlt],
+    ["Enviado", traslado.fecha, FaCalendarAlt],
+    ["Enviado por", traslado.usuario || "—", FaUser],
     ["Estado", estado, FaRegCheckCircle],
-    ["Usuario", traslado.usuario || "—", FaUser],
     ["Nota", traslado.nota || "—", FaRegStickyNote],
   ]
 
-  return (
-    <ModalShell
-      titulo="Detalle del traslado"
-      onCerrar={onCerrar}
-      cerrarAlPulsarFuera
-      acciones={
-        <button type="button" className="btn btn-secondary" onClick={onCerrar}>
-          Cerrar
+  if (traslado.status === "recibido") {
+    datos.push(["Recibido", `${traslado.recibidoPor || "—"} · ${traslado.recibidoEn}`, FaCheck])
+  }
+
+  if (traslado.status === "aplicado") {
+    datos.push(["Recepción", "Aplicado antes del control de recepción", FaCheck])
+  }
+
+  const acciones = (
+    <>
+      <button type="button" className="btn btn-secondary" onClick={onCerrar} disabled={procesando}>
+        Cerrar
+      </button>
+      {puedeRecibir && porRecibir && traslado.status === "pendiente" && (
+        <button type="button" className="btn btn-secondary" onClick={onReportar} disabled={procesando}>
+          <FaExclamationTriangle aria-hidden="true" />Reportar incidencia
         </button>
-      }
-    >
+      )}
+      {puedeRecibir && porRecibir && (
+        <button type="button" className="btn btn-primary" onClick={onConfirmar} disabled={procesando} aria-busy={procesando || undefined}>
+          <FaCheck aria-hidden="true" />Confirmar recepción
+        </button>
+      )}
+    </>
+  )
+
+  return (
+    <ModalShell titulo="Detalle del traslado" onCerrar={onCerrar} cerrarAlPulsarFuera={!procesando} acciones={acciones}>
       <dl className="ficha-datos">
         {datos.map(([termino, valor, Icono]) => (
           <div className="ficha-dato" key={termino}>
@@ -52,6 +88,26 @@ function DetalleDeTraslado({ traslado, onCerrar }) {
         ))}
       </dl>
 
+      {traslado.administrativa && (
+        <section className="transfers-aviso transfers-aviso-administrativo" aria-label="Confirmación administrativa">
+          <h4>Confirmación administrativa</h4>
+          <p>
+            Confirmó {traslado.recibidoPor || "—"} el {traslado.recibidoEn}
+          </p>
+          <p className="transfers-aviso-nota">{traslado.observacion}</p>
+        </section>
+      )}
+
+      {traslado.incidencia && (
+        <section className="transfers-aviso transfers-aviso-incidencia" aria-label="Incidencia">
+          <h4>Incidencia</h4>
+          <p>
+            Reportada por {traslado.incidenciaPor || "—"} el {traslado.incidenciaEn}
+          </p>
+          <p className="transfers-aviso-nota">{traslado.incidencia}</p>
+        </section>
+      )}
+
       <section className="ficha-seccion" aria-label={`Productos (${traslado.renglones.length})`}>
         <h4>Productos ({traslado.renglones.length})</h4>
 
@@ -60,6 +116,7 @@ function DetalleDeTraslado({ traslado, onCerrar }) {
             <thead>
               <tr>
                 <th scope="col">Producto</th>
+                <th scope="col">Código</th>
                 <th scope="col" className="celda-cifra">Cantidad</th>
               </tr>
             </thead>
@@ -67,13 +124,14 @@ function DetalleDeTraslado({ traslado, onCerrar }) {
               {traslado.renglones.map((r) => (
                 <tr key={r.productId}>
                   <td>{r.nombre}</td>
+                  <td className="celda-codigo">{r.productCode || "S/C"}</td>
                   <td className="celda-cifra">{r.qty}</td>
                 </tr>
               ))}
             </tbody>
             <tfoot>
               <tr>
-                <td>Total</td>
+                <td colSpan={2}>Total de unidades</td>
                 <td className="celda-cifra">{total}</td>
               </tr>
             </tfoot>

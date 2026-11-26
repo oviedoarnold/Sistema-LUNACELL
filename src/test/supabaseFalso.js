@@ -861,9 +861,10 @@ export function crearSupabaseFalso({
   }
 
   /*
-    El traslado entre ubicaciones, como registrar_traslado() de la 0020:
-    descuenta el origen, suma al destino, guarda cabecera y detalle y anota
-    la salida y la entrada en el libro, o no hace nada.
+    El envío de un traslado, como registrar_traslado() desde la 0056:
+    descuenta el origen, guarda cabecera y detalle, anota la salida y deja el
+    traslado pendiente; el destino suma al confirmar la recepción
+    (confirmarRecepcionTraslado). O no hace nada.
 
     Reproduce los rechazos que la pantalla tiene que traducir. Los permisos
     y los candados se prueban contra el motor real en pruebas-sql.
@@ -915,7 +916,7 @@ export function crearSupabaseFalso({
         }
 
         return {
-          data: { traslado_id: previo.id, origen_id: previo.origen_id, destino_id: previo.destino_id, estado: "aplicado", items: pedido, repetida: true },
+          data: { traslado_id: previo.id, origen_id: previo.origen_id, destino_id: previo.destino_id, estado: previo.estado, items: pedido, repetida: true },
           error: null,
         }
       }
@@ -952,10 +953,19 @@ export function crearSupabaseFalso({
       origen_id: p_origen,
       destino_id: p_destino,
       usuario_id: usuario.id,
-      estado: "aplicado",
+      estado: "pendiente",
       nota: String(p_nota || "").trim(),
       clave_idempotencia: p_clave_idempotencia,
       creado_en: new Date().toISOString(),
+      unidades: pedido.reduce((suma, r) => suma + r.cantidad, 0),
+      recibido_por: null,
+      recibido_por_nombre: null,
+      recibido_en: null,
+      confirmacion_administrativa: false,
+      observacion_recepcion: null,
+      incidencia: null,
+      incidencia_por_nombre: null,
+      incidencia_en: null,
       huella,
     }
 
@@ -967,19 +977,9 @@ export function crearSupabaseFalso({
         { traslado_id: traslado.id, empresa_id: usuario.empresa_id, ...r },
       ]
 
-      if (!celda(p_destino, r.producto_id)) {
-        datos.inventario_ubicacion = [
-          ...(datos.inventario_ubicacion || []),
-          { empresa_id: usuario.empresa_id, ubicacion_id: p_destino, producto_id: r.producto_id, cantidad: 0 },
-        ]
-      }
-
-      datos.inventario_ubicacion = datos.inventario_ubicacion.map((c) => {
-        if (c.producto_id !== r.producto_id) return c
-        if (c.ubicacion_id === p_origen) return { ...c, cantidad: Number(c.cantidad) - r.cantidad }
-        if (c.ubicacion_id === p_destino) return { ...c, cantidad: Number(c.cantidad) + r.cantidad }
-        return c
-      })
+      datos.inventario_ubicacion = datos.inventario_ubicacion.map((c) =>
+        c.producto_id === r.producto_id && c.ubicacion_id === p_origen ? { ...c, cantidad: Number(c.cantidad) - r.cantidad } : c
+      )
 
       const movimiento = (ubicacion_id, tipo, cantidad, motivo) => ({
         id: siguienteId(),
@@ -998,12 +998,137 @@ export function crearSupabaseFalso({
       datos.movimientos_inventario = [
         ...(datos.movimientos_inventario || []),
         movimiento(p_origen, "traslado_salida", -r.cantidad, `Traslado a ${nombreDe(p_destino)}`),
-        movimiento(p_destino, "traslado_entrada", r.cantidad, `Traslado desde ${nombreDe(p_origen)}`),
       ]
     }
 
     return {
-      data: { traslado_id: traslado.id, origen_id: p_origen, destino_id: p_destino, estado: "aplicado", items: pedido, repetida: false },
+      data: { traslado_id: traslado.id, origen_id: p_origen, destino_id: p_destino, estado: "pendiente", items: pedido, repetida: false },
+      error: null,
+    }
+  }
+
+  /*
+    Quién puede recibir un traslado, como receptor_de_traslado() de la 0056:
+    el administrador; o un usuario activo del destino, con permiso de
+    inventario, que no lo envió. Nunca el contador.
+  */
+  const receptorDelTraslado = (traslado) => {
+    const usuario = (datos.usuarios || []).find((u) => u.auth_id === sesion?.user?.id && u.activo !== false)
+
+    if (!usuario || usuario.rol === "contador" || usuario.empresa_id !== traslado.empresa_id) {
+      return { error: { code: "42501", message: "No tienes permiso para recibir traslados" } }
+    }
+
+    if (usuario.rol === "admin") return { usuario }
+
+    const permisos = (datos.permisos_usuario || []).filter((p) => p.usuario_id === usuario.id).map((p) => p.seccion)
+
+    if (usuario.ubicacion_id !== traslado.destino_id) {
+      return { error: { code: "42501", message: "Solo recibe este traslado alguien de su ubicación de destino" } }
+    }
+
+    if (!permisos.includes("inventory-own") && !permisos.includes("inventory-all")) {
+      return { error: { code: "42501", message: "Necesitas permiso de inventario para recibir traslados" } }
+    }
+
+    if (usuario.id === traslado.usuario_id) {
+      return { error: { code: "42501", message: "Quien envía un traslado no puede confirmar su recepción" } }
+    }
+
+    return { usuario }
+  }
+
+  const respuestaDeRecepcion = (traslado, repetida) => ({
+    data: {
+      traslado_id: traslado.id, numero: traslado.numero, estado: traslado.estado, recibido_en: traslado.recibido_en,
+      recibido_por_nombre: traslado.recibido_por_nombre, confirmacion_administrativa: traslado.confirmacion_administrativa,
+      unidades: traslado.unidades, repetida,
+    },
+    error: null,
+  })
+
+  // La recepción, como confirmar_recepcion_traslado() de la 0056.
+  const confirmarRecepcionTraslado = ({ p_traslado, p_observacion = null }) => {
+    const traslado = (datos.traslados || []).find((t) => t.id === p_traslado)
+
+    if (!traslado) return rechazo("LT010", "No se encontró el traslado")
+
+    const { usuario, error } = receptorDelTraslado(traslado)
+
+    if (error) return { data: null, error }
+
+    if (traslado.estado === "recibido") return respuestaDeRecepcion(traslado, true)
+
+    if (traslado.estado !== "pendiente" && traslado.estado !== "con_incidencia") {
+      return rechazo("LT011", `El traslado ${traslado.numero} se aplicó antes del control de recepción y no necesita confirmación`)
+    }
+
+    const administrativa = usuario.rol === "admin" && (usuario.ubicacion_id !== traslado.destino_id || usuario.id === traslado.usuario_id)
+    const observacion = String(p_observacion || "").trim()
+
+    if (administrativa && (observacion.length < 5 || observacion.length > 500)) {
+      return rechazo("LT013", "Una confirmación administrativa necesita una observación de 5 a 500 caracteres que explique el motivo")
+    }
+
+    const origen = (datos.ubicaciones || []).find((u) => u.id === traslado.origen_id)?.nombre || traslado.origen_id
+
+    for (const r of (datos.traslado_detalle || []).filter((d) => d.traslado_id === traslado.id)) {
+      const existe = (datos.inventario_ubicacion || []).some((c) => c.ubicacion_id === traslado.destino_id && c.producto_id === r.producto_id)
+
+      datos.inventario_ubicacion = existe
+        ? datos.inventario_ubicacion.map((c) =>
+            c.ubicacion_id === traslado.destino_id && c.producto_id === r.producto_id ? { ...c, cantidad: Number(c.cantidad) + Number(r.cantidad) } : c
+          )
+        : [...(datos.inventario_ubicacion || []), { empresa_id: traslado.empresa_id, ubicacion_id: traslado.destino_id, producto_id: r.producto_id, cantidad: Number(r.cantidad) }]
+
+      datos.movimientos_inventario = [
+        ...(datos.movimientos_inventario || []),
+        {
+          id: siguienteId(), ...valoresPorOmision("movimientos_inventario"), empresa_id: traslado.empresa_id, producto_id: r.producto_id,
+          usuario_id: usuario.id, venta_id: null, traslado_id: traslado.id, ubicacion_id: traslado.destino_id,
+          tipo: "traslado_entrada", cantidad: Number(r.cantidad), motivo: `Traslado desde ${origen}`,
+        },
+      ]
+    }
+
+    Object.assign(traslado, {
+      estado: "recibido",
+      recibido_por: usuario.id,
+      recibido_por_nombre: usuario.nombre,
+      recibido_en: new Date().toISOString(),
+      confirmacion_administrativa: administrativa,
+      observacion_recepcion: administrativa ? observacion : null,
+    })
+
+    return respuestaDeRecepcion(traslado, false)
+  }
+
+  // La incidencia, como reportar_incidencia_traslado() de la 0056.
+  const reportarIncidenciaTraslado = ({ p_traslado, p_nota }) => {
+    const traslado = (datos.traslados || []).find((t) => t.id === p_traslado)
+
+    if (!traslado) return rechazo("LT010", "No se encontró el traslado")
+
+    const { usuario, error } = receptorDelTraslado(traslado)
+
+    if (error) return { data: null, error }
+
+    const nota = String(p_nota || "").trim()
+
+    if (traslado.estado === "con_incidencia") return rechazo("LT015", `El traslado ${traslado.numero} ya tiene una incidencia`)
+    if (traslado.estado !== "pendiente") return rechazo("LT011", `El traslado ${traslado.numero} no está pendiente de recepción`)
+    if (nota.length < 5 || nota.length > 500) return rechazo("LT016", "Describe la incidencia en 5 a 500 caracteres")
+
+    Object.assign(traslado, {
+      estado: "con_incidencia",
+      incidencia: nota,
+      incidencia_por: usuario.id,
+      incidencia_por_nombre: usuario.nombre,
+      incidencia_en: new Date().toISOString(),
+    })
+
+    return {
+      data: { traslado_id: traslado.id, numero: traslado.numero, estado: traslado.estado, incidencia: nota, incidencia_en: traslado.incidencia_en, repetida: false },
       error: null,
     }
   }
@@ -1545,6 +1670,13 @@ export function crearSupabaseFalso({
         return Promise.resolve(
           falla ? { data: null, error: falla } : trasladarEntreUbicaciones(argumentos)
         )
+      }
+
+      if (nombre === "confirmar_recepcion_traslado" || nombre === "reportar_incidencia_traslado") {
+        const falla = fallaDe(nombre, "rpc")
+        const hacer = nombre === "confirmar_recepcion_traslado" ? confirmarRecepcionTraslado : reportarIncidenciaTraslado
+
+        return Promise.resolve(falla ? { data: null, error: falla } : hacer(argumentos))
       }
 
       if (nombre === "registrar_movimiento_ubicacion") {
