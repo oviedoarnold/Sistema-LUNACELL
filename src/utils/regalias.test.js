@@ -1,6 +1,24 @@
 import { describe, it, expect } from "vitest"
 
-import { bloqueoDeRegalias, etiquetaDelMotivo, motivoParaLeer, problemaDelMotivo } from "./regalias"
+import { bloqueoDeRegalias, etiquetaDelMotivo, motivoParaLeer, problemaDelMotivo, resumenDeRegalias } from "./regalias"
+
+describe("resumenDeRegalias", () => {
+  const fila = (cantidad, valorComercial) => ({ cantidad, valorComercial })
+
+  it("cuenta regalías y unidades, y suma el valor en centavos", () => {
+    expect(resumenDeRegalias([fila(1, 0.1), fila(2, 0.2), fila(4, 600)])).toEqual({ regalias: 3, unidades: 7, sinPrecio: 0, valorComercial: 600.3 })
+  })
+
+  it("las que no tienen precio cuentan en regalías y unidades, no en el valor", () => {
+    expect(resumenDeRegalias([fila(1, 150), fila(2, null), fila(3, undefined)])).toEqual({ regalias: 3, unidades: 6, sinPrecio: 2, valorComercial: 150 })
+  })
+
+  it("si ninguna tiene precio el valor es null; un precio en cero da 0", () => {
+    expect(resumenDeRegalias([fila(1, null)]).valorComercial).toBeNull()
+    expect(resumenDeRegalias([fila(1, 0)]).valorComercial).toBe(0)
+    expect(resumenDeRegalias([])).toEqual({ regalias: 0, unidades: 0, sinPrecio: 0, valorComercial: null })
+  })
+})
 
 const LISTA = { sinConexion: false, esPedido: false, clienteRegistrado: true, ventaFiscal: false }
 
