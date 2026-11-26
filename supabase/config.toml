@@ -141,6 +141,7 @@ sql_paths = [
   "./migrations/0052_devoluciones_ventas_y_ajustes_credito.sql",
   "./migrations/0053_numero_de_traslado.sql",
   "./migrations/0054_regalias.sql",
+  "./migrations/0055_precio_de_regalias.sql",
   "./seed.sql",
 ]
 
