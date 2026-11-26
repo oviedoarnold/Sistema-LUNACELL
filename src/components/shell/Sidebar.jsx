@@ -4,7 +4,7 @@ import { FaSignOutAlt, FaTimes } from "react-icons/fa"
 import { useAuth } from "../../hooks/useAuth"
 import { useTrasladosPorRecibir } from "../../hooks/useTrasladosPorRecibir"
 import LogoLunacell from "../LogoLunacell"
-import { GRUPOS_DEL_MENU } from "./menuDelPanel"
+import { GRUPOS_DEL_MENU, tieneModulosDebajo } from "./menuDelPanel"
 import { datosDeLaCuenta, useCerrarSesion } from "./useCerrarSesion"
 
 /*
@@ -72,6 +72,7 @@ function Sidebar({ abierto = false, onCerrar = () => {} }) {
               <NavLink
                 key={to}
                 to={to}
+                end={tieneModulosDebajo(to)}
                 onClick={onCerrar}
                 className={({ isActive }) =>
                   isActive ? "sidebar-enlace is-activo" : "sidebar-enlace"
