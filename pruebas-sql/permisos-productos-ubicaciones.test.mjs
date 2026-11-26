@@ -196,11 +196,13 @@ describe("SEC-3a productos: no se borran, para no llevarse la historia", () => {
 
     // Historia real, hecha por las funciones del sistema como el administrador.
     await como(e.a.authId, "select registrar_movimiento_ubicacion($1, $2, 'entrada', 20, 'apertura')", [e.cargador, e.bodega])
-    await como(
+    const traslado = (await como(
       e.a.authId,
-      "select registrar_traslado($1, $2, $3::jsonb, 'reposición', 'sec3a-t1')",
+      "select registrar_traslado($1, $2, $3::jsonb, 'reposición', 'sec3a-t1') as r",
       [e.bodega, e.tienda, JSON.stringify([{ producto_id: e.cargador, cantidad: 5 }])]
-    )
+    )).rows[0].r
+    // Desde la 0056 la tienda recibe al confirmar; aquí lo confirma el administrador (confirmación administrativa).
+    await como(e.a.authId, "select confirmar_recepcion_traslado($1, 'Recepción registrada en la prueba')", [traslado.traslado_id])
     await como(
       e.a.authId,
       "select registrar_venta_ubicacion($1::jsonb, 'contado', null, null, '', null, '', 'sec3a-v1')",

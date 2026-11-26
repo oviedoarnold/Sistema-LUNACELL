@@ -340,11 +340,18 @@ describe("reporte_diario: movimientos de inventario", () => {
     const e = await escenario()
 
     await vender(e, e.vendedor.authId, { cantidad: 2 })
-    await como(
+    const traslado = (await como(
       e.admin.authId,
-      "select public.registrar_traslado($1, $2, $3::jsonb)",
+      "select public.registrar_traslado($1, $2, $3::jsonb) as r",
       [e.camion1, e.camion2, JSON.stringify([{ producto_id: e.cargador.id, cantidad: 3 }])]
-    )
+    )).rows[0].r
+
+    // Pendiente de recepción (0056): solo la salida está en el libro.
+    const enviado = await reporte(e.admin.authId)
+    expect(fila(enviado.movimientos_resumen, "clase", "traslado_salida")).toMatchObject({ movimientos: 1, unidades: -3 })
+    expect(enviado.movimientos_resumen.map((r) => r.clase)).not.toContain("traslado_entrada")
+
+    await como(e.vendedor2.authId, "select public.confirmar_recepcion_traslado($1)", [traslado.traslado_id])
 
     const todas = await reporte(e.admin.authId)
 
