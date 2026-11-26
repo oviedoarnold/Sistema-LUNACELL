@@ -418,7 +418,7 @@ describe("Traslados: registrar", () => {
     })
   })
 
-  it("varios productos en un traslado, y la existencia baja en el origen y sube en el destino", async () => {
+  it("varios productos en un traslado: la existencia baja en el origen y el destino espera la recepción", async () => {
     const { falso } = await renderConFormulario()
 
     llenarTraslado()
@@ -434,7 +434,9 @@ describe("Traslados: registrar", () => {
     const celda = (ubicacion, producto) =>
       falso.datos.inventario_ubicacion.find((c) => c.ubicacion_id === ubicacion && c.producto_id === producto)?.cantidad
 
-    expect([celda("bodega", "p1"), celda("store", "p1"), celda("bodega", "p2"), celda("store", "p2")]).toEqual([7, 3, 4, 2])
+    // Desde la 0056 el destino suma al confirmar la recepción, no al enviar.
+    expect([celda("bodega", "p1"), celda("store", "p1"), celda("bodega", "p2"), celda("store", "p2")]).toEqual([7, undefined, 4, undefined])
+    expect(falso.datos.traslados[0].estado).toBe("pendiente")
   })
 
   it("dos clics seguidos registran el traslado una sola vez", async () => {
@@ -584,6 +586,7 @@ describe("Traslados: historial", () => {
       "Productos",
       "Fecha",
       "Estado",
+      "Recepción",
       "Acciones",
     ])
 
@@ -596,6 +599,7 @@ describe("Traslados: historial", () => {
       "1 producto",
       fechaYHora(DEVOLUCION.creado_en),
       "Aplicado",
+      "Antes del control de recepción",
       "",
     ])
     expect(within(fila).getByText("1 producto")).toHaveAttribute("title", "Cargador × 2")
@@ -735,11 +739,11 @@ describe("Traslados: detalle", () => {
     const dialogo = abrirDetalle()
 
     expect(dato(dialogo, "Número")).toBe("TR-000001")
-    expect(dato(dialogo, "Fecha y hora")).toBe(aFecha(DEVOLUCION.creado_en))
+    expect(dato(dialogo, "Enviado")).toBe(aFecha(DEVOLUCION.creado_en))
     expect(dato(dialogo, "Origen")).toBe("Camión 01")
     expect(dato(dialogo, "Destino")).toBe("Lunacell Bodega")
     expect(dato(dialogo, "Estado")).toBe("Aplicado")
-    expect(dato(dialogo, "Usuario")).toBe("Administradora")
+    expect(dato(dialogo, "Enviado por")).toBe("Administradora")
     expect(dato(dialogo, "Nota")).toBe("Devolución de fin de ruta")
   })
 
@@ -754,9 +758,9 @@ describe("Traslados: detalle", () => {
       .map((fila) => within(fila).getAllByRole("cell").map((c) => c.textContent))
 
     expect(filas).toEqual([
-      ["Cargador", "2"],
-      ["Cable descontinuado", "3"],
-      ["Total", "5"],
+      ["Cargador", "C-1", "2"],
+      ["Cable descontinuado", "C-9", "3"],
+      ["Total de unidades", "5"],
     ])
   })
 
@@ -773,7 +777,7 @@ describe("Traslados: detalle", () => {
 
     const dialogo = abrirDetalle()
 
-    expect(dato(dialogo, "Usuario")).toBe("—")
+    expect(dato(dialogo, "Enviado por")).toBe("—")
     expect(dato(dialogo, "Nota")).toBe("—")
   })
 
@@ -1094,7 +1098,7 @@ describe("Traslados: filtros y Cargar más", () => {
     fireEvent.click(boton)
 
     const dialogo = screen.getByRole("dialog", { name: /detalle del traslado/i })
-    const usuario = within(dialogo).getAllByRole("term").find((dt) => dt.textContent === "Usuario")
+    const usuario = within(dialogo).getAllByRole("term").find((dt) => dt.textContent === "Enviado por")
     expect(usuario.nextElementSibling).toHaveTextContent("—")
     expect(within(dialogo).getByText("Cable descontinuado")).toBeInTheDocument()
 
@@ -1143,7 +1147,7 @@ describe("Traslados: autor visible para quien no es administrador", () => {
 
     fireEvent.click(within(filaDelTraslado()).getByRole("button", { name: /ver detalle/i }))
     const dialogo = screen.getByRole("dialog", { name: /detalle del traslado/i })
-    const usuario = within(dialogo).getAllByRole("term").find((dt) => dt.textContent === "Usuario")
+    const usuario = within(dialogo).getAllByRole("term").find((dt) => dt.textContent === "Enviado por")
     expect(usuario.nextElementSibling).toHaveTextContent("Carla Compañera")
   })
 
@@ -1155,7 +1159,7 @@ describe("Traslados: autor visible para quien no es administrador", () => {
 
     fireEvent.click(within(fila).getByRole("button", { name: /ver detalle/i }))
     const dialogo = screen.getByRole("dialog", { name: /detalle del traslado/i })
-    const usuario = within(dialogo).getAllByRole("term").find((dt) => dt.textContent === "Usuario")
+    const usuario = within(dialogo).getAllByRole("term").find((dt) => dt.textContent === "Enviado por")
     expect(usuario.nextElementSibling).toHaveTextContent("—")
     expect(within(dialogo).getByText("Reposición")).toBeInTheDocument()
   })

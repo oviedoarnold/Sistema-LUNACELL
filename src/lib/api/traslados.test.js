@@ -102,16 +102,17 @@ describe("registrar un traslado", () => {
     }
   })
 
-  it("mueve la existencia de origen a destino", async () => {
+  it("descuenta el origen y deja el traslado pendiente: el destino suma al recibir (0056)", async () => {
     const falso = montar()
 
     await registrarTraslado(traslado(), { clave: "tr-3" })
 
     const celda = (u) =>
-      falso.datos.inventario_ubicacion.find((c) => c.ubicacion_id === u).cantidad
+      falso.datos.inventario_ubicacion.find((c) => c.ubicacion_id === u)?.cantidad
 
     expect(celda("bodega")).toBe(7)
-    expect(celda("store")).toBe(3)
+    expect(celda("store")).toBeUndefined()
+    expect(falso.datos.traslados[0].estado).toBe("pendiente")
   })
 
   it("el reintento con la misma clave devuelve el mismo traslado y no mueve dos veces", async () => {
@@ -258,8 +259,8 @@ describe("el historial: nombres de los productos", () => {
     const { traslados: lista } = await traerTraslados()
 
     expect(lista.find((t) => t.id === "t1").items).toEqual([
-      { productId: "p1", productName: "Cargador", qty: 4 },
-      { productId: "p2", productName: "Cable descontinuado", qty: 2 },
+      { productId: "p1", productName: "Cargador", productCode: "", qty: 4 },
+      { productId: "p2", productName: "Cable descontinuado", productCode: "", qty: 2 },
     ])
   })
 
@@ -290,7 +291,7 @@ describe("el historial: nombres de los productos", () => {
 
     expect(lista).toHaveLength(3)
     expect(lista.find((t) => t.id === "t3").items).toEqual([
-      { productId: "p3", productName: "", qty: 5 },
+      { productId: "p3", productName: "", productCode: "", qty: 5 },
     ])
   })
 })

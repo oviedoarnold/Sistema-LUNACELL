@@ -26,6 +26,7 @@ import ModalDeCliente from "../components/documents/ModalDeCliente"
 import { useCarrito } from "../hooks/useCarrito"
 import { useExistenciaDeMiUbicacion } from "../hooks/useExistenciaDeMiUbicacion"
 import SelectorDeMedios, { AvisoDeMedios } from "../components/pagos/SelectorDeMedios"
+import AvisoDeRecepciones from "../components/transfers/AvisoDeRecepciones"
 import {
   cargoDeCobros,
   cobrosDelSelector,
@@ -1237,6 +1238,9 @@ function POS() {
         igual que en el resto del sistema.
       */}
       <PageHeader descripcion="Arma la venta, revisa el total y genera la factura." />
+
+      {/* Traslados por recibir (0056): solo informa, no toca la venta. */}
+      {!sinServidor && <AvisoDeRecepciones />}
 
       {mostrarEstado && (
         <EstadoSinConexion

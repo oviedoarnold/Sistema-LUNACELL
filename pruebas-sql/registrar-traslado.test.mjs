@@ -1,12 +1,13 @@
 /*
   Los traslados entre ubicaciones, contra PostgreSQL de verdad.
 
-  Un traslado mueve existencia de una ubicación a otra: descuenta el
-  origen, suma al destino y deja en el libro una salida y una entrada por
-  producto, todo ligado a una cabecera. Lo que se afirma aquí es que eso
-  ocurre entero o no ocurre, que dos operaciones sobre la misma existencia
-  se ordenan sin bloquearse para siempre, y que el stock global no cambia:
-  trasladar no crea ni destruye mercadería.
+  Un traslado mueve existencia de una ubicación a otra. Desde la 0056 en
+  dos tiempos: enviar descuenta el origen y anota la salida, y el traslado
+  queda pendiente; recibir suma al destino y anota la entrada. Todo ligado
+  a una cabecera. Lo que se afirma aquí es que cada tiempo ocurre entero o
+  no ocurre, que dos operaciones sobre la misma existencia se ordenan sin
+  bloquearse para siempre, y que, una vez recibido, el stock global no
+  cambia: trasladar no crea ni destruye mercadería.
 */
 
 import { describe, it, expect, beforeAll, afterAll } from "vitest"
@@ -166,10 +167,43 @@ const stockGlobal = async (producto) => {
   return Number(r.rows[0].stock)
 }
 
+/*
+  Desde la 0056 el envío deja el traslado pendiente: el destino suma cuando
+  alguien de esa ubicación confirma la recepción. Cada ubicación tiene aquí
+  su receptor, un vendedor con inventory-own (las reglas de quién recibe se
+  prueban en recepcion-de-traslados.test.mjs).
+*/
+const receptores = new Map()
+
+async function receptorDe(e, ubicacion) {
+  const clave = `${e.empresa}|${ubicacion}`
+
+  if (!receptores.has(clave)) {
+    receptores.set(clave, await crearVendedor(db, { empresa: e.empresa, ubicacion, permisos: ["inventory-own"] }))
+  }
+
+  return receptores.get(clave)
+}
+
+async function recibir(e, res) {
+  const quien = await receptorDe(e, res.destino_id)
+  const r = await como(quien.authId, "select confirmar_recepcion_traslado($1) as res", [res.traslado_id])
+
+  return { ...r.rows[0].res, receptor: quien }
+}
+
+async function trasladarYRecibir(authId, e, datos) {
+  const res = await trasladar(authId, datos)
+
+  await recibir(e, res)
+
+  return res
+}
+
 // ── EL TRASLADO QUE FUNCIONA ──────────────────────────────
 
 describe("el traslado normal", () => {
-  it("1. mueve la existencia de origen a destino y lo deja todo enlazado", async () => {
+  it("1. enviar descuenta el origen y queda pendiente; recibir suma al destino y lo deja todo enlazado", async () => {
     const e = await escenario()
 
     const res = await trasladar(e.authId, {
@@ -182,26 +216,29 @@ describe("el traslado normal", () => {
     expect(res).toMatchObject({
       origen_id: e.bodega,
       destino_id: e.store,
-      estado: "aplicado",
+      estado: "pendiente",
       repetida: false,
       items: [{ producto_id: e.cargador, cantidad: 4 }],
     })
 
     expect(await existencia(e.bodega, e.cargador)).toBe(6)
-    expect(await existencia(e.store, e.cargador)).toBe(4)
+    expect(await existencia(e.store, e.cargador)).toBeNull()
 
-    const cabecera = await db.query(
-      "select empresa_id, usuario_id, origen_id, destino_id, estado, nota from traslados where id = $1",
-      [res.traslado_id]
-    )
+    const cabecera = async () =>
+      (await db.query(
+        "select empresa_id, usuario_id, origen_id, destino_id, estado, nota, unidades, recibido_por from traslados where id = $1",
+        [res.traslado_id]
+      )).rows[0]
 
-    expect(cabecera.rows[0]).toEqual({
+    expect(await cabecera()).toEqual({
       empresa_id: e.empresa,
       usuario_id: e.usuario,
       origen_id: e.bodega,
       destino_id: e.store,
-      estado: "aplicado",
+      estado: "pendiente",
       nota: "Reposición de vitrina",
+      unidades: 4,
+      recibido_por: null,
     })
 
     const detalle = await db.query(
@@ -211,24 +248,33 @@ describe("el traslado normal", () => {
 
     expect(detalle.rows).toEqual([{ producto_id: e.cargador, cantidad: 4 }])
 
-    const movimientos = await db.query(
-      `select ubicacion_id, tipo, cantidad, usuario_id, venta_id
-         from movimientos_inventario
-        where traslado_id = $1
-        order by cantidad`,
-      [res.traslado_id]
-    )
+    const movimientos = async () =>
+      (await db.query(
+        `select ubicacion_id, tipo, cantidad, usuario_id, venta_id
+           from movimientos_inventario
+          where traslado_id = $1
+          order by cantidad`,
+        [res.traslado_id]
+      )).rows
 
-    expect(movimientos.rows).toEqual([
+    expect(await movimientos()).toEqual([
       { ubicacion_id: e.bodega, tipo: "traslado_salida", cantidad: -4, usuario_id: e.usuario, venta_id: null },
-      { ubicacion_id: e.store, tipo: "traslado_entrada", cantidad: 4, usuario_id: e.usuario, venta_id: null },
+    ])
+
+    const { receptor } = await recibir(e, res)
+
+    expect(await existencia(e.store, e.cargador)).toBe(4)
+    expect(await cabecera()).toMatchObject({ estado: "recibido", recibido_por: receptor.usuario })
+    expect(await movimientos()).toEqual([
+      { ubicacion_id: e.bodega, tipo: "traslado_salida", cantidad: -4, usuario_id: e.usuario, venta_id: null },
+      { ubicacion_id: e.store, tipo: "traslado_entrada", cantidad: 4, usuario_id: receptor.usuario, venta_id: null },
     ])
   })
 
   it("2. varios productos en un solo traslado", async () => {
     const e = await escenario()
 
-    const res = await trasladar(e.authId, {
+    const res = await trasladarYRecibir(e.authId, e, {
       origen: e.bodega,
       destino: e.camion1,
       items: [renglon(e.cargador, 3), renglon(e.cubo, 2)],
@@ -264,25 +310,29 @@ describe("el traslado normal", () => {
     expect(await existencia(e.bodega, e.cargador)).toBe(5)
   })
 
-  it("4. crea la existencia del destino cuando no la había", async () => {
+  it("4. crea la existencia del destino al recibir, cuando no la había", async () => {
     const e = await escenario()
 
     expect(await existencia(e.camion2, e.cubo)).toBeNull()
 
-    await trasladar(e.authId, {
+    const res = await trasladar(e.authId, {
       origen: e.bodega,
       destino: e.camion2,
       items: [renglon(e.cubo, 6)],
     })
 
-    expect(await existencia(e.camion2, e.cubo)).toBe(6)
+    expect(await existencia(e.camion2, e.cubo)).toBeNull()
     expect(await existencia(e.bodega, e.cubo)).toBe(0)
+
+    await recibir(e, res)
+
+    expect(await existencia(e.camion2, e.cubo)).toBe(6)
   })
 
   it("5. el motivo de cada movimiento dice de dónde viene y a dónde va", async () => {
     const e = await escenario()
 
-    const res = await trasladar(e.authId, {
+    const res = await trasladarYRecibir(e.authId, e, {
       origen: e.bodega,
       destino: e.store,
       items: [renglon(e.cargador, 1)],
@@ -424,8 +474,8 @@ describe("quién puede trasladar", () => {
   it("14. el administrador traslada entre cualquier par de ubicaciones activas", async () => {
     const e = await escenario()
 
-    await trasladar(e.authId, { origen: e.bodega, destino: e.camion2, items: [renglon(e.cargador, 2)] })
-    await trasladar(e.authId, { origen: e.camion2, destino: e.store, items: [renglon(e.cargador, 1)] })
+    await trasladarYRecibir(e.authId, e, { origen: e.bodega, destino: e.camion2, items: [renglon(e.cargador, 2)] })
+    await trasladarYRecibir(e.authId, e, { origen: e.camion2, destino: e.store, items: [renglon(e.cargador, 1)] })
 
     expect(await existencia(e.camion2, e.cargador)).toBe(1)
     expect(await existencia(e.store, e.cargador)).toBe(1)
@@ -439,7 +489,7 @@ describe("quién puede trasladar", () => {
       permisos: ["inventory-all"],
     })
 
-    const res = await trasladar(v.authId, {
+    const res = await trasladarYRecibir(v.authId, e, {
       origen: e.bodega,
       destino: e.camion1,
       items: [renglon(e.cargador, 2)],
@@ -458,7 +508,7 @@ describe("quién puede trasladar", () => {
   it("16. con inventory-own se traslada desde la ubicación propia", async () => {
     const e = await escenario()
 
-    await trasladar(e.authId, { origen: e.bodega, destino: e.camion1, items: [renglon(e.cargador, 5)] })
+    await trasladarYRecibir(e.authId, e, { origen: e.bodega, destino: e.camion1, items: [renglon(e.cargador, 5)] })
 
     const v = await crearVendedor(db, {
       empresa: e.empresa,
@@ -466,7 +516,7 @@ describe("quién puede trasladar", () => {
       permisos: ["inventory-own"],
     })
 
-    await trasladar(v.authId, { origen: e.camion1, destino: e.bodega, items: [renglon(e.cargador, 2)] })
+    await trasladarYRecibir(v.authId, e, { origen: e.camion1, destino: e.bodega, items: [renglon(e.cargador, 2)] })
 
     expect(await existencia(e.camion1, e.cargador)).toBe(3)
     expect(await existencia(e.bodega, e.cargador)).toBe(7)
@@ -548,29 +598,30 @@ describe("aislamiento entre empresas", () => {
 
 describe("o entra todo o no entra nada", () => {
   /*
-    El caso difícil: el origen ya se descontó y la salida ya se anotó, y lo
-    que falla es la entrada del destino. Se provoca con una restricción
-    puesta solo para la prueba. Si el traslado no fuera atómico, la bodega
-    perdería unidades que la tienda nunca recibió.
+    El caso difícil del envío: la cabecera y el detalle ya se escribieron y
+    el origen ya se descontó, y lo que falla es la salida en el libro. Se
+    provoca con una restricción puesta solo para la prueba. Si el envío no
+    fuera atómico, quedaría un traslado pendiente sin su salida. (La
+    atomicidad de la recepción está en recepcion-de-traslados.test.mjs.)
   */
-  it("23. si falla la entrada en destino no queda nada del traslado", async () => {
+  it("23. si falla la salida del origen no queda nada del traslado", async () => {
     const e = await escenario()
 
     const cabeceras = await contar(db, "traslados")
     const movimientos = await contar(db, "movimientos_inventario")
 
-    // NOT VALID: las entradas de las pruebas anteriores no cuentan, solo las nuevas.
+    // NOT VALID: las salidas de las pruebas anteriores no cuentan, solo las nuevas.
     await db.query(
       `alter table movimientos_inventario
-         add constraint prueba_sin_entradas check (tipo <> 'traslado_entrada') not valid`
+         add constraint prueba_sin_salidas check (tipo <> 'traslado_salida') not valid`
     )
 
     try {
       await expect(
         trasladar(e.authId, { origen: e.bodega, destino: e.store, items: [renglon(e.cargador, 3)] })
-      ).rejects.toThrow(/prueba_sin_entradas/)
+      ).rejects.toThrow(/prueba_sin_salidas/)
     } finally {
-      await db.query("alter table movimientos_inventario drop constraint prueba_sin_entradas")
+      await db.query("alter table movimientos_inventario drop constraint prueba_sin_salidas")
     }
 
     expect(await contar(db, "traslados")).toBe(cabeceras)
@@ -598,9 +649,15 @@ describe("idempotencia", () => {
 
     expect(segunda.traslado_id).toBe(primera.traslado_id)
     expect(segunda.repetida).toBe(true)
+    expect(segunda.estado).toBe("pendiente")
     expect(await existencia(e.bodega, e.cargador)).toBe(8)
-    expect(await existencia(e.store, e.cargador)).toBe(2)
+    expect(await existencia(e.store, e.cargador)).toBeNull()
     expect(await contar(db, "traslados", "empresa_id = $1", [e.empresa])).toBe(1)
+
+    await recibir(e, primera)
+
+    expect(await existencia(e.store, e.cargador)).toBe(2)
+    expect((await trasladar(e.authId, datos)).estado).toBe("recibido")
   })
 
   it("25. la misma clave con otro contenido → LT006", async () => {
@@ -649,6 +706,11 @@ describe("idempotencia", () => {
 
     expect(await contar(db, "traslados", "empresa_id = $1", [e.empresa])).toBe(1)
     expect(await existencia(e.bodega, e.cargador)).toBe(7)
+    expect(await existencia(e.store, e.cargador)).toBeNull()
+
+    const { traslado_id } = (await db.query("select id as traslado_id from traslados where empresa_id = $1", [e.empresa])).rows[0]
+    await recibir(e, { traslado_id, destino_id: e.store })
+
     expect(await existencia(e.store, e.cargador)).toBe(3)
   })
 })
@@ -722,42 +784,40 @@ describe("concurrencia", () => {
   })
 
   /*
-    El caso del deadlock: A→B y B→A a la vez, con dos productos y en orden
-    distinto. Si cada traslado bloqueara en el orden en que llegan sus
-    renglones, A tomaría (cargador, bodega) y B (cubo, store), y cada uno
-    esperaría por el otro para siempre. Con un único orden global
-    (producto, ubicación) el segundo espera al primero y los dos entran.
+    A→B y B→A a la vez, con dos productos y en orden distinto. Hasta la 0055
+    cada traslado bloqueaba origen y destino, y era el caso del deadlock que
+    el orden global (producto, ubicación) evitaba. Desde la 0056 enviar solo
+    bloquea su origen: los dos envíos no comparten celdas, no se esperan y
+    los dos entran. El caso de espera pasó a ser recibir en una ubicación
+    mientras se envía desde ella (recepcion-de-traslados.test.mjs).
   */
-  it("30. A→B y B→A simultáneos con dos productos no se bloquean entre sí", async () => {
+  it("30. A→B y B→A simultáneos con dos productos entran los dos sin bloquearse", async () => {
     const e = await escenario()
 
-    await trasladar(e.authId, {
+    await trasladarYRecibir(e.authId, e, {
       origen: e.bodega,
       destino: e.store,
       items: [renglon(e.cargador, 5), renglon(e.cubo, 3)],
     })
 
-    const { error, espera } = await enDosSesiones(base, db, {
-      primera: {
-        authId: e.authId,
-        hacer: trasladarEn({
-          origen: e.bodega,
-          destino: e.store,
-          items: [renglon(e.cargador, 1), renglon(e.cubo, 1)],
-        }),
-      },
-      segunda: {
-        authId: e.authId,
-        hacer: trasladarEn({
-          origen: e.store,
-          destino: e.bodega,
-          items: [renglon(e.cubo, 2), renglon(e.cargador, 2)],
-        }),
-      },
-    })
+    const a = await base.conectar()
+    const b = await base.conectar()
+    let resultados
 
-    expect(espera).toMatch(/^Lock\//)
-    expect(error).toBeUndefined()
+    try {
+      await comoUsuario(a, e.authId)
+      await comoUsuario(b, e.authId)
+
+      resultados = await Promise.all([
+        trasladarEn({ origen: e.bodega, destino: e.store, items: [renglon(e.cargador, 1), renglon(e.cubo, 1)] })(a),
+        trasladarEn({ origen: e.store, destino: e.bodega, items: [renglon(e.cubo, 2), renglon(e.cargador, 2)] })(b),
+      ])
+    } finally {
+      await a.end()
+      await b.end()
+    }
+
+    for (const r of resultados) await recibir(e, r.rows[0].res)
 
     // Bodega: 5 − 1 + 2 = 6 cargadores; 3 − 1 + 2 = 4 cubos.
     expect(await existencia(e.bodega, e.cargador)).toBe(6)
@@ -770,7 +830,7 @@ describe("concurrencia", () => {
 // ── LA INVARIANTE ─────────────────────────────────────────
 
 describe("el libro y las celdas dicen lo mismo", () => {
-  it("31. tras varios traslados y un rechazo, libro y celdas coinciden y el stock global no cambia", async () => {
+  it("31. tras varios traslados y un rechazo, libro y celdas coinciden y, recibido todo, el stock global no cambia", async () => {
     const e = await escenario()
 
     const antes = await stockGlobal(e.cargador)
@@ -784,11 +844,20 @@ describe("el libro y las celdas dicen lo mismo", () => {
     ]
 
     for (const paso of pasos) {
-      await trasladar(e.authId, paso).catch(() => {})
+      await trasladarYRecibir(e.authId, e, paso).catch(() => {})
     }
 
-    expect(await existencia(e.bodega, e.cargador)).toBe(4)
-    expect(await existencia(e.store, e.cargador)).toBe(4)
+    // Lo que va en camino no está en ninguna celda, y el libro lo dice igual.
+    const enCamino = await trasladar(e.authId, { origen: e.bodega, destino: e.store, items: [renglon(e.cargador, 1)] })
+
+    expect(await celdas(e.cargador)).toBe(9)
+    expect(await libro(e.cargador)).toBe(9)
+    expect(await stockGlobal(e.cargador)).toBe(antes - 1)
+
+    await recibir(e, enCamino)
+
+    expect(await existencia(e.bodega, e.cargador)).toBe(3)
+    expect(await existencia(e.store, e.cargador)).toBe(5)
     expect(await existencia(e.camion1, e.cargador)).toBe(1)
     expect(await existencia(e.camion2, e.cargador)).toBe(1)
     expect(await celdas(e.cargador)).toBe(10)

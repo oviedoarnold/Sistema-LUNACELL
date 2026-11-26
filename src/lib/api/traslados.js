@@ -3,11 +3,14 @@ import { supabase } from "../supabase"
 /*
   Traslados de existencia entre ubicaciones.
 
-  Escribir es UNA llamada a registrar_traslado(), que en una sola
-  transacción descuenta el origen, suma al destino y deja la salida y la
-  entrada en el libro. El navegador solo dice de dónde, hacia dónde, qué
-  productos y cuántos: empresa, usuario y existencias los decide la base,
-  y las tablas de traslados no se escriben desde aquí.
+  Desde la 0056, en dos tiempos. Enviar es UNA llamada a
+  registrar_traslado(): descuenta el origen, anota la salida y deja el
+  traslado pendiente. Recibir es confirmar_recepcion_traslado(): suma al
+  destino y anota la entrada, con quién recibió y cuándo. Si lo recibido no
+  coincide, reportar_incidencia_traslado() lo deja con incidencia. El
+  navegador solo dice qué traslado y, si hace falta, la observación:
+  empresa, usuario, permisos y existencias los decide la base, y las
+  tablas de traslados no se escriben desde aquí.
 */
 
 function fallo(error, queHacia) {
@@ -27,6 +30,14 @@ const MOTIVOS_DE_TRASLADO = {
   LT004: "producto-invalido",
   LT005: "existencia-insuficiente",
   LT006: "clave-reusada",
+  // Recepción (0056). El mensaje de la base dice qué hacer.
+  LT010: "traslado-no-encontrado",
+  LT011: "estado-no-admite",
+  LT012: "destino-inactivo",
+  LT013: "falta-observacion",
+  LT014: "contenido-cambiado",
+  LT015: "incidencia-repetida",
+  LT016: "incidencia-invalida",
   42501: "sin-permiso",
 }
 
@@ -62,25 +73,58 @@ export async function registrarTraslado(
     p_clave_idempotencia: clave,
   })
 
-  if (error) {
-    const motivo = MOTIVOS_DE_TRASLADO[error.code]
-
-    /*
-      Los rechazos de negocio llevan el mensaje del motor, que ya dice qué
-      hacer: cuánto hay y en qué ubicación, o que el origen no es el suyo.
-    */
-    if (motivo) {
-      throw new ErrorDeTraslado(error.message, motivo, error.code)
-    }
-
-    fallo(error, "registrar el traslado")
-  }
+  /*
+    Los rechazos de negocio llevan el mensaje del motor, que ya dice qué
+    hacer: cuánto hay y en qué ubicación, o que el origen no es el suyo.
+  */
+  if (error) rechazoDeTraslado(error, "registrar el traslado")
 
   return data.traslado_id
 }
 
+/*
+  Un rechazo de negocio con el mensaje del motor; cualquier otro, genérico.
+*/
+function rechazoDeTraslado(error, queHacia) {
+  const motivo = MOTIVOS_DE_TRASLADO[error.code]
+
+  if (motivo) throw new ErrorDeTraslado(error.message, motivo, error.code)
+
+  fallo(error, queHacia)
+}
+
+/*
+  Confirma la recepción física de un traslado pendiente. La observación
+  solo la pide la base en una confirmación administrativa. Reintentar es
+  seguro: si ya estaba recibido responde lo mismo, sin volver a sumar.
+*/
+export async function confirmarRecepcion(trasladoId, observacion = null) {
+  const { data, error } = await supabase.rpc("confirmar_recepcion_traslado", {
+    p_traslado: trasladoId,
+    p_observacion: observacion,
+  })
+
+  if (error) rechazoDeTraslado(error, "confirmar la recepción")
+
+  return data
+}
+
+// Reporta la única incidencia del traslado; no suma ni resta nada.
+export async function reportarIncidencia(trasladoId, nota) {
+  const { data, error } = await supabase.rpc("reportar_incidencia_traslado", {
+    p_traslado: trasladoId,
+    p_nota: nota,
+  })
+
+  if (error) rechazoDeTraslado(error, "reportar la incidencia")
+
+  return data
+}
+
 const COLUMNAS = `
-  id, numero, origen_id, destino_id, usuario_id, estado, nota, creado_en,
+  id, numero, origen_id, destino_id, usuario_id, estado, nota, creado_en, unidades,
+  recibido_por, recibido_por_nombre, recibido_en, confirmacion_administrativa, observacion_recepcion,
+  incidencia, incidencia_por_nombre, incidencia_en,
   traslado_detalle (*)
 `
 
@@ -118,12 +162,15 @@ async function nombresDeProductos(filas) {
 
   if (ids.length === 0) return new Map()
 
-  const { data, error } = await supabase.from("productos").select("id, nombre").in("id", ids)
+  const { data, error } = await supabase.from("productos").select("id, nombre, codigo").in("id", ids)
 
   if (error) return new Map()
 
-  return new Map((data || []).map((p) => [p.id, p.nombre]))
+  return new Map((data || []).map((p) => [p.id, { nombre: p.nombre, codigo: p.codigo || "" }]))
 }
+
+// El producto puede llegar como nombre suelto o como { nombre, codigo }.
+const datosDelProducto = (valor) => (typeof valor === "string" ? { nombre: valor, codigo: "" } : valor || { nombre: "", codigo: "" })
 
 export const aTrasladoDeApp = (fila, nombres = new Map(), productos = new Map()) => ({
   id: fila.id,
@@ -139,10 +186,51 @@ export const aTrasladoDeApp = (fila, nombres = new Map(), productos = new Map())
   timestamp: new Date(fila.creado_en).getTime(),
   items: (fila.traslado_detalle || []).map((d) => ({
     productId: d.producto_id,
-    productName: productos.get(d.producto_id) || "",
+    productName: datosDelProducto(productos.get(d.producto_id)).nombre,
+    productCode: datosDelProducto(productos.get(d.producto_id)).codigo,
     qty: Number(d.cantidad),
   })),
+  // Recepción (0056). Un traslado «aplicado» es de antes del control: no tiene.
+  units: fila.unidades ?? (fila.traslado_detalle || []).reduce((suma, d) => suma + Number(d.cantidad), 0),
+  receivedById: fila.recibido_por || null,
+  receivedBy: fila.recibido_por_nombre || "",
+  receivedAt: fila.recibido_en || null,
+  administrative: Boolean(fila.confirmacion_administrativa),
+  receptionNote: fila.observacion_recepcion || "",
+  incident: fila.incidencia || "",
+  incidentBy: fila.incidencia_por_nombre || "",
+  incidentAt: fila.incidencia_en || null,
 })
+
+// Los estados que esperan una recepción.
+export const ESTADOS_POR_RECIBIR = ["pendiente", "con_incidencia"]
+
+/*
+  Los traslados que este usuario puede recibir, del más antiguo al más
+  reciente. El administrador, todos los de su empresa; los demás, los que
+  van a su ubicación operativa y no envió él. La base lo vuelve a comprobar
+  al confirmar: esto solo decide qué se le muestra.
+*/
+export async function traerPorRecibir({ esAdmin = false, ubicacionId = "", usuarioId = "" } = {}) {
+  if (!esAdmin && (!ubicacionId || !IDENTIFICADOR.test(ubicacionId))) return []
+
+  let consulta = supabase.from("traslados").select(COLUMNAS).in("estado", ESTADOS_POR_RECIBIR)
+
+  if (!esAdmin) consulta = consulta.eq("destino_id", ubicacionId)
+
+  const { data, error } = await consulta.order("creado_en", { ascending: true }).order("id", { ascending: true })
+
+  if (error) fallo(error, "cargar los traslados por recibir")
+
+  // Lo que envió él mismo no es suyo para recibir (salvo el administrador).
+  const filas = (data || []).filter((fila) => esAdmin || !usuarioId || fila.usuario_id !== usuarioId)
+
+  if (filas.length === 0) return []
+
+  const [nombres, productos] = await Promise.all([nombresDeUsuarios(filas), nombresDeProductos(filas)])
+
+  return filas.map((fila) => aTrasladoDeApp(fila, nombres, productos))
+}
 
 // Cuántos traslados trae cada página del historial.
 export const TAMANO_PAGINA = 25

@@ -2,6 +2,7 @@ import { NavLink } from "react-router-dom"
 import { FaSignOutAlt, FaTimes } from "react-icons/fa"
 
 import { useAuth } from "../../hooks/useAuth"
+import { useTrasladosPorRecibir } from "../../hooks/useTrasladosPorRecibir"
 import LogoLunacell from "../LogoLunacell"
 import { GRUPOS_DEL_MENU } from "./menuDelPanel"
 import { datosDeLaCuenta, useCerrarSesion } from "./useCerrarSesion"
@@ -29,6 +30,10 @@ function Sidebar({ abierto = false, onCerrar = () => {} }) {
   const { user, hasPermission, isAdmin } = useAuth()
   const cerrarSesion = useCerrarSesion()
   const cuenta = datosDeLaCuenta(user)
+
+  // Los contadores que un módulo puede pedir junto a su nombre (0056).
+  const { cantidad: porRecibir } = useTrasladosPorRecibir()
+  const avisos = { "traslados-por-recibir": porRecibir }
 
   const gruposVisibles = GRUPOS_DEL_MENU.map((grupo) => ({
     ...grupo,
@@ -63,7 +68,7 @@ function Sidebar({ abierto = false, onCerrar = () => {} }) {
           <div className="sidebar-grupo" key={grupo.titulo}>
             <p className="sidebar-grupo-titulo">{grupo.titulo}</p>
 
-            {grupo.modulos.map(({ to, label, Icono }) => (
+            {grupo.modulos.map(({ to, label, Icono, aviso }) => (
               <NavLink
                 key={to}
                 to={to}
@@ -74,6 +79,12 @@ function Sidebar({ abierto = false, onCerrar = () => {} }) {
               >
                 <Icono aria-hidden="true" />
                 <span>{label}</span>
+                {avisos[aviso] > 0 && (
+                  <span className="sidebar-contador">
+                    <span aria-hidden="true">{avisos[aviso]}</span>
+                    <span className="solo-lector">, {avisos[aviso] === 1 ? "1 por recibir" : `${avisos[aviso]} por recibir`}</span>
+                  </span>
+                )}
               </NavLink>
             ))}
           </div>

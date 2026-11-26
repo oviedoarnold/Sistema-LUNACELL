@@ -186,7 +186,8 @@ export function useNuevoTraslado({
 
       await alRegistrar()
 
-      Swal.fire({ icon: "success", title: "Traslado registrado" })
+      // Desde la 0056 el destino lo suma al confirmar la recepción.
+      Swal.fire({ icon: "success", title: "Traslado enviado", text: `Queda pendiente de recepción en ${nombreUbicacion(destino)}.` })
     } catch (problema) {
       Swal.fire({ icon: "error", title: "No se pudo trasladar", text: problema.message })
     } finally {

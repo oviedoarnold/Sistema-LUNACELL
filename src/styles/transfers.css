@@ -518,3 +518,125 @@
     width: 100%;
   }
 }
+
+/* ── RECEPCIÓN (0056) ───────────────────────────────────── */
+
+/* «Por recibir»: arriba del historial, solo cuando hay algo que recibir. */
+.transfers .transfers-por-recibir {
+  margin-bottom: var(--space-5);
+  padding: var(--space-4);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-left: 4px solid var(--amber);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
+}
+
+.transfers .transfers-por-recibir-titulo {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0 0 var(--space-3);
+  font-family: var(--font-display);
+  font-size: 17px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.transfers .transfers-por-recibir-cantidad {
+  min-width: 22px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--amber-light);
+  color: #7A5300;
+  font-size: 12.5px;
+  font-weight: 700;
+  text-align: center;
+}
+
+.transfers .transfers-recepcion {
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.transfers .transfers-administrativa {
+  display: block;
+  font-size: 11.5px;
+  font-weight: 700;
+  color: #2450A6;
+}
+
+/* La confirmación administrativa y la incidencia, en el detalle. */
+.transfers-aviso {
+  margin: var(--space-3) 0;
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+}
+
+.transfers-aviso h4 {
+  margin: 0 0 var(--space-1);
+  font-size: 14px;
+}
+
+.transfers-aviso p {
+  margin: 0;
+  font-size: 13.5px;
+}
+
+.transfers-aviso .transfers-aviso-nota {
+  margin-top: var(--space-1);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  color: var(--text-primary);
+}
+
+.transfers-aviso-administrativo {
+  background: #E8EFFD;
+  border-color: #D2DEF8;
+}
+
+.transfers-aviso-incidencia {
+  background: #FDECEB;
+  border-color: #F6D2CF;
+}
+
+/* Aviso discreto en el POS: una línea, no bloquea nada. */
+.aviso-recepciones {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin: 0 0 var(--space-3);
+  padding: 8px var(--space-3);
+  border: 1px solid #F3E0A6;
+  border-radius: var(--radius-sm);
+  background: #FFF5D9;
+  color: #7A5300;
+  font-size: 13.5px;
+}
+
+.aviso-recepciones svg {
+  flex: none;
+}
+
+.aviso-recepciones a {
+  margin-left: auto;
+  font-weight: 700;
+  color: #7A5300;
+}
+
+@media (max-width: 640px) {
+  .transfers .transfers-por-recibir {
+    padding: var(--space-3);
+  }
+
+  .transfers .transfers-por-recibir .btn {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .aviso-recepciones a {
+    margin-left: 0;
+  }
+}
