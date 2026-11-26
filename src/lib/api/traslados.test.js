@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
 
-import { registrarTraslado, traerTraslados, ErrorDeTraslado, TAMANO_PAGINA } from "./traslados"
+import { registrarTraslado, traerTraslado, traerTraslados, ErrorDeTraslado, MAXIMO_POR_CONSULTA, TAMANO_PAGINA } from "./traslados"
 import { crearSupabaseFalso } from "../../test/supabaseFalso"
 
 vi.mock("../supabase", () => ({
@@ -334,6 +334,55 @@ describe("el historial: páginas", () => {
 
   const consultasA = (falso, tabla) =>
     falso.from.mock.calls.filter(([nombre]) => nombre === tabla).length
+
+  /*
+    El refresco entre dispositivos vuelve a pedir de una vez las filas ya
+    cargadas: lo mismo que las páginas, en el mismo orden, sin perder ni
+    repetir ninguna.
+  */
+  it("con `cantidad` trae de una vez lo mismo que esas páginas, en el mismo orden", async () => {
+    const total = TAMANO_PAGINA * 2 + 3
+    montarMuchos(total)
+
+    const primera = await traerTraslados()
+    const segunda = await traerTraslados({}, { inicio: TAMANO_PAGINA })
+    const deUnaVez = await traerTraslados({}, { cantidad: TAMANO_PAGINA * 2 })
+
+    expect(ids(deUnaVez)).toEqual([...ids(primera), ...ids(segunda)])
+    expect(deUnaVez.hayMas).toBe(true)
+    expect((await traerTraslados({}, { cantidad: total })).hayMas).toBe(false)
+  })
+
+  it("con la misma fecha y hora, `cantidad` desempata por id igual que las páginas", async () => {
+    montarMuchos(TAMANO_PAGINA * 2, { mismaHora: true })
+
+    const paginas = [...ids(await traerTraslados()), ...ids(await traerTraslados({}, { inicio: TAMANO_PAGINA }))]
+
+    expect(ids(await traerTraslados({}, { cantidad: TAMANO_PAGINA * 2 }))).toEqual(paginas)
+  })
+
+  it.each([0, -1, 1.5, MAXIMO_POR_CONSULTA + 1, "25"])("una cantidad %p se rechaza sin consultar", async (cantidad) => {
+    const falso = montarMuchos(3)
+
+    await expect(traerTraslados({}, { cantidad })).rejects.toThrow(/cantidad/i)
+    expect(consultasA(falso, "traslados")).toBe(0)
+  })
+
+  it("el máximo por consulta queda por debajo del tope de filas de Supabase", () => {
+    expect(MAXIMO_POR_CONSULTA + 1).toBeLessThanOrEqual(1000)
+  })
+
+  it("un traslado por su id trae su estado y su recepción; si no existe, null", async () => {
+    const traslados = [{ ...muchos(1)[0], estado: "recibido", recibido_por_nombre: "Beto", recibido_en: "2026-11-26T15:45:00Z" }]
+    montar({ tablas: { traslados, traslado_detalle: conDetalle(traslados) } })
+
+    const uno = await traerTraslado("t000")
+
+    expect(uno).toMatchObject({ id: "t000", status: "recibido", receivedBy: "Beto" })
+    expect(uno.items).toEqual([{ productId: "p1", qty: 1, productName: "Cargador", productCode: "" }])
+    expect(await traerTraslado("no-existe")).toBeNull()
+    expect(await traerTraslado("id con espacios")).toBeNull()
+  })
 
   it("la primera página trae los más recientes y avisa que hay más", async () => {
     montarMuchos(TAMANO_PAGINA * 2 + 3)
