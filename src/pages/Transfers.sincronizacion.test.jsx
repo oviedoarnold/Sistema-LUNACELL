@@ -8,13 +8,6 @@ import { CADA_CUANTO } from "../hooks/useTraslados"
 import { renderizarPantalla } from "../test/pantallas"
 import Transfers from "./Transfers"
 
-vi.mock("../lib/supabase", () => ({
-  get supabase() {
-    return globalThis.__supabaseFalso
-  },
-  hayConexionConfigurada: true,
-}))
-
 /*
   Traslados al día entre dispositivos. El remitente deja la pantalla
   abierta en su PC; quien recibe confirma o reporta desde su teléfono. Aquí
@@ -23,15 +16,20 @@ vi.mock("../lib/supabase", () => ({
   30 s se adelanta a mano. La pantalla no se recarga nunca.
 */
 
-const PRODUCTOS = [
-  { id: "p1", code: "C-1", name: "Cargador", category: "Accesorios", price: 120, stock: 10, minStock: 1 },
-  { id: "p2", code: "C-2", name: "Cubo Iphone", category: "Accesorios", price: 100, stock: 6, minStock: 1 },
-]
-
+const producto = (id, code, name, price) => ({ id, code, name, category: "Accesorios", price, stock: 10, minStock: 1 })
+const PRODUCTOS = [producto("p1", "C-1", "Cargador", 120), producto("p2", "C-2", "Cubo Iphone", 100)]
 const UBICACIONES = [
-  { id: "bodega", name: "Lunacell Bodega", type: "bodega" },
-  { id: "store", name: "Ruta local", type: "camion" },
-]
+  ["bodega", "Lunacell Bodega", "bodega"],
+  ["store", "Ruta local", "camion"],
+].map(([id, name, type]) => ({ id, name, type }))
+
+// La pantalla habla con el doble de Supabase de la prueba (vi.mock se eleva al inicio).
+vi.mock("../lib/supabase", () => ({
+  hayConexionConfigurada: true,
+  get supabase() {
+    return globalThis.__supabaseFalso
+  },
+}))
 
 const PENDIENTE = {
   id: "t-pend",
@@ -71,32 +69,35 @@ const CON_INCIDENCIA = {
   incidencia_en: "2026-11-26T15:44:00Z",
 }
 
-function renderTraslados({ rol = "admin", permisos = ["inventory-all", "inventory-own"], ubicacion = "bodega", fallarEn = {} } = {}) {
-  return renderizarPantalla(
-    <AuthProvider>
-      <ProductProvider>
-        <LocationsProvider>
-          <Transfers />
-        </LocationsProvider>
-      </ProductProvider>
-    </AuthProvider>,
-    {
-      productos: PRODUCTOS,
-      ubicaciones: UBICACIONES,
-      existencias: [{ locationId: "bodega", productId: "p1", quantity: 7 }],
-      rolDelUsuario: rol,
-      permisosDelUsuario: permisos,
-      ubicacionOperativa: ubicacion,
-      otrosUsuarios: [
-        { id: "u-gladys", nombre: "Gladys Luna", ubicacion_id: "bodega" },
-        { id: "u-ruta", nombre: "Vendedor Ruta", ubicacion_id: "store" },
-      ],
-      traslados: [PENDIENTE, ANTERIOR],
-      fallarEn,
-      esperar: ["productos_con_stock", "ubicaciones", "existencias_por_ubicacion", "traslados"],
-    }
-  )
-}
+// El administrador de Lunacell Bodega, que envió el traslado y deja la pantalla abierta.
+const REMITENTE = { rolDelUsuario: "admin", permisosDelUsuario: ["inventory-all", "inventory-own"], ubicacionOperativa: "bodega" }
+
+const PERSONAS = [
+  ["u-gladys", "Gladys Luna", "bodega"],
+  ["u-ruta", "Vendedor Ruta", "store"],
+].map(([id, nombre, ubicacion_id]) => ({ id, nombre, ubicacion_id }))
+
+const PANTALLA = (
+  <AuthProvider>
+    <ProductProvider>
+      <LocationsProvider>
+        <Transfers />
+      </LocationsProvider>
+    </ProductProvider>
+  </AuthProvider>
+)
+
+const renderTraslados = ({ fallarEn = {} } = {}) =>
+  renderizarPantalla(PANTALLA, {
+    ...REMITENTE,
+    traslados: [PENDIENTE, ANTERIOR],
+    otrosUsuarios: PERSONAS,
+    productos: PRODUCTOS,
+    ubicaciones: UBICACIONES,
+    existencias: [{ locationId: "bodega", productId: "p1", quantity: 7 }],
+    fallarEn,
+    esperar: ["productos_con_stock", "ubicaciones", "existencias_por_ubicacion", "traslados"],
+  })
 
 // Lo que dejaría en la base la operación hecha en el otro dispositivo.
 const enElOtroDispositivo = (falso, id, cambios) => {
