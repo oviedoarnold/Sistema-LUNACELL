@@ -1,21 +1,23 @@
 import { useContext, useEffect, useState } from "react"
-import { FaGift } from "react-icons/fa"
+import { FaBoxOpen, FaGift, FaTag } from "react-icons/fa"
 
 import EmptyState from "../components/crud/EmptyState"
-import PageHeader from "../components/crud/PageHeader"
 import { LocationsContext } from "../context/contexts"
 import { ROLES } from "../context/permissions"
 import { useAuth } from "../hooks/useAuth"
 import { traerReporteDeRegalias } from "../lib/api/reportes"
 import { formatMoney } from "../utils/format"
-import { motivoParaLeer } from "../utils/regalias"
+import { motivoParaLeer, resumenDeRegalias } from "../utils/regalias"
 import { fechaYHoraEnHonduras, hoyEnHonduras } from "../utils/reporteDiario"
+import StatCard from "./dashboard/StatCard"
 
 const ESTADO_DE_LA_FACTURA = {
   pagada: "Pagada",
   pendiente: "Pendiente",
   anulada: "Anulada · regalía no restituida",
 }
+
+const NO_REGISTRADO = "No registrado"
 
 // El mismo día de hace `dias`, como AAAA-MM-DD.
 const diasAntes = (dia, dias) => {
@@ -26,14 +28,30 @@ const diasAntes = (dia, dias) => {
   return fecha.toISOString().slice(0, 10)
 }
 
+// Un importe, o «No registrado» si no se guardó: un cero se muestra como L 0.00.
+const importe = (valor) => (valor === null || valor === undefined ? <span className="reporte-regalias-sin-precio">{NO_REGISTRADO}</span> : formatMoney(valor))
+
+// La nota del valor comercial: sin ISV, o cuántas regalías quedan fuera por no tener precio.
+function detalleDelValor({ regalias, sinPrecio }) {
+  if (sinPrecio === 0) return "A precio de venta, sin ISV"
+  if (sinPrecio === regalias) return "Ninguna regalía del período tiene precio registrado"
+
+  return `No incluye ${sinPrecio} ${sinPrecio === 1 ? "regalía" : "regalías"} sin precio registrado`
+}
+
 /*
-  Reporte de regalías (0054): lo entregado sin cargo, con su factura, su
-  cliente, quién lo entregó y por qué. No suma ventas ni cobros: es una salida
-  de inventario. Una factura anulada conserva su regalía, que no volvió.
+  Reporte de regalías (0054 y 0055): lo entregado sin cargo, con su factura,
+  su cliente, quién lo entregó y por qué, y cuánto vale a precio de venta. No
+  suma ventas ni cobros: es una salida de inventario. Una factura anulada
+  conserva su regalía, que no volvió.
 
   La base decide qué ve cada quien: el administrador toda la empresa y el
   costo; el contador todas las ubicaciones sin costo; el vendedor con
   «Historial» su ubicación. La columna de costo solo se dibuja si llega.
+
+  El valor comercial es precio de venta (sin ISV) × cantidad, con el precio
+  guardado al entregar. Una regalía anterior a la 0055 no tiene precio: se
+  muestra «No registrado» y queda fuera del valor, nunca como L 0.00.
 */
 function ReporteDeRegalias() {
   const { user, isAdmin } = useAuth()
@@ -67,12 +85,17 @@ function ReporteDeRegalias() {
   const listo = estado.consulta === consulta
   const filas = listo ? estado.filas : null
   const conCosto = Boolean(filas?.some((f) => f.costoUnitario !== null))
-  const unidades = (filas || []).reduce((suma, f) => suma + f.cantidad, 0)
-  const costo = (filas || []).reduce((suma, f) => suma + (f.costoTotal || 0), 0)
+  const resumen = resumenDeRegalias(filas || [])
+  const valorTotal = resumen.valorComercial === null ? NO_REGISTRADO : formatMoney(resumen.valorComercial)
 
   return (
-    <div className="view active crud panel reportes">
-      <PageHeader descripcion="Productos entregados sin cargo, con su factura, cliente y motivo. No suman a ventas ni cobros." />
+    <div className="view active crud panel reportes reporte-regalias">
+      <header className="crud-encabezado">
+        <div>
+          <h2 className="reporte-regalias-titulo">Reporte de regalías</h2>
+          <p className="crud-descripcion">Detalle de productos entregados como regalía.</p>
+        </div>
+      </header>
 
       <div className="toolbar reportes-filtros">
         <div className="field">
@@ -113,52 +136,66 @@ function ReporteDeRegalias() {
       )}
 
       {filas?.length > 0 && (
-        <section className="panel-seccion reportes-seccion" aria-labelledby="regalias-titulo">
-          <h2 className="panel-seccion-titulo" id="regalias-titulo">
-            {filas.length} {filas.length === 1 ? "regalía" : "regalías"} · {unidades} {unidades === 1 ? "unidad" : "unidades"}
-            {conCosto && ` · Costo ${formatMoney(costo)}`}
-          </h2>
+        <>
+          <section className="panel-kpis" aria-label="Resumen de las regalías">
+            <StatCard etiqueta="Regalías" valor={resumen.regalias} Icono={FaGift} tono="blue" />
+            <StatCard etiqueta="Unidades entregadas" valor={resumen.unidades} Icono={FaBoxOpen} />
+            <StatCard etiqueta="Valor comercial total" valor={valorTotal} detalle={detalleDelValor(resumen)} Icono={FaTag} tono="ok" />
+          </section>
 
-          <div className="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th scope="col">Fecha y hora</th>
-                  <th scope="col">Factura</th>
-                  <th scope="col">Estado</th>
-                  <th scope="col">Cliente</th>
-                  <th scope="col">Producto</th>
-                  <th scope="col">Código</th>
-                  <th scope="col" className="num">Cantidad</th>
-                  <th scope="col">Ubicación</th>
-                  <th scope="col">Entregó</th>
-                  <th scope="col">Motivo</th>
-                  {conCosto && <th scope="col" className="num">Costo unit.</th>}
-                  {conCosto && <th scope="col" className="num">Costo total</th>}
-                </tr>
-              </thead>
-
-              <tbody>
-                {filas.map((f) => (
-                  <tr key={f.id}>
-                    <td>{fechaYHoraEnHonduras(f.fecha)}</td>
-                    <td>{f.factura}</td>
-                    <td>{ESTADO_DE_LA_FACTURA[f.estadoFactura] || f.estadoFactura}</td>
-                    <td>{f.cliente}</td>
-                    <td>{f.producto}</td>
-                    <td>{f.codigo || "S/C"}</td>
-                    <td className="num">{f.cantidad}</td>
-                    <td>{f.ubicacion}</td>
-                    <td>{f.usuario}</td>
-                    <td>{motivoParaLeer(f.motivo, f.detalleMotivo)}</td>
-                    {conCosto && <td className="num">{formatMoney(f.costoUnitario)}</td>}
-                    {conCosto && <td className="num">{formatMoney(f.costoTotal)}</td>}
+          <section className="panel-seccion reportes-seccion" aria-label="Detalle de las regalías">
+            <div className="table-wrap">
+              <table className="tabla-adaptable">
+                <thead>
+                  <tr>
+                    <th scope="col">Fecha y hora</th>
+                    <th scope="col">Factura</th>
+                    <th scope="col">Estado</th>
+                    <th scope="col">Cliente</th>
+                    <th scope="col">Producto</th>
+                    <th scope="col">Código</th>
+                    <th scope="col" className="num">Cantidad</th>
+                    <th scope="col">Ubicación</th>
+                    <th scope="col">Entregó</th>
+                    <th scope="col">Motivo</th>
+                    {conCosto && <th scope="col" className="num">Costo unitario</th>}
+                    <th scope="col" className="num">Precio de venta unitario</th>
+                    <th scope="col" className="num">Valor comercial</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </section>
+                </thead>
+
+                <tbody>
+                  {filas.map((f) => (
+                    <tr key={f.id}>
+                      <td data-etiqueta="Fecha y hora">{fechaYHoraEnHonduras(f.fecha)}</td>
+                      <td data-etiqueta="Factura">{f.factura}</td>
+                      <td data-etiqueta="Estado">{ESTADO_DE_LA_FACTURA[f.estadoFactura] || f.estadoFactura}</td>
+                      <td data-etiqueta="Cliente">{f.cliente}</td>
+                      <td data-etiqueta="Producto">{f.producto}</td>
+                      <td data-etiqueta="Código">{f.codigo || "S/C"}</td>
+                      <td data-etiqueta="Cantidad" className="num">{f.cantidad}</td>
+                      <td data-etiqueta="Ubicación">{f.ubicacion}</td>
+                      <td data-etiqueta="Entregó">{f.usuario}</td>
+                      <td data-etiqueta="Motivo">{motivoParaLeer(f.motivo, f.detalleMotivo)}</td>
+                      {conCosto && <td data-etiqueta="Costo unitario" className="num">{formatMoney(f.costoUnitario)}</td>}
+                      <td data-etiqueta="Precio de venta unitario" className="num">{importe(f.precioUnitario)}</td>
+                      <td data-etiqueta="Valor comercial" className="num">{importe(f.valorComercial)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+
+                <tfoot>
+                  <tr>
+                    <th scope="row" colSpan={6}>Totales</th>
+                    <td className="num">{resumen.unidades}</td>
+                    <td colSpan={conCosto ? 5 : 4} />
+                    <td className="num">{valorTotal}</td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+          </section>
+        </>
       )}
     </div>
   )

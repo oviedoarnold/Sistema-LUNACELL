@@ -138,7 +138,7 @@ function partesDeLaSeleccion(columnas) {
   Pedirlas, también con `*`, hace fallar toda la consulta, como en PostgREST.
 */
 const COLUMNAS_NO_CONCEDIDAS = {
-  regalias_venta: ["costo_unitario"],
+  regalias_venta: ["costo_unitario", "precio_unitario"],
 }
 
 function exigirColumnasConcedidas(tabla, lista) {
@@ -1205,6 +1205,8 @@ export function crearSupabaseFalso({
           motivo: p_motivo_regalia,
           detalle_motivo: p_detalle_motivo || "",
           costo_unitario: Number(producto?.costo || 0),
+          // 0055: el disparador copia el precio general del catálogo.
+          precio_unitario: Number(producto?.precio || 0),
           creado_en: venta.fecha,
         },
       ]
@@ -1229,13 +1231,17 @@ export function crearSupabaseFalso({
     }
   }
 
-  // El reporte de la base: el costo solo para el administrador.
-  const reporteDeRegalias = () => {
+  /*
+    El reporte de la base: el costo solo para el administrador; el precio y el
+    valor comercial (0055) para todos, nulos si la regalía no tiene precio.
+  */
+  const reporteDeRegalias = ({ p_ubicacion = null } = {}) => {
     const usuario = usuarioDeLaSesion()
     const admin = usuario?.rol === "admin"
 
     return (datos.regalias_venta || [])
       .filter((r) => admin || usuario?.rol === "contador" || r.ubicacion_id === usuario?.ubicacion_id)
+      .filter((r) => !p_ubicacion || r.ubicacion_id === p_ubicacion)
       .map((r) => {
         const venta = (datos.ventas || []).find((v) => v.id === r.venta_id) || {}
         const ubicacion = (datos.ubicaciones || []).find((u) => u.id === r.ubicacion_id)
@@ -1259,6 +1265,8 @@ export function crearSupabaseFalso({
           detalle_motivo: r.detalle_motivo,
           costo_unitario: admin ? r.costo_unitario : null,
           costo_total: admin ? redondear(r.costo_unitario * r.cantidad) : null,
+          precio_unitario: r.precio_unitario ?? null,
+          valor_comercial: r.precio_unitario === null || r.precio_unitario === undefined ? null : redondear(r.precio_unitario * r.cantidad),
         }
       })
   }
@@ -1410,7 +1418,7 @@ export function crearSupabaseFalso({
       if (nombre === "reporte_de_regalias") {
         const falla = fallaDe(nombre, "rpc")
 
-        return Promise.resolve(falla ? { data: null, error: falla } : { data: reporteDeRegalias(), error: null })
+        return Promise.resolve(falla ? { data: null, error: falla } : { data: reporteDeRegalias(argumentos), error: null })
       }
 
       // Los medios los valida la base (0039); aquí vende igual que sin ellos.

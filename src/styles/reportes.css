@@ -23,3 +23,85 @@
   margin-bottom: var(--space-5);
   font-weight: 600;
 }
+
+/*
+  Reporte de regalías: título propio en la página (la barra superior dice
+  «Regalías»), tres indicadores en vez de cuatro, el valor comercial en verde
+  y la fila de totales. Todo acotado a .reporte-regalias.
+*/
+.reporte-regalias-titulo {
+  margin: 0 0 var(--space-1);
+  font-family: var(--font-display);
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.reporte-regalias .panel-kpis {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.reporte-regalias .stat-card.ok .value {
+  color: var(--success);
+}
+
+.reporte-regalias-sin-precio {
+  color: var(--text-muted);
+  font-family: var(--font-body);
+  font-style: italic;
+  white-space: normal;
+}
+
+.reporte-regalias tfoot th,
+.reporte-regalias tfoot td {
+  border-top: 2px solid var(--border);
+  background: var(--surface-secondary);
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.reporte-regalias tfoot th {
+  text-align: left;
+}
+
+/*
+  Trece columnas: los encabezados largos («Precio de venta unitario») se
+  parten en líneas y las celdas llevan menos margen, para que en la
+  computadora las columnas de importes se vean sin desplazar la tabla.
+*/
+@media (min-width: 641px) {
+  .reporte-regalias.crud thead th {
+    white-space: normal;
+  }
+
+  .reporte-regalias.crud thead th,
+  .reporte-regalias.crud tbody td,
+  .reporte-regalias.crud tfoot th,
+  .reporte-regalias.crud tfoot td {
+    padding-left: 6px;
+    padding-right: 6px;
+  }
+
+  .reporte-regalias.crud tfoot th,
+  .reporte-regalias.crud tfoot td {
+    padding-top: 10px;
+    padding-bottom: 10px;
+  }
+}
+
+/* En el teléfono las tarjetas ya dan los totales; cada regalía es una tarjeta. */
+@media (max-width: 640px) {
+  .reporte-regalias .panel-kpis {
+    grid-template-columns: 1fr;
+  }
+
+  .reporte-regalias tfoot {
+    display: none;
+  }
+
+  /* El rótulo largo se parte en dos líneas en vez de empujar el importe fuera de la tarjeta. */
+  .reporte-regalias .tabla-adaptable tbody td[data-etiqueta]::before {
+    flex: 0 1 auto;
+    white-space: normal;
+  }
+}

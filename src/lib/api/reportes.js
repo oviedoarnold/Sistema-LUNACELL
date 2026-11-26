@@ -34,10 +34,17 @@ export async function traerReporteDiario(dia, ubicacionId = null) {
   return { ...diario.data, medios: medios.data }
 }
 
+// Un importe que puede no venir: nulo se queda nulo, para no confundirlo con un cero.
+const importeONulo = (valor) => (valor === null || valor === undefined ? null : Number(valor))
+
 /*
   Las regalías entregadas entre dos días (0054). La base decide quién ve qué:
   el administrador toda la empresa con el costo; el contador con «Historial»
   todas las ubicaciones, sin costo; el vendedor con «Historial», su ubicación.
+
+  El precio de venta guardado al entregar y su valor comercial (0055) los ve
+  todo el que ve el reporte. Una regalía anterior a la 0055 no tiene precio:
+  llega nulo, no cero.
 */
 export async function traerReporteDeRegalias(desde, hasta, ubicacionId = null) {
   const { data, error } = await supabase.rpc("reporte_de_regalias", {
@@ -72,7 +79,9 @@ export async function traerReporteDeRegalias(desde, hasta, ubicacionId = null) {
     usuario: fila.usuario || "",
     motivo: fila.motivo,
     detalleMotivo: fila.detalle_motivo || "",
-    costoUnitario: fila.costo_unitario === null || fila.costo_unitario === undefined ? null : Number(fila.costo_unitario),
-    costoTotal: fila.costo_total === null || fila.costo_total === undefined ? null : Number(fila.costo_total),
+    costoUnitario: importeONulo(fila.costo_unitario),
+    costoTotal: importeONulo(fila.costo_total),
+    precioUnitario: importeONulo(fila.precio_unitario),
+    valorComercial: importeONulo(fila.valor_comercial),
   }))
 }
