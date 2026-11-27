@@ -15,7 +15,7 @@ import {
   useTrasladosPorRecibir,
 } from "../hooks/useTrasladosPorRecibir"
 import { confirmarRecepcion, reportarIncidencia, traerTraslado } from "../lib/api/traslados"
-import { fechaYHora } from "../utils/format"
+import { fechaYHora, formatDateForDisplay, hora } from "../utils/format"
 import { coincideBusqueda } from "../utils/texto"
 import EmptyState from "../components/crud/EmptyState"
 import PageHeader from "../components/crud/PageHeader"
@@ -56,12 +56,35 @@ const CLASE_DEL_ESTADO = {
 const cuantosProductos = (n) => (n === 1 ? "1 producto" : `${n} productos`)
 const cuantasUnidades = (n) => (n === 1 ? "1 unidad" : `${n} unidades`)
 
-// Quién recibió y cuándo, en una línea; o por qué no hay recepción.
+// Por qué un traslado no tiene recepción. El recibido muestra quién y cuándo (ver la tabla).
 function textoDeRecepcion(t) {
-  if (t.status === "recibido") return `${t.receivedBy || "—"} · ${fechaYHora(t.receivedAt)}`
   if (t.status === "aplicado") return "Antes del control de recepción"
 
   return "Pendiente"
+}
+
+// Fecha y hora de la recepción, en la segunda línea de la columna: «27/11/2026 · 01:20 p. m.».
+const cuandoSeRecibio = (iso) => (iso ? `${formatDateForDisplay(new Date(iso))} · ${hora(iso)}` : "—")
+
+/*
+  La columna Recepción: el nombre de quien recibió arriba y la fecha y hora
+  debajo, para que la columna no ensanche la tabla. Todo va en un solo
+  contenedor, así en el teléfono queda junto, a la derecha del rótulo.
+*/
+function CeldaDeRecepcion({ t }) {
+  return (
+    <div className="transfers-recepcion-datos">
+      {t.status === "recibido" ? (
+        <>
+          <span className="transfers-receptor">{t.receivedBy || "—"}</span>
+          <span className="transfers-recibido-en">{cuandoSeRecibio(t.receivedAt)}</span>
+        </>
+      ) : (
+        t.recepcion
+      )}
+      {t.administrative && <span className="transfers-administrativa">Confirmación administrativa</span>}
+    </div>
+  )
 }
 
 // La observación obligatoria: de 5 a 500 caracteres, sin contar espacios de los extremos.
@@ -525,8 +548,7 @@ function Transfers() {
                     <td data-etiqueta="Fecha" className="transfers-fecha">{t.fecha}</td>
                     <td data-etiqueta="Estado"><EstadoDelTraslado estado={t.status} texto={t.estado} /></td>
                     <td data-etiqueta="Recepción" className="transfers-recepcion">
-                      {t.recepcion}
-                      {t.administrative && <span className="transfers-administrativa">Confirmación administrativa</span>}
+                      <CeldaDeRecepcion t={t} />
                     </td>
                     <td className="celda-acciones">
                       <button

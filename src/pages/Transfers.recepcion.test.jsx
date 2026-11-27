@@ -6,6 +6,7 @@ import { AuthProvider } from "../context/AuthContext"
 import ProductProvider from "../context/ProductContext"
 import LocationsProvider from "../context/LocationsContext"
 import { renderizarPantalla } from "../test/pantallas"
+import { formatDateForDisplay, hora } from "../utils/format"
 import Transfers from "./Transfers"
 
 vi.mock("../lib/supabase", () => ({
@@ -284,10 +285,35 @@ describe("Traslados: el historial con la recepción", () => {
       return within(fila).getAllByRole("cell")[6].textContent
     }
 
-    expect(recepcionDe("TR-000002")).toMatch(/^Vendedor Ruta · /)
+    expect(recepcionDe("TR-000002")).toMatch(/^Vendedor Ruta\d{2}\/\d{2}\/\d{4} · /)
     expect(recepcionDe("TR-000003")).toBe("Pendiente")
     expect(recepcionDe("TR-000001")).toBe("Antes del control de recepción")
     expect(within(tabla).getByText("Pendiente de recepción")).toHaveClass("badge-low")
     expect(within(tabla).getByText("Recibido")).toHaveClass("badge-paid")
+  })
+
+  it("Recepción en dos líneas: quién recibió arriba, la fecha y la hora debajo; el nombre largo completo y la confirmación administrativa", async () => {
+    const LARGO = "María Fernanda de los Ángeles Rodríguez Castellanos"
+    const ADMINISTRATIVO = {
+      ...RECIBIDO,
+      id: "t-adm",
+      creado_en: "2026-11-25T16:00:00Z",
+      recibido_por_nombre: LARGO,
+      recibido_en: "2026-11-25T19:05:00Z",
+      confirmacion_administrativa: true,
+      observacion_recepcion: "Confirmado por teléfono.",
+    }
+    await renderRecepcion({ traslados: [ADMINISTRATIVO, RECIBIDO, HISTORICO] })
+
+    const tabla = await screen.findByRole("table", { name: /historial de traslados/i })
+    const recepciones = within(tabla).getAllByRole("row").slice(1).map((f) => f.querySelector('[data-etiqueta="Recepción"]'))
+    const celdaCon = (texto) => recepciones.find((c) => c.textContent.includes(texto))
+    const lineas = (celda) => [...celda.firstElementChild.children].map((e) => e.textContent)
+    const cuando = (iso) => `${formatDateForDisplay(new Date(iso))} · ${hora(iso)}`
+
+    expect(lineas(celdaCon(LARGO))).toEqual([LARGO, cuando("2026-11-25T19:05:00Z"), "Confirmación administrativa"])
+    expect(lineas(celdaCon("Vendedor Ruta"))).toEqual(["Vendedor Ruta", cuando("2026-11-25T15:20:00Z")])
+    expect(cuando("2026-11-25T15:20:00Z")).toMatch(/^\d{2}\/\d{2}\/\d{4} · \d{2}:\d{2}\s[ap]\.\s?m\.$/u)
+    expect(celdaCon("Antes del control")).toHaveTextContent(/^Antes del control de recepción$/)
   })
 })
