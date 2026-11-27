@@ -225,12 +225,29 @@ export const MODULOS_DEL_MENU = GRUPOS_DEL_MENU.flatMap(
 /*
   El título que muestra la barra superior. Sale de la misma etiqueta del
   menú para que no haya dos nombres para el mismo módulo.
+
+  Si la ruta cae bajo dos módulos (/inventory/transfers está bajo
+  Existencias, /inventory, y es Traslados), gana el más específico: el de
+  ruta más larga. Una subruta propia de un módulo (/products/123) sigue
+  siendo de ese módulo.
 */
 export function tituloDeLaRuta(pathname) {
-  const modulo = MODULOS_DEL_MENU.find(
+  const modulo = MODULOS_DEL_MENU.filter(
     (candidato) =>
       pathname === candidato.to || pathname.startsWith(`${candidato.to}/`)
+  ).reduce(
+    (elegido, candidato) =>
+      !elegido || candidato.to.length > elegido.to.length ? candidato : elegido,
+    null
   )
 
   return modulo?.label || ""
 }
+
+/*
+  Si otro módulo del menú vive bajo la ruta de este (Existencias tiene
+  debajo a Traslados; Reportes, a Regalías). Ese módulo solo se marca
+  activo en su ruta exacta, para no marcarse junto con el de abajo.
+*/
+export const tieneModulosDebajo = (to) =>
+  MODULOS_DEL_MENU.some((otro) => otro.to.startsWith(`${to}/`))

@@ -14,7 +14,7 @@ import {
   puedeRecibirEste,
   useTrasladosPorRecibir,
 } from "../hooks/useTrasladosPorRecibir"
-import { confirmarRecepcion, reportarIncidencia } from "../lib/api/traslados"
+import { confirmarRecepcion, reportarIncidencia, traerTraslado } from "../lib/api/traslados"
 import { fechaYHora } from "../utils/format"
 import { coincideBusqueda } from "../utils/texto"
 import EmptyState from "../components/crud/EmptyState"
@@ -42,6 +42,9 @@ const ESTADOS = {
   con_incidencia: "Con incidencia",
   recibido: "Recibido",
 }
+
+// Cuánto avanzó cada estado: solo se avanza, nunca se vuelve atrás.
+const AVANCE = { pendiente: 0, con_incidencia: 1, recibido: 2, aplicado: 2 }
 
 const CLASE_DEL_ESTADO = {
   aplicado: "badge badge-paid",
@@ -106,6 +109,38 @@ function Transfers() {
   const rangoInvalido = Boolean(filtroDesde && filtroHasta && filtroDesde > filtroHasta)
   const hayFiltros = Boolean(filtroUbicacion || filtroDesde || filtroHasta)
 
+  /*
+    El detalle abierto se arma con la versión más nueva del traslado que
+    tenga la pantalla. Si deja de estar en las listas (un filtro, o salió
+    de «Por recibir» porque otro lo recibió), no se cierra de golpe: se
+    sigue mostrando lo último que se supo y en cada refresco se consulta
+    ese traslado por su id, para que no quede desactualizado.
+  */
+  const [detalleAbierto, setDetalleAbierto] = useState(null)
+  const [detalleSuelto, setDetalleSuelto] = useState(null)
+  const [procesando, setProcesando] = useState(false)
+
+  const abrirDetalle = (t) => {
+    setDetalleSuelto(t)
+    setDetalleAbierto(t.id)
+  }
+
+  // Cada refresco automático del historial pone al día también lo demás.
+  const alRefrescarHistorial = () => {
+    avisarCambioDeTraslados()
+
+    const id = detalleAbierto
+
+    if (id && !traslados.some((t) => t.id === id)) {
+      traerTraslado(id).then(
+        (fresco) => fresco && setDetalleSuelto((antes) => (antes?.id === id ? fresco : antes)),
+        () => {
+          // Sin conexión: se conserva lo último que se supo.
+        }
+      )
+    }
+  }
+
   const {
     traslados,
     cargando: cargandoHistorial,
@@ -120,6 +155,10 @@ function Transfers() {
     desde: filtroDesde,
     hasta: filtroHasta,
     activo: !rangoInvalido,
+    pausado: procesando,
+    alRefrescar: alRefrescarHistorial,
+    // El detalle abierto se pone al día primero, esté donde esté en el historial.
+    prioridad: detalleAbierto,
   })
 
   const limpiarFiltros = () => {
@@ -131,9 +170,6 @@ function Transfers() {
 
   const veTodas = hasPermission(PERMISSIONS.INVENTORY_ALL)
   const propia = user?.locationId || ""
-
-  const [detalleAbierto, setDetalleAbierto] = useState(null)
-  const [procesando, setProcesando] = useState(false)
 
   const { traslados: pendientes, recargar: recargarPendientes } = useTrasladosPorRecibir()
 
@@ -194,7 +230,18 @@ function Transfers() {
   const buscado = busqueda.trim()
   const visibles = buscado ? historial.filter((t) => coincideTraslado(t, buscado)) : historial
 
-  const detalle = porRecibir.find((t) => t.id === detalleAbierto) || historial.find((t) => t.id === detalleAbierto)
+  /*
+    El estado de un traslado solo avanza (pendiente → con incidencia →
+    recibido). Si las listas lo traen con estados distintos porque una se
+    refrescó antes que otra, vale el más avanzado.
+  */
+  const detalle = [
+    porRecibir.find((t) => t.id === detalleAbierto),
+    historial.find((t) => t.id === detalleAbierto),
+    detalleSuelto?.id === detalleAbierto ? nombrado(detalleSuelto) : null,
+  ]
+    .filter(Boolean)
+    .reduce((elegido, t) => (!elegido || AVANCE[t.status] > AVANCE[elegido.status] ? t : elegido), null)
 
   // Después de confirmar o reportar: todo lo que muestra el traslado, al día.
   const alCambiarRecepcion = async () => {
@@ -328,7 +375,7 @@ function Transfers() {
                         type="button"
                         className="btn btn-primary btn-sm"
                         aria-label={`Ver traslado ${t.numero} desde ${t.origen}`}
-                        onClick={() => setDetalleAbierto(t.id)}
+                        onClick={() => abrirDetalle(t)}
                       >
                         <FaEye aria-hidden="true" />Ver traslado
                       </button>
@@ -487,7 +534,7 @@ function Transfers() {
                         className="btn-icono"
                         title="Ver detalle"
                         aria-label={`Ver detalle del traslado ${[t.numero, t.ruta, t.fecha].filter(Boolean).join(", ")}`}
-                        onClick={() => setDetalleAbierto(t.id)}
+                        onClick={() => abrirDetalle(t)}
                       >
                         <FaEye aria-hidden="true" />
                       </button>

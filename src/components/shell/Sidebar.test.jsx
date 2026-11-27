@@ -200,6 +200,28 @@ describe("Sidebar · módulo activo", () => {
     expect(otro).not.toHaveClass("is-activo")
     expect(otro).not.toHaveAttribute("aria-current")
   })
+
+  /*
+    Un módulo con otro debajo de su ruta (Existencias con Traslados,
+    Reportes con Regalías) se marca solo en su ruta exacta: en la del de
+    abajo se marca únicamente el de abajo.
+  */
+  it.each([
+    ["/inventory/transfers", /^traslados/i],
+    ["/inventory", /^existencias/i],
+    ["/reports/regalias", /^regalías/i],
+    ["/reports", /^reportes/i],
+    ["/products/123", /^inventario/i],
+  ])("en %s se marca solo un módulo, el que corresponde", async (ruta, nombre) => {
+    await montarSidebar({ rol: "admin", secciones: TODOS, ruta })
+
+    const marcados = screen.getAllByRole("link").filter((enlace) => enlace.classList.contains("is-activo"))
+
+    expect(marcados).toHaveLength(1)
+    expect(marcados[0]).toHaveAccessibleName(nombre)
+    expect(marcados[0]).toHaveAttribute("aria-current", "page")
+    expect(screen.getAllByRole("link").filter((enlace) => enlace.hasAttribute("aria-current"))).toHaveLength(1)
+  })
 })
 
 describe("Sidebar · usuario y sesión", () => {

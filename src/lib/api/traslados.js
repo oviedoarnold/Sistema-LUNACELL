@@ -235,6 +235,9 @@ export async function traerPorRecibir({ esAdmin = false, ubicacionId = "", usuar
 // Cuántos traslados trae cada página del historial.
 export const TAMANO_PAGINA = 25
 
+// Supabase responde como mucho 1000 filas por consulta; el refresco pide menos.
+export const MAXIMO_POR_CONSULTA = 500
+
 const FECHA = /^(\d{4})-(\d{2})-(\d{2})$/
 
 /*
@@ -274,10 +277,15 @@ const IDENTIFICADOR = /^[\w-]+$/
 */
 export async function traerTraslados(
   { ubicacionId = "", desde = "", hasta = "" } = {},
-  { inicio = 0 } = {}
+  { inicio = 0, cantidad = TAMANO_PAGINA } = {}
 ) {
   if (ubicacionId && !IDENTIFICADOR.test(ubicacionId)) {
     throw new Error("Ubicación no válida.")
+  }
+
+  // `cantidad` deja volver a pedir de una vez las filas ya cargadas (el refresco).
+  if (!Number.isInteger(cantidad) || cantidad < 1 || cantidad > MAXIMO_POR_CONSULTA) {
+    throw new Error("Cantidad de traslados no válida.")
   }
 
   const limiteInferior = desde ? inicioDelDia(desde) : null
@@ -296,11 +304,11 @@ export async function traerTraslados(
   const { data, error } = await consulta
     .order("creado_en", { ascending: false })
     .order("id", { ascending: false })
-    .range(inicio, inicio + TAMANO_PAGINA)
+    .range(inicio, inicio + cantidad)
 
   if (error) fallo(error, "cargar el historial de traslados")
 
-  const filas = (data || []).slice(0, TAMANO_PAGINA)
+  const filas = (data || []).slice(0, cantidad)
 
   if (filas.length === 0) return { traslados: [], hayMas: false }
 
@@ -308,6 +316,59 @@ export async function traerTraslados(
 
   return {
     traslados: filas.map((fila) => aTrasladoDeApp(fila, nombres, productos)),
-    hayMas: (data || []).length > TAMANO_PAGINA,
+    hayMas: (data || []).length > cantidad,
   }
+}
+
+/*
+  Un traslado por su id, con lo que el usuario puede ver (RLS). Sirve para
+  mantener al día un detalle abierto que ya no está en las listas de la
+  pantalla, por ejemplo por un filtro. Si no lo puede ver, null.
+*/
+export async function traerTraslado(id) {
+  if (!id || !IDENTIFICADOR.test(String(id))) return null
+
+  const { data, error } = await supabase.from("traslados").select(COLUMNAS).eq("id", id).limit(1)
+
+  if (error) fallo(error, "cargar el traslado")
+
+  const filas = data || []
+
+  if (filas.length === 0) return null
+
+  const [nombres, productos] = await Promise.all([nombresDeUsuarios(filas), nombresDeProductos(filas)])
+
+  return aTrasladoDeApp(filas[0], nombres, productos)
+}
+
+/*
+  Varios traslados por su id, en una consulta. Los ids viajan en la URL
+  (`id=in.(…)`): cada uno ocupa unos 37 caracteres, así que se piden como
+  mucho LOTE_POR_ID por vez para quedar muy por debajo del largo que
+  aceptan PostgREST y los proxies de por medio (unos 8 KB por línea), y
+  no solo del tope de filas. Quien necesite más los pide por lotes.
+
+  Devuelve los que el usuario puede ver (RLS); un id que no puede ver, o
+  que ya no existe, no viene.
+*/
+export const LOTE_POR_ID = 50
+
+export async function traerTrasladosPorId(ids = []) {
+  if (ids.length === 0) return []
+
+  if (ids.length > LOTE_POR_ID || ids.some((id) => !id || !IDENTIFICADOR.test(String(id)))) {
+    throw new Error("Identificadores de traslados no válidos.")
+  }
+
+  const { data, error } = await supabase.from("traslados").select(COLUMNAS).in("id", ids)
+
+  if (error) fallo(error, "cargar los traslados")
+
+  const filas = data || []
+
+  if (filas.length === 0) return []
+
+  const [nombres, productos] = await Promise.all([nombresDeUsuarios(filas), nombresDeProductos(filas)])
+
+  return filas.map((fila) => aTrasladoDeApp(fila, nombres, productos))
 }

@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
 
-import { registrarTraslado, traerTraslados, ErrorDeTraslado, TAMANO_PAGINA } from "./traslados"
+import { registrarTraslado, traerTraslado, traerTraslados, traerTrasladosPorId, ErrorDeTraslado, LOTE_POR_ID, MAXIMO_POR_CONSULTA, TAMANO_PAGINA } from "./traslados"
 import { crearSupabaseFalso } from "../../test/supabaseFalso"
 
 vi.mock("../supabase", () => ({
@@ -334,6 +334,95 @@ describe("el historial: páginas", () => {
 
   const consultasA = (falso, tabla) =>
     falso.from.mock.calls.filter(([nombre]) => nombre === tabla).length
+
+  /*
+    El refresco entre dispositivos vuelve a pedir de una vez las filas ya
+    cargadas: lo mismo que las páginas, en el mismo orden, sin perder ni
+    repetir ninguna.
+  */
+  it("con `cantidad` trae de una vez lo mismo que esas páginas, en el mismo orden", async () => {
+    const total = TAMANO_PAGINA * 2 + 3
+    montarMuchos(total)
+
+    const primera = await traerTraslados()
+    const segunda = await traerTraslados({}, { inicio: TAMANO_PAGINA })
+    const deUnaVez = await traerTraslados({}, { cantidad: TAMANO_PAGINA * 2 })
+
+    expect(ids(deUnaVez)).toEqual([...ids(primera), ...ids(segunda)])
+    expect(deUnaVez.hayMas).toBe(true)
+    expect((await traerTraslados({}, { cantidad: total })).hayMas).toBe(false)
+  })
+
+  it("con la misma fecha y hora, `cantidad` desempata por id igual que las páginas", async () => {
+    montarMuchos(TAMANO_PAGINA * 2, { mismaHora: true })
+
+    const paginas = [...ids(await traerTraslados()), ...ids(await traerTraslados({}, { inicio: TAMANO_PAGINA }))]
+
+    expect(ids(await traerTraslados({}, { cantidad: TAMANO_PAGINA * 2 }))).toEqual(paginas)
+  })
+
+  it.each([0, -1, 1.5, MAXIMO_POR_CONSULTA + 1, "25"])("una cantidad %p se rechaza sin consultar", async (cantidad) => {
+    const falso = montarMuchos(3)
+
+    await expect(traerTraslados({}, { cantidad })).rejects.toThrow(/cantidad/i)
+    expect(consultasA(falso, "traslados")).toBe(0)
+  })
+
+  it("el máximo por consulta queda por debajo del tope de filas de Supabase", () => {
+    expect(MAXIMO_POR_CONSULTA + 1).toBeLessThanOrEqual(1000)
+  })
+
+  it("un traslado por su id trae su estado y su recepción; si no existe, null", async () => {
+    const traslados = [{ ...muchos(1)[0], estado: "recibido", recibido_por_nombre: "Beto", recibido_en: "2026-11-26T15:45:00Z" }]
+    montar({ tablas: { traslados, traslado_detalle: conDetalle(traslados) } })
+
+    const uno = await traerTraslado("t000")
+
+    expect(uno).toMatchObject({ id: "t000", status: "recibido", receivedBy: "Beto" })
+    expect(uno.items).toEqual([{ productId: "p1", qty: 1, productName: "Cargador", productCode: "" }])
+    expect(await traerTraslado("no-existe")).toBeNull()
+    expect(await traerTraslado("id con espacios")).toBeNull()
+  })
+
+  /*
+    Las filas de más abajo de las 500 primeras se ponen al día por su id,
+    de a lotes: los ids viajan en la URL y un lote grande podría pasar del
+    largo que aceptan PostgREST y los proxies.
+  */
+  it("varios traslados por su id llegan en una sola consulta, con nombres de productos y usuarios", async () => {
+    const traslados = muchos(5)
+    const falso = montar({ tablas: { traslados, traslado_detalle: conDetalle(traslados) } })
+
+    const varios = await traerTrasladosPorId(["t001", "t003", "no-existe"])
+
+    expect(varios.map((t) => t.id).sort()).toEqual(["t001", "t003"])
+    expect(varios[0].items[0].productName).toBe("Cargador")
+    expect(consultasA(falso, "traslados")).toBe(1)
+  })
+
+  it("sin ids no consulta", async () => {
+    const falso = montarMuchos(3)
+
+    expect(await traerTrasladosPorId([])).toEqual([])
+    expect(consultasA(falso, "traslados")).toBe(0)
+  })
+
+  it("un lote más grande que LOTE_POR_ID, o con un id que no es identificador, se rechaza sin consultar", async () => {
+    const falso = montarMuchos(3)
+    const demasiados = Array.from({ length: LOTE_POR_ID + 1 }, (_, i) => `t${i}`)
+
+    await expect(traerTrasladosPorId(demasiados)).rejects.toThrow(/no válidos/i)
+    await expect(traerTrasladosPorId(["t001", "id con espacios"])).rejects.toThrow(/no válidos/i)
+    await expect(traerTrasladosPorId(["t001", ""])).rejects.toThrow(/no válidos/i)
+    expect(consultasA(falso, "traslados")).toBe(0)
+  })
+
+  it("un lote completo de ids de traslado cabe con holgura en la URL de la consulta", () => {
+    const uuid = "6d25d3c2-fdad-4216-8318-d2f3fe1d8398"
+    const filtro = `id=in.(${Array.from({ length: LOTE_POR_ID }, () => uuid).join(",")})`
+
+    expect(filtro.length).toBeLessThan(4096)
+  })
 
   it("la primera página trae los más recientes y avisa que hay más", async () => {
     montarMuchos(TAMANO_PAGINA * 2 + 3)

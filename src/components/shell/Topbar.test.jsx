@@ -103,4 +103,20 @@ describe("tituloDeLaRuta", () => {
   it("devuelve vacío para una ruta ajena al panel", () => {
     expect(tituloDeLaRuta("/login")).toBe("")
   })
+
+  /*
+    Traslados (/inventory/transfers) está bajo la ruta de Existencias
+    (/inventory), y Regalías bajo la de Reportes: gana el módulo más
+    específico, sin importar el orden del menú.
+  */
+  it.each([
+    ["/inventory/transfers", "Traslados"],
+    ["/inventory", "Existencias"],
+    ["/reports/regalias", "Regalías"],
+    ["/reports", "Reportes"],
+    ["/products/123", "Inventario"],
+    ["/pos", "Facturar"],
+  ])("en %s el título es %s", (ruta, titulo) => {
+    expect(tituloDeLaRuta(ruta)).toBe(titulo)
+  })
 })

@@ -66,28 +66,48 @@ export function useTrasladosPorRecibir() {
   const [estado, setEstado] = useState({ clave: "", traslados: NINGUNO })
   const vigente = useRef(true)
 
+  /*
+    Solo vale la respuesta de la última consulta pedida: una antigua que
+    llega tarde no devuelve un traslado ya recibido a «por recibir». El
+    reloj no encola consultas: si hay una en curso, se salta. Un aviso de
+    cambio (EVENTO_TRASLADOS_CAMBIARON) o `recargar` sí consultan siempre.
+  */
+  const ultima = useRef(0)
+  const enCurso = useRef(0)
+
   const consultar = useCallback(async () => {
+    const numero = ++ultima.current
+    enCurso.current += 1
+
     try {
       const traslados = await traerPorRecibir({ esAdmin, ubicacionId, usuarioId })
 
-      if (vigente.current) setEstado({ clave, traslados })
+      if (vigente.current && numero === ultima.current) setEstado({ clave, traslados })
     } catch {
       // Sin conexión o un fallo pasajero: se conserva lo último.
+    } finally {
+      enCurso.current -= 1
     }
   }, [esAdmin, ubicacionId, usuarioId, clave])
+
+  const consultarSiHaceFalta = useCallback(() => {
+    if (enCurso.current === 0) void consultar()
+  }, [consultar])
 
   useEffect(() => {
     vigente.current = true
 
     if (!activo) return undefined
 
+    const numero = ++ultima.current
+
     traerPorRecibir({ esAdmin, ubicacionId, usuarioId }).then(
-      (traslados) => vigente.current && setEstado({ clave, traslados }),
+      (traslados) => vigente.current && numero === ultima.current && setEstado({ clave, traslados }),
       () => {}
     )
 
     const reloj = window.setInterval(() => {
-      if (document.visibilityState === "visible") void consultar()
+      if (document.visibilityState === "visible") consultarSiHaceFalta()
     }, CADA_CUANTO)
 
     window.addEventListener(EVENTO_TRASLADOS_CAMBIARON, consultar)
@@ -97,9 +117,9 @@ export function useTrasladosPorRecibir() {
       window.clearInterval(reloj)
       window.removeEventListener(EVENTO_TRASLADOS_CAMBIARON, consultar)
     }
-  }, [activo, consultar, esAdmin, ubicacionId, usuarioId, clave])
+  }, [activo, consultar, consultarSiHaceFalta, esAdmin, ubicacionId, usuarioId, clave])
 
-  useAlVolverALaApp(consultar, { activo })
+  useAlVolverALaApp(consultarSiHaceFalta, { activo })
 
   const traslados = activo && estado.clave === clave ? estado.traslados : NINGUNO
 
