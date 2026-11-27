@@ -39,6 +39,13 @@ export function todayForDisplay() {
   return formatDateForDisplay(new Date())
 }
 
+// Solo la hora de un instante del servidor, en hora local; «—» si no hay.
+export function hora(iso) {
+  if (!iso) return "—"
+
+  return new Date(iso).toLocaleTimeString(LOCALE, { hour: "2-digit", minute: "2-digit" })
+}
+
 // Fecha y hora de un instante del servidor, en hora local; «—» si no hay.
 export function fechaYHora(iso) {
   if (!iso) return "—"

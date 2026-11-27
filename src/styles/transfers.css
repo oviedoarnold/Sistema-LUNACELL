@@ -554,8 +554,36 @@
   text-align: center;
 }
 
-.transfers .transfers-recepcion {
+/*
+  Recepción en dos líneas: quién recibió arriba y la fecha y hora debajo.
+  El nombre parte línea si es largo (nunca se corta) en vez de ensanchar
+  la tabla; la fecha y la hora no se parten.
+*/
+.transfers .transfers-tabla td.transfers-recepcion {
+  white-space: normal;
   font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.transfers .transfers-recepcion-datos {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  max-width: 13rem;
+  line-height: 1.3;
+}
+
+.transfers .transfers-receptor {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-primary);
+  overflow-wrap: anywhere;
+}
+
+.transfers .transfers-recibido-en {
+  font-size: 12.5px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
   color: var(--text-secondary);
 }
 

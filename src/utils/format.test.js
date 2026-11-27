@@ -6,8 +6,23 @@ import {
   toISODateInDays,
   formatDateForDisplay,
   fechaYHora,
+  hora,
   MONEDA_POR_DEFECTO,
 } from "./format"
+
+describe("hora", () => {
+  it("solo la hora, sin segundos, en la hora local del instante", () => {
+    const instante = "2026-11-16T15:04:59Z"
+
+    expect(hora(instante)).toMatch(/^\d{2}:\d{2}\s?[ap]\.\s?m\.$/u)
+    expect(hora(instante)).toContain(String(new Date(instante).getMinutes()).padStart(2, "0"))
+    expect(hora(instante)).not.toMatch(/:59/)
+  })
+
+  it("sin instante dice «—»", () => {
+    expect(hora(null)).toBe("—")
+  })
+})
 
 describe("formatMoney", () => {
   it("usa lempiras por defecto y dos decimales", () => {

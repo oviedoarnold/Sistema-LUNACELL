@@ -134,7 +134,7 @@ describe("Traslados: actualización entre dispositivos", () => {
     await pasan30s()
 
     await waitFor(() => expect(columna(filaDelHistorial("TR-000002"), "Estado")).toBe("Recibido"))
-    expect(columna(filaDelHistorial("TR-000002"), "Recepción")).toMatch(/^Vendedor Ruta · /)
+    expect(columna(filaDelHistorial("TR-000002"), "Recepción")).toMatch(/^Vendedor Ruta\d{2}\/\d{2}\/\d{4} · /)
     expect(columna(filaDelHistorial("TR-000001"), "Recepción")).toBe("Antes del control de recepción")
   })
 
