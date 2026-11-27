@@ -340,3 +340,35 @@ export async function traerTraslado(id) {
 
   return aTrasladoDeApp(filas[0], nombres, productos)
 }
+
+/*
+  Varios traslados por su id, en una consulta. Los ids viajan en la URL
+  (`id=in.(…)`): cada uno ocupa unos 37 caracteres, así que se piden como
+  mucho LOTE_POR_ID por vez para quedar muy por debajo del largo que
+  aceptan PostgREST y los proxies de por medio (unos 8 KB por línea), y
+  no solo del tope de filas. Quien necesite más los pide por lotes.
+
+  Devuelve los que el usuario puede ver (RLS); un id que no puede ver, o
+  que ya no existe, no viene.
+*/
+export const LOTE_POR_ID = 50
+
+export async function traerTrasladosPorId(ids = []) {
+  if (ids.length === 0) return []
+
+  if (ids.length > LOTE_POR_ID || ids.some((id) => !id || !IDENTIFICADOR.test(String(id)))) {
+    throw new Error("Identificadores de traslados no válidos.")
+  }
+
+  const { data, error } = await supabase.from("traslados").select(COLUMNAS).in("id", ids)
+
+  if (error) fallo(error, "cargar los traslados")
+
+  const filas = data || []
+
+  if (filas.length === 0) return []
+
+  const [nombres, productos] = await Promise.all([nombresDeUsuarios(filas), nombresDeProductos(filas)])
+
+  return filas.map((fila) => aTrasladoDeApp(fila, nombres, productos))
+}

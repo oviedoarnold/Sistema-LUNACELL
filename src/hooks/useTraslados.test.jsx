@@ -1,11 +1,15 @@
 import { afterEach, beforeEach, describe, it, expect, vi } from "vitest"
 import { act, renderHook } from "@testing-library/react"
 
-import { traerTraslados } from "../lib/api/traslados"
+import { LOTE_POR_ID, traerTraslados, traerTrasladosPorId } from "../lib/api/traslados"
 import { ESPERA_ENTRE_RECARGAS } from "./useAlVolverALaApp"
-import { CADA_CUANTO, useTraslados } from "./useTraslados"
+import { CADA_CUANTO, porActualizar, useTraslados } from "./useTraslados"
 
-vi.mock("../lib/api/traslados", async (original) => ({ ...(await original()), traerTraslados: vi.fn() }))
+vi.mock("../lib/api/traslados", async (original) => ({
+  ...(await original()),
+  traerTraslados: vi.fn(),
+  traerTrasladosPorId: vi.fn(),
+}))
 
 /*
   El refresco del historial entre dispositivos: quien recibe confirma en su
@@ -46,6 +50,8 @@ describe("useTraslados · refresco entre dispositivos", () => {
     visible = "visible"
     vi.spyOn(document, "visibilityState", "get").mockImplementation(() => visible)
     traerTraslados.mockReset()
+    traerTrasladosPorId.mockReset()
+    traerTrasladosPorId.mockResolvedValue([])
   })
 
   afterEach(() => {
@@ -119,32 +125,193 @@ describe("useTraslados · refresco entre dispositivos", () => {
     expect(ids(result)).toEqual(Array.from({ length: 30 }, (_, i) => `t-${i}`))
   })
 
-  it("nunca pide más filas que el máximo por consulta, y conserva las que quedan fuera", async () => {
-    const MAXIMO = 500
-    let siguiente = 0
+  /*
+    Más de 500 cargados (20 páginas o más). El refresco pide las 500
+    primeras y, por su id, las de más abajo que todavía pueden cambiar:
+    ninguna queda desactualizada para siempre.
+  */
+  describe("más allá de las 500 primeras filas", () => {
+    // La base simulada: n traslados del más reciente (t-0) al más antiguo.
+    let base
 
-    traerTraslados.mockImplementation((_, { inicio = 0, cantidad } = {}) => {
-      if (cantidad) return Promise.resolve(pagina(0, cantidad, { estado: "recibido", hayMas: true }))
+    const montarBase = (n, estadoDe = () => "pendiente") => {
+      base = Array.from({ length: n }, (_, i) => traslado(i, estadoDe(i)))
 
-      siguiente = inicio + 25
-      return Promise.resolve(pagina(inicio, siguiente, { hayMas: true }))
+      traerTraslados.mockImplementation((_, { inicio = 0, cantidad = 25 } = {}) =>
+        Promise.resolve({
+          traslados: base.slice(inicio, inicio + cantidad).map((t) => ({ ...t })),
+          hayMas: inicio + cantidad < base.length,
+        })
+      )
+      traerTrasladosPorId.mockImplementation((lista) =>
+        Promise.resolve(base.filter((t) => lista.includes(t.id)).map((t) => ({ ...t })))
+      )
+    }
+
+    // En el otro dispositivo: el traslado cambia de estado en la base.
+    const cambiar = (n, estado) => {
+      base[n] = { ...base[n], status: estado }
+    }
+
+    async function cargarTodo(result) {
+      await asentar()
+
+      while (result.current.hayMas) await act(() => result.current.cargarMas())
+    }
+
+    const pedidosPorId = () => traerTrasladosPorId.mock.calls.map(([lista]) => lista)
+
+    it("nunca pide más filas que el máximo por consulta, y pone al día las de más abajo", async () => {
+      montarBase(550)
+      const { result } = renderHook(() => useTraslados())
+      await cargarTodo(result)
+
+      for (let i = 0; i < 550; i++) cambiar(i, "recibido")
+      await tic()
+
+      expect(traerTraslados).toHaveBeenLastCalledWith(expect.anything(), { cantidad: 500 })
+      expect(estados(result).every((e) => e === "recibido")).toBe(true)
+      expect(result.current.traslados).toHaveLength(550)
+      expect(result.current.hayMas).toBe(false)
     })
 
-    const { result } = renderHook(() => useTraslados())
+    it("un traslado pendiente después de la fila 500 pasa a «recibido»", async () => {
+      montarBase(550, (i) => (i < 500 ? "recibido" : i === 520 ? "pendiente" : "aplicado"))
+      const { result } = renderHook(() => useTraslados())
+      await cargarTodo(result)
 
-    await asentar()
+      cambiar(520, "recibido")
+      await tic()
 
-    for (let i = 0; i < 21; i++) await act(() => result.current.cargarMas())
+      expect(result.current.traslados[520].status).toBe("recibido")
+      expect(pedidosPorId()).toEqual([["t-520"]])
+    })
 
-    expect(result.current.traslados).toHaveLength(550)
+    it("uno con incidencia después de la fila 500 también pasa a «recibido»", async () => {
+      montarBase(550, (i) => (i === 530 ? "con_incidencia" : "recibido"))
+      const { result } = renderHook(() => useTraslados())
+      await cargarTodo(result)
 
-    await tic()
+      cambiar(530, "recibido")
+      await tic()
 
-    expect(traerTraslados).toHaveBeenLastCalledWith(expect.anything(), { cantidad: MAXIMO })
-    expect(result.current.traslados).toHaveLength(550)
-    expect(estados(result).slice(0, 500).every((e) => e === "recibido")).toBe(true)
-    expect(estados(result).slice(500).every((e) => e === "pendiente")).toBe(true)
-    expect(result.current.hayMas).toBe(true)
+      expect(result.current.traslados[530].status).toBe("recibido")
+    })
+
+    it("no vuelve a pedir los recibidos ni los aplicados de más abajo: ya no cambian", async () => {
+      montarBase(560, (i) => (i < 530 ? "recibido" : "aplicado"))
+      const { result } = renderHook(() => useTraslados())
+      await cargarTodo(result)
+
+      await tic()
+      await tic()
+
+      expect(traerTrasladosPorId).not.toHaveBeenCalled()
+      expect(traerTraslados).toHaveBeenCalledTimes(1 + 22 + 2)
+    })
+
+    it("con más de 500 por actualizar, se turnan de a lotes y ninguna queda fuera", async () => {
+      montarBase(1150)
+      const { result } = renderHook(() => useTraslados())
+      await cargarTodo(result)
+
+      // 650 pendientes más abajo de la fila 500, todas recibidas en el otro dispositivo.
+      for (let i = 0; i < 1150; i++) cambiar(i, "recibido")
+
+      const vueltas = Math.ceil(650 / LOTE_POR_ID)
+      for (let i = 0; i < vueltas; i++) await tic()
+
+      expect(pedidosPorId()).toHaveLength(vueltas)
+      expect(pedidosPorId().every((lista) => lista.length <= LOTE_POR_ID)).toBe(true)
+      expect(new Set(pedidosPorId().flat()).size).toBe(650)
+      expect(estados(result).every((e) => e === "recibido")).toBe(true)
+    })
+
+    it("el detalle abierto más abajo de la fila 500 se pide primero", async () => {
+      montarBase(1150)
+      const { result } = renderHook(() => useTraslados({ prioridad: "t-1100" }))
+      await cargarTodo(result)
+
+      cambiar(1100, "con_incidencia")
+      await tic()
+
+      expect(pedidosPorId()[0][0]).toBe("t-1100")
+      expect(result.current.traslados[1100].status).toBe("con_incidencia")
+
+      cambiar(1100, "recibido")
+      await tic()
+
+      expect(pedidosPorId()[1][0]).toBe("t-1100")
+      expect(result.current.traslados[1100].status).toBe("recibido")
+    })
+
+    it("conserva el orden y las páginas, sin duplicados, y «cargar más» sigue funcionando", async () => {
+      montarBase(560)
+      const { result } = renderHook(() => useTraslados({ ubicacionId: "bodega" }))
+
+      await asentar()
+      for (let i = 0; i < 21; i++) await act(() => result.current.cargarMas())
+      expect(result.current.traslados).toHaveLength(550)
+
+      await tic()
+      await tic()
+
+      expect(ids(result)).toEqual(Array.from({ length: 550 }, (_, i) => `t-${i}`))
+      expect(traerTraslados).toHaveBeenCalledWith({ ubicacionId: "bodega", desde: "", hasta: "" }, { cantidad: 500 })
+
+      await act(() => result.current.cargarMas())
+      expect(ids(result)).toEqual(Array.from({ length: 560 }, (_, i) => `t-${i}`))
+    })
+
+    it("una respuesta por id antigua no devuelve a «pendiente» lo ya recibido", async () => {
+      montarBase(520)
+      const { result } = renderHook(() => useTraslados())
+      await cargarTodo(result)
+
+      const vieja = respuestaPendiente()
+      traerTrasladosPorId.mockReturnValueOnce(vieja.promesa)
+      await tic()
+
+      // Mientras esa respuesta tarda, se recibe y una operación de esta pantalla recarga.
+      cambiar(510, "recibido")
+      await act(() => result.current.recargar())
+      expect(result.current.traslados[510].status).toBe("recibido")
+
+      await act(async () => {
+        vieja.entregar([traslado(510, "pendiente")])
+        await vieja.promesa
+      })
+
+      expect(result.current.traslados[510].status).toBe("recibido")
+    })
+
+    it("si la consulta por id falla, conserva lo que había y se pone al día en el siguiente refresco", async () => {
+      montarBase(520)
+      const { result } = renderHook(() => useTraslados())
+      await cargarTodo(result)
+
+      cambiar(510, "recibido")
+      traerTrasladosPorId.mockRejectedValueOnce(new Error("sin red"))
+      await tic()
+
+      expect(result.current.traslados[510].status).toBe("pendiente")
+      expect(result.current.error).toBe("")
+
+      await tic()
+      expect(result.current.traslados[510].status).toBe("recibido")
+    })
+
+    it("en cada refresco hay como mucho una consulta del historial y una por id", async () => {
+      montarBase(1150)
+      const { result } = renderHook(() => useTraslados())
+      await cargarTodo(result)
+
+      const antes = [traerTraslados.mock.calls.length, traerTrasladosPorId.mock.calls.length]
+      await tic()
+
+      expect(traerTraslados.mock.calls.length - antes[0]).toBe(1)
+      expect(traerTrasladosPorId.mock.calls.length - antes[1]).toBe(1)
+    })
   })
 
   it("una respuesta antigua que llega tarde no devuelve a «pendiente» lo ya recibido", async () => {
@@ -321,5 +488,59 @@ describe("useTraslados · refresco entre dispositivos", () => {
     await asentar()
     await tic()
     expect(traerTraslados).not.toHaveBeenCalled()
+  })
+})
+
+describe("porActualizar · qué filas de más abajo se piden por id", () => {
+  const abajo = (n, estado = "pendiente") => Array.from({ length: n }, (_, i) => ({ id: `t-${i}`, status: estado }))
+
+  it("solo las que todavía pueden cambiar: pendientes y con incidencia", () => {
+    const filas = [
+      { id: "a", status: "pendiente" },
+      { id: "b", status: "recibido" },
+      { id: "c", status: "con_incidencia" },
+      { id: "d", status: "aplicado" },
+    ]
+
+    expect(porActualizar(filas, 0, null).lote).toEqual(["a", "c"])
+    expect(porActualizar(abajo(10, "recibido"), 0, null)).toEqual({ lote: [], turno: 0 })
+  })
+
+  it("de a un lote, y el siguiente turno sigue donde quedó hasta dar la vuelta", () => {
+    const filas = abajo(LOTE_POR_ID * 2 + 10)
+    const vistos = []
+    let turno = 0
+
+    for (let i = 0; i < 3; i++) {
+      const r = porActualizar(filas, turno, null)
+
+      expect(r.lote.length).toBeLessThanOrEqual(LOTE_POR_ID)
+      expect(new Set(r.lote).size).toBe(r.lote.length)
+      vistos.push(...r.lote)
+      turno = r.turno
+    }
+
+    expect(new Set(vistos).size).toBe(filas.length)
+  })
+
+  it("el detalle abierto va primero y no se repite en el lote", () => {
+    const filas = abajo(LOTE_POR_ID * 3)
+    const { lote } = porActualizar(filas, LOTE_POR_ID, "t-149")
+
+    expect(lote[0]).toBe("t-149")
+    expect(lote).toHaveLength(LOTE_POR_ID)
+    expect(lote.filter((id) => id === "t-149")).toHaveLength(1)
+  })
+
+  it("un detalle abierto ya recibido no se vuelve a pedir", () => {
+    const filas = [{ id: "t-1", status: "recibido" }, ...abajo(3).map((t, i) => ({ ...t, id: `p-${i}` }))]
+
+    expect(porActualizar(filas, 0, "t-1").lote).toEqual(["p-0", "p-1", "p-2"])
+  })
+
+  it("con menos filas que el lote, las pide todas una sola vez", () => {
+    const { lote } = porActualizar(abajo(7), 5, null)
+
+    expect([...lote].sort()).toEqual(abajo(7).map((t) => t.id).sort())
   })
 })

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 
-import { MAXIMO_POR_CONSULTA, TAMANO_PAGINA, traerTraslados } from "../lib/api/traslados"
+import { LOTE_POR_ID, MAXIMO_POR_CONSULTA, TAMANO_PAGINA, traerTraslados, traerTrasladosPorId } from "../lib/api/traslados"
 import { useAlVolverALaApp } from "./useAlVolverALaApp"
 
 /*
@@ -84,7 +84,8 @@ const conPaginaSiguiente = (estado, pagina) => {
   hacia abajo, o hay más cargadas que el máximo) se conserva al final:
   sigue en orden, porque es más antigua que todo lo pedido, y "cargar más"
   la descarta por id si vuelve a llegar. Nada se pierde ni se duplica, y
-  las páginas cargadas (`siguiente`) no cambian.
+  las páginas cargadas (`siguiente`) no cambian. Esas filas de más abajo
+  se ponen al día por su id (ver `porActualizar`).
 */
 const refrescada = (estado, pagina, cantidad) => {
   const nuevos = new Set(pagina.traslados.map((t) => t.id))
@@ -98,6 +99,37 @@ const refrescada = (estado, pagina, cantidad) => {
   }
 }
 
+// Solo un traslado pendiente o con incidencia puede cambiar todavía; recibido y aplicado ya no.
+const PUEDE_CAMBIAR = new Set(["pendiente", "con_incidencia"])
+
+/*
+  Qué filas de más abajo (fuera de lo que trajo el refresco) se consultan
+  por su id en este refresco: solo las que todavía pueden cambiar, de a
+  LOTE_POR_ID. Si son más, se van turnando de un refresco al siguiente
+  (`turno`), así ninguna queda fuera para siempre. El detalle abierto
+  (`prioridad`) va siempre primero.
+*/
+export function porActualizar(abajo, turno, prioridad) {
+  const candidatas = abajo.filter((t) => PUEDE_CAMBIAR.has(t.status)).map((t) => t.id)
+
+  if (candidatas.length === 0) return { lote: [], turno: 0 }
+
+  const primera = candidatas.includes(prioridad) ? [prioridad] : []
+  const resto = candidatas.filter((id) => id !== prioridad)
+  const desde = resto.length ? turno % resto.length : 0
+  const cupo = LOTE_POR_ID - primera.length
+  const lote = [...resto.slice(desde, desde + cupo), ...resto.slice(0, Math.max(0, desde + cupo - resto.length))]
+
+  return { lote: [...primera, ...new Set(lote)], turno: resto.length ? (desde + cupo) % resto.length : 0 }
+}
+
+// Reemplaza por id las filas que llegaron frescas; las demás quedan igual y en su lugar.
+const conFilasFrescas = (estado, frescas) => {
+  const porId = new Map(frescas.map((t) => [t.id, t]))
+
+  return { ...estado, traslados: estado.traslados.map((t) => porId.get(t.id) || t) }
+}
+
 /*
   `activo` en falso no consulta: la pantalla lo usa cuando los filtros no
   forman un rango válido, para no pedirle a la base algo sin sentido.
@@ -107,8 +139,11 @@ const refrescada = (estado, pagina, cantidad) => {
 
   `alRefrescar` se llama después de cada refresco automático, para que la
   pantalla ponga al día a la vez lo demás que depende de los traslados.
+
+  `prioridad` es el id del detalle abierto: si está más abajo de lo que
+  trae el refresco y todavía puede cambiar, se consulta primero.
 */
-export function useTraslados({ ubicacionId = "", desde = "", hasta = "", activo = true, pausado = false, alRefrescar } = {}) {
+export function useTraslados({ ubicacionId = "", desde = "", hasta = "", activo = true, pausado = false, alRefrescar, prioridad = null } = {}) {
   const [estado, setEstado] = useState(SIN_CARGAR)
 
   const filtros = useMemo(() => ({ ubicacionId, desde, hasta }), [ubicacionId, desde, hasta])
@@ -129,11 +164,14 @@ export function useTraslados({ ubicacionId = "", desde = "", hasta = "", activo 
   const actual = useRef(estado)
   const pausa = useRef(pausado)
   const avisar = useRef(alRefrescar)
+  const primero = useRef(prioridad)
+  const turno = useRef(0)
 
   useEffect(() => {
     actual.current = estado
     pausa.current = pausado
     avisar.current = alRefrescar
+    primero.current = prioridad
   })
 
   // La respuesta puede llegar con la pantalla ya cerrada o con otros filtros.
@@ -183,7 +221,26 @@ export function useTraslados({ ubicacionId = "", desde = "", hasta = "", activo 
     try {
       const pagina = await traerTraslados(filtros, { cantidad })
 
-      if (esLaUltima()) setEstado((ahora) => (ahora.clave === clave ? refrescada(ahora, pagina, cantidad) : ahora))
+      if (!esLaUltima()) return
+
+      setEstado((ahora) => (ahora.clave === clave ? refrescada(ahora, pagina, cantidad) : ahora))
+
+      /*
+        Las filas de más abajo que todavía pueden cambiar, por su id: una
+        consulta más, y solo si hay alguna. Las ya recibidas o aplicadas no
+        se vuelven a pedir.
+      */
+      const abajo = refrescada(antes, pagina, cantidad).traslados.slice(pagina.traslados.length)
+      const { lote, turno: siguienteTurno } = porActualizar(abajo, turno.current, primero.current)
+
+      if (lote.length === 0) return
+
+      const frescas = await traerTrasladosPorId(lote)
+
+      if (!esLaUltima()) return
+
+      turno.current = siguienteTurno
+      setEstado((ahora) => (ahora.clave === clave ? conFilasFrescas(ahora, frescas) : ahora))
     } catch {
       // Sin conexión o un fallo pasajero: se conserva lo último que se supo.
     }

@@ -157,6 +157,8 @@ function Transfers() {
     activo: !rangoInvalido,
     pausado: procesando,
     alRefrescar: alRefrescarHistorial,
+    // El detalle abierto se pone al día primero, esté donde esté en el historial.
+    prioridad: detalleAbierto,
   })
 
   const limpiarFiltros = () => {
